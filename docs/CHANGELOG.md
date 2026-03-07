@@ -81,6 +81,43 @@
 - 配置任一可用 LLM Key（Gemini 或 OpenAI），运行 `npm run dev`。
 - 新增单词或用图片识别新增单词后，在 “My Words” 中展开 “Learn more” 查看拓展信息。
 
+## 2026-03-07
+
+### 新增/修改内容
+- 新增 “Practice（多题型练习）”：基于用户某一周的单词列表，LLM 自动生成 3 种题型（选择题/填空题/句子重组题）。
+- 答题提交后自动展示：答案对比、详细解析、语法讲解与词汇用法讲解。
+
+### 涉及文件
+- 修改：`src/lib/types.ts`（新增 Practice 题型的 schema/type）
+- 新增：`src/ai/flows/generate-practice.ts`
+- 修改：`src/app/actions.ts`（新增 `generatePracticeAction`）
+- 新增：`src/components/practice-view.tsx`
+- 修改：`src/components/word-review-list.tsx`（每周新增 Practice 入口）
+- 修改：`src/app/page.tsx`（新增 practice 视图与状态管理）
+- 修改：`docs/PROJECT_OVERVIEW.md`（补充 Practice 功能与结构）
+
+### 背景/原因
+- 在“生成故事”之外增加更系统的练习方式，支持多题型并提供可复习的讲解，提升学习效果。
+
+### 如何验证
+- 配置任一可用 LLM Key（Gemini 或 OpenAI），运行 `npm run dev`。
+- 在 “My Words” 页面按周点击 “Practice”，生成题目后完成作答并提交，检查是否显示答案对比与讲解。
+
+## 2026-03-07
+
+### 新增/修改内容
+- 修复 Practice 生成在部分模型下返回 JSON 字段不完整（例如缺少 `promptEn`）导致的 Zod 校验失败：在服务端对 LLM 输出做字段兜底与别名兼容，并补充提示词强调必填字段。
+
+### 涉及文件
+- 修改：`src/ai/flows/generate-practice.ts`
+
+### 背景/原因
+- 部分 OpenAI-compatible 模型会省略 `fill_blank`/`reorder` 的 `promptEn`（将其视为冗余），从而导致校验失败并中断生成流程。
+
+### 如何验证
+- 运行：`npm run dev`
+- 在 “My Words” 页面点击 “Practice”，确认能正常生成题目并显示每题的英文提示。
+
 ---
 
 ## 记录模板（复制后填写）

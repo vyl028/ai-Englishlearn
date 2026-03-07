@@ -1,0 +1,332 @@
+"use client";
+
+import * as React from "react";
+import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+
+import type { GeneratePracticeOutput, PracticeQuestion } from "@/lib/types";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
+interface PracticeViewProps {
+  practiceData: { questions: GeneratePracticeOutput };
+  onBack: () => void;
+}
+
+type AnswerState = {
+  mcq?: number;
+  blank?: string;
+  reorder?: number[];
+};
+
+function normalizeAnswer(s: string) {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function arraysEqual(a: number[], b: number[]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function joinSentence(parts: string[]) {
+  return parts
+    .join(" ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/\s+’/g, "’")
+    .replace(/\s+'/g, "'");
+}
+
+function getTypeLabel(type: PracticeQuestion["type"]) {
+  switch (type) {
+    case "mcq":
+      return "Multiple Choice";
+    case "fill_blank":
+      return "Fill in the Blank";
+    case "reorder":
+      return "Sentence Reordering";
+    default:
+      return type;
+  }
+}
+
+export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
+  const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
+  const [submitted, setSubmitted] = React.useState(false);
+
+  const setAnswer = (questionIndex: number, patch: Partial<AnswerState>) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionIndex]: { ...prev[questionIndex], ...patch },
+    }));
+  };
+
+  const isCorrect = (q: PracticeQuestion, questionIndex: number) => {
+    const a = answers[questionIndex];
+    if (!a) return false;
+
+    if (q.type === "mcq") {
+      return a.mcq === q.answerIndex;
+    }
+
+    if (q.type === "fill_blank") {
+      const user = normalizeAnswer(a.blank || "");
+      const accepted = q.acceptableAnswers.map(normalizeAnswer);
+      return user.length > 0 && accepted.includes(user);
+    }
+
+    if (q.type === "reorder") {
+      const order = a.reorder || [];
+      return order.length === q.correctOrder.length && arraysEqual(order, q.correctOrder);
+    }
+
+    return false;
+  };
+
+  const correctCount = React.useMemo(() => {
+    if (!submitted) return 0;
+    return practiceData.questions.filter((q, idx) => isCorrect(q, idx)).length;
+  }, [practiceData.questions, answers, submitted]);
+
+  const handleSubmit = () => setSubmitted(true);
+
+  const renderExplanation = (q: PracticeQuestion) => (
+    <Accordion type="single" collapsible>
+      <AccordionItem value="explain" className="border-none">
+        <AccordionTrigger className="py-2 text-sm">Answer & Explanation</AccordionTrigger>
+        <AccordionContent>
+          <div className="space-y-3 text-sm">
+            <div>
+              <div className="font-semibold">详细解析</div>
+              <div className="text-muted-foreground whitespace-pre-wrap">{q.analysisZh}</div>
+            </div>
+            <div>
+              <div className="font-semibold">语法讲解</div>
+              <div className="text-muted-foreground whitespace-pre-wrap">{q.grammarZh}</div>
+            </div>
+            <div>
+              <div className="font-semibold">用法讲解</div>
+              <div className="text-muted-foreground whitespace-pre-wrap">{q.usageZh}</div>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="outline" size="icon" onClick={onBack}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex items-center justify-between w-full gap-3">
+          <h2 className="text-2xl font-bold font-headline">Practice</h2>
+          {submitted && (
+            <div className="text-sm text-muted-foreground">
+              Score: <span className="font-semibold text-foreground">{correctCount}</span> / {practiceData.questions.length}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {practiceData.questions.map((q, index) => {
+        const correct = submitted ? isCorrect(q, index) : undefined;
+        return (
+          <Card key={index}>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2">
+                    <span>Question {index + 1}</span>
+                    <Badge variant="secondary">{getTypeLabel(q.type)}</Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    <span className="font-medium text-foreground">{q.word}</span>
+                    <span className="mx-2 text-muted-foreground">·</span>
+                    {q.promptEn}
+                  </CardDescription>
+                </div>
+                {submitted && (
+                  <div className="pt-1">
+                    {correct ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-600" />
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {q.type === "mcq" && (
+                <RadioGroup
+                  value={typeof answers[index]?.mcq === "number" ? String(answers[index]?.mcq) : ""}
+                  onValueChange={(value) => setAnswer(index, { mcq: Number(value) })}
+                  disabled={submitted}
+                >
+                  {q.options.map((option, optionIndex) => {
+                    const isCorrectOption = optionIndex === q.answerIndex;
+                    const isSelected = answers[index]?.mcq === optionIndex;
+
+                    const className = submitted
+                      ? isCorrectOption
+                        ? "text-green-600 font-bold"
+                        : isSelected
+                          ? "text-red-600 line-through"
+                          : "text-muted-foreground"
+                      : "";
+
+                    return (
+                      <div key={optionIndex} className="flex items-center space-x-2">
+                        <RadioGroupItem value={String(optionIndex)} id={`q${index}-o${optionIndex}`} />
+                        <Label htmlFor={`q${index}-o${optionIndex}`} className={cn("flex items-center", className)}>
+                          {option}
+                          {submitted && isCorrectOption && <CheckCircle className="ml-2 h-4 w-4 text-green-600" />}
+                          {submitted && isSelected && !isCorrectOption && <XCircle className="ml-2 h-4 w-4 text-red-600" />}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </RadioGroup>
+              )}
+
+              {q.type === "fill_blank" && (
+                <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">{q.sentenceEn}</div>
+                  <div className="space-y-2">
+                    <Label>Answer</Label>
+                    <Input
+                      value={answers[index]?.blank || ""}
+                      onChange={(e) => setAnswer(index, { blank: e.target.value })}
+                      disabled={submitted}
+                      placeholder="Type your answer..."
+                    />
+                  </div>
+                  {submitted && (
+                    <div className="text-sm text-muted-foreground">
+                      Correct answer: <span className="text-foreground">{q.acceptableAnswers.join(" / ")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {q.type === "reorder" && (
+                <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground">Tap parts to build the correct sentence.</div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground">Your order</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(answers[index]?.reorder || []).map((partIndex, i) => (
+                        <Button
+                          key={`${partIndex}-${i}`}
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={submitted}
+                          onClick={() => {
+                            const curr = answers[index]?.reorder || [];
+                            const next = curr.filter((_, idx) => idx !== i);
+                            setAnswer(index, { reorder: next });
+                          }}
+                        >
+                          {q.parts[partIndex]}
+                        </Button>
+                      ))}
+                      {(answers[index]?.reorder || []).length === 0 && (
+                        <span className="text-sm text-muted-foreground">No parts selected.</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={submitted}
+                        onClick={() => setAnswer(index, { reorder: [] })}
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground">Remaining parts</div>
+                    <div className="flex flex-wrap gap-2">
+                      {q.parts.map((p, partIndex) => {
+                        const curr = answers[index]?.reorder || [];
+                        const used = curr.includes(partIndex);
+                        return (
+                          <Button
+                            key={partIndex}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={submitted || used}
+                            onClick={() => setAnswer(index, { reorder: [...curr, partIndex] })}
+                          >
+                            {p}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {submitted && (
+                    <div className="space-y-1 text-sm">
+                      <div className="text-muted-foreground">
+                        Correct sentence:{" "}
+                        <span className="text-foreground">
+                          {q.answerSentenceEn || joinSentence(q.correctOrder.map(i => q.parts[i]))}
+                        </span>
+                      </div>
+                      {q.translationZh && (
+                        <div className="text-muted-foreground">
+                          中文：<span className="text-foreground">{q.translationZh}</span>
+                        </div>
+                      )}
+                      <div className="text-muted-foreground">
+                        Your sentence:{" "}
+                        <span className="text-foreground">
+                          {joinSentence((answers[index]?.reorder || []).map(i => q.parts[i]))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {submitted && (
+                <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                  {q.type === "mcq" && (
+                    <div className="text-sm text-muted-foreground mb-3">
+                      Correct answer:{" "}
+                      <span className="text-foreground">{q.options[q.answerIndex]}</span>
+                    </div>
+                  )}
+                  {renderExplanation(q)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      {!submitted && (
+        <Button onClick={handleSubmit} className="w-full">
+          Submit Answers
+        </Button>
+      )}
+    </div>
+  );
+}
+

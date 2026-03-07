@@ -4,6 +4,8 @@ import {
   CapturedWord,
   DefineCapturedWordInput,
   ExtractWordAndDefineOutput,
+  GeneratePracticeInput,
+  GeneratePracticeOutput,
   GenerateQuizInput,
   GenerateQuizOutput,
   GenerateStoryInput,
@@ -11,6 +13,7 @@ import {
 } from "@/lib/types";
 import { defineCapturedWord } from '@/ai/flows/define-captured-word';
 import { extractWordAndDefine } from '@/ai/flows/extract-word-and-define';
+import { generatePractice } from '@/ai/flows/generate-practice';
 import { generateQuiz } from '@/ai/flows/generate-quiz';
 import { generateStory } from '@/ai/flows/generate-story';
 import { generateId } from "@/lib/utils";
@@ -77,6 +80,21 @@ export async function generateQuizAction(
   } catch (error: any) {
     console.error('generateQuizAction error:', error);
     return { success: false, error: error.message || "An error occurred while generating the quiz." };
+  }
+}
+
+export async function generatePracticeAction(
+  input: GeneratePracticeInput
+): Promise<{ success: boolean; data?: { questions: GeneratePracticeOutput }; error?: string }> {
+  try {
+    const result = await generatePractice(input);
+    if (!result || result.length === 0) {
+      return { success: false, error: "Could not generate practice questions. The model may have returned an empty result." };
+    }
+    return { success: true, data: { questions: result } };
+  } catch (error: any) {
+    console.error('generatePracticeAction error:', error);
+    return { success: false, error: error.message || "An error occurred while generating practice questions." };
   }
 }
 

@@ -7,9 +7,10 @@ import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { QuizView } from '@/components/quiz-view';
-import type { CapturedWord, GenerateQuizOutput } from '@/lib/types';
+import { PracticeView } from '@/components/practice-view';
+import type { CapturedWord, GeneratePracticeOutput, GenerateQuizOutput } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { generateQuizAction, generateStoryAction } from '@/app/actions';
+import { generatePracticeAction, generateQuizAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -23,7 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type View = 'capture' | 'review' | 'quiz';
+type View = 'capture' | 'review' | 'quiz' | 'practice';
 
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
@@ -32,6 +33,7 @@ export default function Home() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
   const [quizData, setQuizData] = useState<{ questions: GenerateQuizOutput } | null>(null);
+  const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -125,6 +127,26 @@ export default function Home() {
     setIsLoading(false);
   };
 
+  const handleGeneratePractice = async (practiceWords: CapturedWord[]) => {
+    setIsLoading(true);
+    toast({ title: "Generating Practice...", description: "Your questions are being created by AI. This may take a moment." });
+    const input = {
+      words: practiceWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
+    };
+    const result = await generatePracticeAction(input);
+    if (result.success && result.data) {
+      setPracticeData(result.data);
+      setView('practice');
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Practice Generation Failed",
+        description: result.error || "An unexpected error occurred.",
+      });
+    }
+    setIsLoading(false);
+  };
+
   const handleGenerateStory = async (storyWords: CapturedWord[]) => {
     setIsLoading(true);
     toast({ title: "Generating Story...", description: "Your story is being created by AI. This may take a moment." });
@@ -170,12 +192,17 @@ export default function Home() {
       case 'capture':
         return <WordCaptureForm onWordAdded={handleWordAdded} onMultipleWordsAdded={handleMultipleWordsAdded} />;
       case 'review':
-        return <WordReviewList words={words} onEditWord={handleEditWord} onDeleteWord={handleDeleteWord} onGenerateQuiz={handleGenerateQuiz} onGenerateStory={handleGenerateStory} />;
+        return <WordReviewList words={words} onEditWord={handleEditWord} onDeleteWord={handleDeleteWord} onGenerateQuiz={handleGenerateQuiz} onGeneratePractice={handleGeneratePractice} onGenerateStory={handleGenerateStory} />;
       case 'quiz':
         if (quizData) {
           return <QuizView quizData={quizData} onBack={() => setView('review')} />;
         }
         return null; // Or a fallback UI
+      case 'practice':
+        if (practiceData) {
+          return <PracticeView practiceData={practiceData} onBack={() => setView('review')} />;
+        }
+        return null;
       default:
         return null;
     }

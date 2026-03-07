@@ -47,6 +47,7 @@
 - 以“周”为单位分组展示（按捕获时间）
 - 每周可一键生成：
   - **Quiz**：`generateQuizAction`
+  - **Practice**（多题型练习：选择题/填空/句子重组 + 答案对比与讲解）：`generatePracticeAction`
   - **Story**：`generateStoryAction`（生成并下载 PDF）
 - 支持：
   - 显示/隐藏释义（Switch）
@@ -125,18 +126,22 @@
 │  ├─ ai/
 │  │  ├─ dev.ts
 │  │  ├─ gemini.ts
+│  │  ├─ llm.ts
+│  │  ├─ openai.ts
 │  │  ├─ genkit.ts
 │  │  ├─ server.ts
 │  │  └─ flows/
 │  │     ├─ define-captured-word.ts
 │  │     ├─ extract-word-and-define.ts
 │  │     ├─ generate-quiz.ts
+│  │     ├─ generate-practice.ts
 │  │     └─ generate-story.ts
 │  ├─ components/
 │  │  ├─ word-capture-form.tsx
 │  │  ├─ word-review-list.tsx
 │  │  ├─ edit-word-dialog.tsx
 │  │  ├─ quiz-view.tsx
+│  │  ├─ practice-view.tsx
 │  │  └─ ui/ (shadcn/radix 组件集合)
 │  ├─ hooks/
 │  │  ├─ use-mobile.tsx

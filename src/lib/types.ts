@@ -106,6 +106,52 @@ export const GenerateQuizOutputSchema = z.array(QuizQuestionSchema);
 export type GenerateQuizOutput = z.infer<typeof GenerateQuizOutputSchema>;
 
 
+// Schema for generating practice questions (multiple types)
+export const GeneratePracticeInputSchema = z.object({
+  words: z.array(WordInputSchema),
+});
+export type GeneratePracticeInput = z.infer<typeof GeneratePracticeInputSchema>;
+
+const PracticeQuestionBaseSchema = z.object({
+  type: z.enum(['mcq', 'fill_blank', 'reorder']),
+  word: z.string().describe('The target word for this question.'),
+  promptEn: z.string().describe('The question prompt in English.'),
+  analysisZh: z.string().describe('Detailed explanation in Chinese.'),
+  grammarZh: z.string().describe('Grammar explanation in Chinese.'),
+  usageZh: z.string().describe('Vocabulary usage notes in Chinese.'),
+});
+
+const PracticeMcqQuestionSchema = PracticeQuestionBaseSchema.extend({
+  type: z.literal('mcq'),
+  options: z.array(z.string()).length(4).describe('4 multiple-choice options.'),
+  answerIndex: z.number().int().min(0).max(3).describe('Index of the correct option (0-3).'),
+});
+
+const PracticeFillBlankQuestionSchema = PracticeQuestionBaseSchema.extend({
+  type: z.literal('fill_blank'),
+  sentenceEn: z.string().describe('English sentence containing a blank placeholder like ____.'),
+  acceptableAnswers: z.array(z.string()).min(1).describe('List of acceptable answers for the blank.'),
+});
+
+const PracticeReorderQuestionSchema = PracticeQuestionBaseSchema.extend({
+  type: z.literal('reorder'),
+  parts: z.array(z.string()).min(4).describe('Shuffled sentence parts to reorder.'),
+  correctOrder: z.array(z.number().int()).min(4).describe('Correct order of indices for parts.'),
+  answerSentenceEn: z.string().optional().describe('Optional full correct English sentence.'),
+  translationZh: z.string().optional().describe('Optional Chinese translation of the sentence.'),
+});
+
+export const PracticeQuestionSchema = z.discriminatedUnion('type', [
+  PracticeMcqQuestionSchema,
+  PracticeFillBlankQuestionSchema,
+  PracticeReorderQuestionSchema,
+]);
+export type PracticeQuestion = z.infer<typeof PracticeQuestionSchema>;
+
+export const GeneratePracticeOutputSchema = z.array(PracticeQuestionSchema);
+export type GeneratePracticeOutput = z.infer<typeof GeneratePracticeOutputSchema>;
+
+
 // Schema for generating a story
 export const GenerateStoryInputSchema = z.object({
   words: z.array(WordInputSchema),

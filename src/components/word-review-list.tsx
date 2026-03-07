@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, FileText, Newspaper } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, FileText, Newspaper, ListChecks } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import type { CapturedWord } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ interface WordReviewListProps {
   onEditWord: (word: CapturedWord) => void;
   onDeleteWord: (word: CapturedWord) => void;
   onGenerateQuiz: (words: CapturedWord[]) => void;
+  onGeneratePractice: (words: CapturedWord[]) => void;
   onGenerateStory: (words: CapturedWord[]) => void;
 }
 
@@ -41,7 +42,7 @@ const groupWordsByWeek = (words: CapturedWord[]) => {
   return grouped;
 };
 
-export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz, onGenerateStory }: WordReviewListProps) {
+export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz, onGeneratePractice, onGenerateStory }: WordReviewListProps) {
   const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set());
   const [showDefinitions, setShowDefinitions] = useState<{ [key: string]: boolean }>({});
   const [showDefinition, setShowDefinition] = useState(false);
@@ -131,6 +132,10 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz
                   <Button variant="outline" size="sm" onClick={() => onGenerateQuiz(groupedWords[weekKey])}>
                     <FileText className="h-4 w-4 mr-2" />
                     Quiz
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => onGeneratePractice(groupedWords[weekKey])}>
+                    <ListChecks className="h-4 w-4 mr-2" />
+                    Practice
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => onGenerateStory(groupedWords[weekKey])}>
                     <Newspaper className="h-4 w-4 mr-2" />
