@@ -10,8 +10,9 @@
 **LexiCapture** 是一个基于 **Next.js（App Router）** 的 Web 应用，面向“初中（九年级）英语学习”场景：
 
 - 通过**手动输入**或**拍照/上传图片**采集英语单词
-- 借助 **Google Gemini** 生成：
+- 借助 **LLM（Gemini / OpenAI 等）** 生成：
   - 单词的（字典风格）中文释义
+  - 单词拓展信息（搭配 / 同反义词 / 例句 / 难度与用法分析）
   - 每周词汇的选择题测验（Quiz）
   - 包含这些词汇的短故事 + 中文翻译，并生成 PDF
 - 当前持久化方式为：**浏览器 localStorage（单机/单浏览器）**
@@ -30,11 +31,11 @@
 1) **Text（手动输入）**
 - 输入 `word` + `partOfSpeech`
 - 可选附带 `photoDataUri`（图片预览）
-- 点击 **Add Word** 后调用服务端 action：`getDefinitionAction` → AI 生成中文释义 → 加入单词列表
+- 点击 **Add Word** 后调用服务端 action：`getDefinitionAction` → AI 生成中文释义 + 单词拓展信息（搭配/同反义/例句/难度用法）→ 加入单词列表
 
 2) **Camera（拍照识别）**
 - 申请摄像头权限，采集视频帧，转成 `data:image/jpeg;base64,...`
-- 调用 `extractWordAndDefineAction` 自动识别图片中的多个单词，并直接加入列表
+- 调用 `extractWordAndDefineAction` 自动识别图片中的多个单词，并生成中文释义 + 拓展信息后加入列表
 
 3) **Upload（上传图片识别）**
 - 选择本地图片，读取为 Data URI
@@ -49,6 +50,7 @@
   - **Story**：`generateStoryAction`（生成并下载 PDF）
 - 支持：
   - 显示/隐藏释义（Switch）
+  - 展开 “Learn more” 查看拓展信息（搭配/同反义/例句/难度用法）
   - 点击单词打开 Cambridge 词典页面（新标签页）
   - 编辑（本地更新）
   - 删除（带二次确认弹窗）
@@ -196,6 +198,7 @@ type CapturedWord = {
   word: string;
   partOfSpeech: string;
   definition: string;
+  enrichment?: WordEnrichment;
   capturedAt: Date;
   photoDataUri?: string;
 };

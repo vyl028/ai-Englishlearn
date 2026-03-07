@@ -93,6 +93,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
           word: foundWord.word,
           partOfSpeech: foundWord.partOfSpeech,
           definition: foundWord.definition,
+          enrichment: foundWord.enrichment,
           capturedAt: new Date(),
           photoDataUri: dataUri,
         }));

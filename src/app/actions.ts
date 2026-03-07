@@ -35,6 +35,7 @@ export async function getDefinitionAction(
       word: data.word,
       partOfSpeech: data.partOfSpeech,
       definition: result.definition,
+      enrichment: result.enrichment,
       capturedAt: new Date(),
       photoDataUri: data.photoDataUri,
     };

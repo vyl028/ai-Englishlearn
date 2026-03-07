@@ -6,9 +6,45 @@ export type CapturedWord = {
   word: string;
   partOfSpeech: string;
   definition: string;
+  enrichment?: WordEnrichment;
   capturedAt: Date;
   photoDataUri?: string;
 };
+
+export const WordEnrichmentSchema = z.object({
+  collocations: z.preprocess((v) => {
+    if (!Array.isArray(v)) return v;
+    return v.map((item) => (typeof item === 'string' ? { phrase: item } : item));
+  }, z.array(z.object({
+    phrase: z.string().describe('An English collocation phrase that commonly appears with the target word.'),
+    meaningZh: z.string().optional().describe('Optional concise Chinese meaning for the collocation.'),
+    exampleEn: z.string().optional().describe('Optional English example sentence for the collocation.'),
+    exampleZh: z.string().optional().describe('Optional Chinese translation for the example sentence.'),
+  }))).optional(),
+  synonyms: z.preprocess((v) => {
+    if (typeof v === 'string') return v.split(/[,，]\s*/).filter(Boolean);
+    return v;
+  }, z.array(z.string())).optional().describe('Common English synonyms.'),
+  antonyms: z.preprocess((v) => {
+    if (typeof v === 'string') return v.split(/[,，]\s*/).filter(Boolean);
+    return v;
+  }, z.array(z.string())).optional().describe('Common English antonyms.'),
+  examples: z.preprocess((v) => {
+    if (!Array.isArray(v)) return v;
+    return v.map((item) => (typeof item === 'string' ? { en: item } : item));
+  }, z.array(z.object({
+    en: z.string().describe('An English example sentence using the target word.'),
+    zh: z.string().optional().describe('Chinese translation of the example sentence.'),
+  }))).optional(),
+  level: z.preprocess((v) => {
+    if (typeof v === 'string') return { usageZh: v };
+    return v;
+  }, z.object({
+    cefr: z.string().optional().describe('Estimated CEFR level (e.g., A1~C2).'),
+    usageZh: z.string().optional().describe('Concise Chinese usage notes, common patterns and pitfalls.'),
+  })).optional(),
+});
+export type WordEnrichment = z.infer<typeof WordEnrichmentSchema>;
 
 // Schema for defining a single word
 export const DefineCapturedWordInputSchema = z.object({
@@ -22,6 +58,7 @@ export type DefineCapturedWordInput = z.infer<typeof DefineCapturedWordInputSche
 
 export const DefineCapturedWordOutputSchema = z.object({
   definition: z.string().describe('The Chinese definition of the word and its part of speech.'),
+  enrichment: WordEnrichmentSchema.optional().describe('Optional AI-generated enrichment content for learning.'),
 });
 export type DefineCapturedWordOutput = z.infer<typeof DefineCapturedWordOutputSchema>;
 
@@ -38,6 +75,7 @@ const WordDefinitionSchema = z.object({
   word: z.string().describe('The English word identified in the photo.'),
   partOfSpeech: z.string().describe('The part of speech of the identified word (e.g., noun, verb, adjective).'),
   definition: z.string().describe('The Chinese definition of the word and its part of speech.'),
+  enrichment: WordEnrichmentSchema.optional().describe('Optional AI-generated enrichment content for learning.'),
 });
 
 export const ExtractWordAndDefineOutputSchema = z.array(WordDefinitionSchema);

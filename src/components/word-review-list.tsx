@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface WordReviewListProps {
   words: CapturedWord[];
@@ -140,25 +141,100 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz
               <div className="space-y-2">
                 {groupedWords[weekKey].map((word) => (
                   <Card key={word.id} className="w-full">
-                    <CardContent className="p-3 flex items-center justify-between">
-                        <div className="flex-grow flex items-center gap-2 overflow-hidden">
-                            <span className="font-bold text-lg cursor-pointer hover:underline" onClick={() => handleWordClick(word.word)}>{word.word}</span>
-                            <Badge variant="secondary" className="capitalize shrink-0">{word.partOfSpeech}</Badge>
-                            {showDefinition && <p className="text-muted-foreground truncate">{word.definition}</p>}
-                        </div>
-                        <div className="flex items-center flex-shrink-0 ml-4">
-                            <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
-                                {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
-                                <Pencil className="h-4 w-4" />
-                                <span className="sr-only">Edit Word</span>
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(word); }}>
-                                <Trash className="h-4 w-4" />
-                                <span className="sr-only">Delete Word</span>
-                            </Button>
-                        </div>
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                          <div className="flex-grow flex items-center gap-2 overflow-hidden">
+                              <span className="font-bold text-lg cursor-pointer hover:underline" onClick={() => handleWordClick(word.word)}>{word.word}</span>
+                              <Badge variant="secondary" className="capitalize shrink-0">{word.partOfSpeech}</Badge>
+                              {showDefinition && <p className="text-muted-foreground truncate">{word.definition}</p>}
+                          </div>
+                          <div className="flex items-center flex-shrink-0 ml-4">
+                              <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
+                                  {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
+                                  <Pencil className="h-4 w-4" />
+                                  <span className="sr-only">Edit Word</span>
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(word); }}>
+                                  <Trash className="h-4 w-4" />
+                                  <span className="sr-only">Delete Word</span>
+                              </Button>
+                          </div>
+                      </div>
+
+                      <Accordion type="single" collapsible className="mt-2">
+                        <AccordionItem value="details" className="border-none">
+                          <AccordionTrigger className="py-2 text-sm">
+                            Learn more
+                          </AccordionTrigger>
+                          <AccordionContent className="pb-1">
+                            {!word.enrichment ? (
+                              <p className="text-muted-foreground">No AI enrichment available yet.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="text-xs font-semibold text-muted-foreground">Level & Usage</div>
+                                  <div className="text-sm">
+                                    {word.enrichment.level?.cefr && (
+                                      <span className="mr-2">CEFR: {word.enrichment.level.cefr}</span>
+                                    )}
+                                    {word.enrichment.level?.usageZh && (
+                                      <p className="mt-1 text-muted-foreground">{word.enrichment.level.usageZh}</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {Array.isArray(word.enrichment.collocations) && word.enrichment.collocations.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-semibold text-muted-foreground">Collocations</div>
+                                    <ul className="mt-1 space-y-1 text-sm">
+                                      {word.enrichment.collocations.slice(0, 6).map((c, idx) => (
+                                        <li key={idx} className="text-muted-foreground">
+                                          <span className="text-foreground">{c.phrase}</span>
+                                          {c.meaningZh ? ` — ${c.meaningZh}` : ''}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {(Array.isArray(word.enrichment.synonyms) && word.enrichment.synonyms.length > 0) && (
+                                  <div>
+                                    <div className="text-xs font-semibold text-muted-foreground">Synonyms</div>
+                                    <div className="mt-1 text-sm text-muted-foreground">
+                                      {word.enrichment.synonyms.slice(0, 10).join(', ')}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(Array.isArray(word.enrichment.antonyms) && word.enrichment.antonyms.length > 0) && (
+                                  <div>
+                                    <div className="text-xs font-semibold text-muted-foreground">Antonyms</div>
+                                    <div className="mt-1 text-sm text-muted-foreground">
+                                      {word.enrichment.antonyms.slice(0, 10).join(', ')}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {Array.isArray(word.enrichment.examples) && word.enrichment.examples.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-semibold text-muted-foreground">Example Sentences</div>
+                                    <ul className="mt-1 space-y-2 text-sm">
+                                      {word.enrichment.examples.slice(0, 5).map((ex, idx) => (
+                                        <li key={idx}>
+                                          <div className="text-foreground">{ex.en}</div>
+                                          <div className="text-muted-foreground">{ex.zh}</div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
                     </CardContent>
                   </Card>
                 ))}

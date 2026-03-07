@@ -83,7 +83,7 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
     setIsSubmitting(true);
     // Here we would typically have an async action, but for now we'll just update locally
     await new Promise(resolve => setTimeout(resolve, 500)); 
-    onWordUpdated(values);
+    onWordUpdated({ ...(word || ({} as any)), ...values } as CapturedWord);
     setIsSubmitting(false);
     onOpenChange(false);
   }

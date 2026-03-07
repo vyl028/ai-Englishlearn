@@ -15,8 +15,27 @@ import {
 export async function extractWordAndDefine(input: ExtractWordAndDefineInput): Promise<ExtractWordAndDefineOutput> {
   ExtractWordAndDefineInputSchema.parse(input);
 
-  const systemPrompt = 'You are an OCR + bilingual lexicon expert. You read an image, list distinct English words with part of speech and give concise accurate Chinese definitions.';
-  const userPrompt = `Analyze the image and return ONLY a JSON array. Each element: {"word": string, "partOfSpeech": string, "definition": string}. Avoid duplicates. If no valid English words, return [].`;
+  const systemPrompt = `You are an OCR + bilingual lexicon expert.
+You read an image, extract distinct English words, and provide concise Chinese learning content.
+You must output valid JSON only.`;
+  const userPrompt = `Analyze the image and return ONLY a JSON array.
+Each element must have: {"word": string, "partOfSpeech": string, "definition": string, "enrichment"?: {...} }.
+
+The "enrichment" object shape:
+{
+  "collocations": [{"phrase": string, "meaningZh"?: string, "exampleEn"?: string, "exampleZh"?: string}],
+  "synonyms": string[],
+  "antonyms": string[],
+  "examples": [{"en": string, "zh": string}],
+  "level": {"cefr"?: "A1"|"A2"|"B1"|"B2"|"C1"|"C2"|"Unknown", "usageZh"?: string}
+}
+
+Rules:
+- Return at most 8 items (avoid noise).
+- Avoid duplicates (case-insensitive).
+- definition: concise Chinese dictionary-style definition.
+- enrichment should be compact: collocations 2-4, synonyms/antonyms 2-4, examples 1-2, usageZh <= 80 Chinese characters.
+- If no valid English words, return [].`;
 
   const data = await generateJsonArray<{ word: string; partOfSpeech: string; definition: string; }[]>({
     systemPrompt,

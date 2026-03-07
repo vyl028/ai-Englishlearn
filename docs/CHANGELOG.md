@@ -55,6 +55,28 @@
 - Gemini（默认）：配置 `GOOGLE_API_KEY`，运行 `npm run dev` 并触发“释义/识别/Quiz/Story”相关功能。
 - OpenAI：配置 `AI_PROVIDER=openai` + `OPENAI_API_KEY`（必要时设置 `OPENAI_MODEL` / `OPENAI_BASE_URL`），同上验证。
 
+## 2026-03-07
+
+### 新增/修改内容
+- 新增“单词智能拓展（Enrichment）”：在新增单词（手动输入/图片识别）时，LLM 会同步生成常见搭配、同反义词、例句、难度与用法分析，并随单词一起存入本地单词本。
+- 复习列表新增 “Learn more” 展示区，用户无需跳转外部词典即可查看核心学习信息（仍保留原 Cambridge 外链点击行为）。
+
+### 涉及文件
+- 修改：`src/lib/types.ts`（新增 enrichment 结构与相关 schema/type）
+- 修改：`src/ai/flows/define-captured-word.ts`（生成 definition + enrichment）
+- 修改：`src/ai/flows/extract-word-and-define.ts`（图片识别结果增加 enrichment）
+- 修改：`src/app/actions.ts`（保存单词时带上 enrichment）
+- 修改：`src/components/word-capture-form.tsx`（图片识别添加到单词本时保留 enrichment）
+- 修改：`src/components/word-review-list.tsx`（新增 enrichment 展示）
+- 修改：`src/components/edit-word-dialog.tsx`（编辑时保留 enrichment，避免丢失）
+
+### 背景/原因
+- 现有单词本仅存释义；加入搭配/同反义/例句/用法分析后，学习信息更完整，且不依赖外部跳转。
+
+### 如何验证
+- 配置任一可用 LLM Key（Gemini 或 OpenAI），运行 `npm run dev`。
+- 新增单词或用图片识别新增单词后，在 “My Words” 中展开 “Learn more” 查看拓展信息。
+
 ---
 
 ## 记录模板（复制后填写）
