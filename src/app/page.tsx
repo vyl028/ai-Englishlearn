@@ -111,7 +111,7 @@ export default function Home() {
     options: { questionCount: number; allowedTypes: PracticeQuestionType[] }
   ) => {
     setIsLoading(true);
-    toast({ title: "Generating Practice...", description: "Your questions are being created by AI. This may take a moment." });
+    toast({ title: "正在生成练习...", description: "AI 正在生成题目，请稍等片刻。" });
     const input = {
       words: practiceWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
       questionCount: options.questionCount,
@@ -124,8 +124,8 @@ export default function Home() {
     } else {
       toast({
         variant: "destructive",
-        title: "Practice Generation Failed",
-        description: result.error || "An unexpected error occurred.",
+        title: "练习生成失败",
+        description: result.error || "发生未知错误，请稍后重试。",
       });
     }
     setIsLoading(false);
@@ -133,15 +133,15 @@ export default function Home() {
 
   const handleGenerateStory = async (storyWords: CapturedWord[]) => {
     setIsLoading(true);
-    toast({ title: "Generating Story...", description: "Your story is being created by AI. This may take a moment." });
+    toast({ title: "正在生成故事...", description: "AI 正在生成故事与 PDF，请稍等片刻。" });
     const input = {
       words: storyWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
     };
     const result = await generateStoryAction(input);
     if (result.success && result.data) {
       toast({
-        title: "Story PDF Generated!",
-        description: `Your PDF "${result.data.title}.pdf" has been downloaded.`,
+        title: "故事 PDF 已生成",
+        description: `已下载：${result.data.title}.pdf`,
       });
       if (result.data.pdfDataUri) {
         const link = document.createElement('a');
@@ -154,8 +154,8 @@ export default function Home() {
     } else {
       toast({
         variant: "destructive",
-        title: "Story Generation Failed",
-        description: result.error || "An unexpected error occurred.",
+        title: "故事生成失败",
+        description: result.error || "发生未知错误，请稍后重试。",
       });
     }
     setIsLoading(false);
@@ -166,8 +166,8 @@ export default function Home() {
       return (
         <div className="flex flex-col items-center justify-center text-center py-16">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <h3 className="text-lg font-medium">AI is working its magic...</h3>
-          <p className="text-sm text-muted-foreground">Please wait a moment.</p>
+          <h3 className="text-lg font-medium">AI 正在处理中...</h3>
+          <p className="text-sm text-muted-foreground">请稍等片刻。</p>
         </div>
       );
     }
@@ -220,7 +220,7 @@ export default function Home() {
               onClick={() => setView('capture')}
             >
               <PlusSquare />
-              New Words
+              新增单词
             </Button>
             <Button
               variant="ghost"
@@ -231,7 +231,7 @@ export default function Home() {
               onClick={() => setView('review')}
             >
               <BookOpen />
-              My Words
+              单词本
             </Button>
           </div>
         </nav>
@@ -245,17 +245,16 @@ export default function Home() {
       <AlertDialog open={!!wordToDelete} onOpenChange={() => cancelDelete()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>确认删除？</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the word
-              <span className="font-bold"> "{wordToDelete?.word}"</span>.
+              此操作无法撤销，将永久删除单词 <span className="font-bold">“{wordToDelete?.word}”</span>。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelDelete}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={cancelDelete}>取消</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               <Trash className="mr-2 h-4 w-4" />
-              Delete
+              删除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

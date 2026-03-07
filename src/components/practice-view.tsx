@@ -47,11 +47,11 @@ function joinSentence(parts: string[]) {
 function getTypeLabel(type: PracticeQuestion["type"]) {
   switch (type) {
     case "mcq":
-      return "Multiple Choice";
+      return "选择题";
     case "fill_blank":
-      return "Fill in the Blank";
+      return "填空题";
     case "reorder":
-      return "Sentence Reordering";
+      return "句子重组";
     default:
       return type;
   }
@@ -100,7 +100,7 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
   const renderExplanation = (q: PracticeQuestion) => (
     <Accordion type="single" collapsible>
       <AccordionItem value="explain" className="border-none">
-        <AccordionTrigger className="py-2 text-sm">Answer & Explanation</AccordionTrigger>
+        <AccordionTrigger className="py-2 text-sm">答案与解析</AccordionTrigger>
         <AccordionContent>
           <div className="space-y-3 text-sm">
             <div>
@@ -128,10 +128,10 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex items-center justify-between w-full gap-3">
-          <h2 className="text-2xl font-bold font-headline">Practice</h2>
+          <h2 className="text-2xl font-bold font-headline">练习</h2>
           {submitted && (
             <div className="text-sm text-muted-foreground">
-              Score: <span className="font-semibold text-foreground">{correctCount}</span> / {practiceData.questions.length}
+              得分：<span className="font-semibold text-foreground">{correctCount}</span> / {practiceData.questions.length}
             </div>
           )}
         </div>
@@ -145,11 +145,11 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2">
-                    <span>Question {index + 1}</span>
+                    <span>第 {index + 1} 题</span>
                     <Badge variant="secondary">{getTypeLabel(q.type)}</Badge>
                   </CardTitle>
                   <CardDescription>
-                    <span className="font-medium text-foreground">{q.word}</span>
+                    <span className="font-medium text-foreground">词汇：{q.word}</span>
                     <span className="mx-2 text-muted-foreground">·</span>
                     {q.promptEn}
                   </CardDescription>
@@ -188,8 +188,11 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                     return (
                       <div key={optionIndex} className="flex items-center space-x-2">
                         <RadioGroupItem value={String(optionIndex)} id={`q${index}-o${optionIndex}`} />
-                        <Label htmlFor={`q${index}-o${optionIndex}`} className={cn("flex items-center", className)}>
-                          {option}
+                        <Label htmlFor={`q${index}-o${optionIndex}`} className={cn("flex items-center gap-2", className)}>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {String.fromCharCode(65 + optionIndex)}.
+                          </span>
+                          <span>{option}</span>
                           {submitted && isCorrectOption && <CheckCircle className="ml-2 h-4 w-4 text-green-600" />}
                           {submitted && isSelected && !isCorrectOption && <XCircle className="ml-2 h-4 w-4 text-red-600" />}
                         </Label>
@@ -203,17 +206,17 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                 <div className="space-y-3">
                   <div className="text-sm text-muted-foreground whitespace-pre-wrap">{q.sentenceEn}</div>
                   <div className="space-y-2">
-                    <Label>Answer</Label>
+                    <Label>你的答案</Label>
                     <Input
                       value={answers[index]?.blank || ""}
                       onChange={(e) => setAnswer(index, { blank: e.target.value })}
                       disabled={submitted}
-                      placeholder="Type your answer..."
+                      placeholder="请输入答案..."
                     />
                   </div>
                   {submitted && (
                     <div className="text-sm text-muted-foreground">
-                      Correct answer: <span className="text-foreground">{q.acceptableAnswers.join(" / ")}</span>
+                      正确答案：<span className="text-foreground">{q.acceptableAnswers.join(" / ")}</span>
                     </div>
                   )}
                 </div>
@@ -221,10 +224,10 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
 
               {q.type === "reorder" && (
                 <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">Tap parts to build the correct sentence.</div>
+                  <div className="text-sm text-muted-foreground">点击碎片，按顺序组成正确句子。</div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground">Your order</div>
+                    <div className="text-xs font-semibold text-muted-foreground">你的选择</div>
                     <div className="flex flex-wrap gap-2">
                       {(answers[index]?.reorder || []).map((partIndex, i) => (
                         <Button
@@ -243,7 +246,7 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                         </Button>
                       ))}
                       {(answers[index]?.reorder || []).length === 0 && (
-                        <span className="text-sm text-muted-foreground">No parts selected.</span>
+                        <span className="text-sm text-muted-foreground">未选择任何碎片。</span>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -254,13 +257,13 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                         disabled={submitted}
                         onClick={() => setAnswer(index, { reorder: [] })}
                       >
-                        Reset
+                        重置
                       </Button>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground">Remaining parts</div>
+                    <div className="text-xs font-semibold text-muted-foreground">可选碎片</div>
                     <div className="flex flex-wrap gap-2">
                       {q.parts.map((p, partIndex) => {
                         const curr = answers[index]?.reorder || [];
@@ -284,7 +287,7 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                   {submitted && (
                     <div className="space-y-1 text-sm">
                       <div className="text-muted-foreground">
-                        Correct sentence:{" "}
+                        正确句子：{" "}
                         <span className="text-foreground">
                           {q.answerSentenceEn || joinSentence(q.correctOrder.map(i => q.parts[i]))}
                         </span>
@@ -295,7 +298,7 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                         </div>
                       )}
                       <div className="text-muted-foreground">
-                        Your sentence:{" "}
+                        你的句子：{" "}
                         <span className="text-foreground">
                           {joinSentence((answers[index]?.reorder || []).map(i => q.parts[i]))}
                         </span>
@@ -309,8 +312,10 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                 <div className="mt-4 p-4 bg-muted/50 rounded-lg">
                   {q.type === "mcq" && (
                     <div className="text-sm text-muted-foreground mb-3">
-                      Correct answer:{" "}
-                      <span className="text-foreground">{q.options[q.answerIndex]}</span>
+                      正确答案：{" "}
+                      <span className="text-foreground">
+                        {String.fromCharCode(65 + q.answerIndex)}. {q.options[q.answerIndex]}
+                      </span>
                     </div>
                   )}
                   {renderExplanation(q)}
@@ -323,10 +328,9 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
 
       {!submitted && (
         <Button onClick={handleSubmit} className="w-full">
-          Submit Answers
+          提交答案
         </Button>
       )}
     </div>
   );
 }
-

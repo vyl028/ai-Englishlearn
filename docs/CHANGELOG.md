@@ -138,6 +138,52 @@
 - 运行：`npm run dev`
 - 在 “My Words” 页面点击 “Practice”，在弹窗中勾选题型与设置题量后生成；确认题型混合符合勾选项，且能正常判题与展示讲解。
 
+## 2026-03-07
+
+### 新增/修改内容
+- 优化 Practice 的选择题（MCQ）生成：改为更贴近国内英语试卷的“单项选择/单句填空（单空 ____）”风格，并要求选项包含目标词及其常见变形作为干扰项，避免 “Which sentence uses <word> correctly?” 这类题型。
+- 练习页面选择题选项增加 A/B/C/D 标号展示。
+- 全站 UI 文案中文化（按钮、提示、弹窗、toast 等），保留单词本整体交互与布局不变。
+
+### 涉及文件
+- 修改：`src/ai/flows/generate-practice.ts`（MCQ 出题约束与示例）
+- 修改：`src/components/practice-view.tsx`（A/B/C/D + 中文文案）
+- 修改：`src/components/word-review-list.tsx`（中文文案 + 练习配置弹窗）
+- 修改：`src/components/word-capture-form.tsx`（中文文案）
+- 修改：`src/components/edit-word-dialog.tsx`（中文文案）
+- 修改：`src/app/page.tsx`（中文 toast/导航/删除确认）
+- 修改：`src/app/actions.ts`（用户可见错误信息中文化）
+- 修改：`src/app/layout.tsx`（`lang` 调整为 `zh-CN`，描述中文化）
+- 修改：`src/components/ui/carousel.tsx`（无障碍文案中文化）
+- 修改：`src/components/ui/dialog.tsx`（无障碍文案中文化）
+- 修改：`src/components/ui/sheet.tsx`（无障碍文案中文化）
+- 修改：`src/components/ui/sidebar.tsx`（无障碍文案中文化）
+- 修改：`docs/PROJECT_OVERVIEW.md`（同步更新说明）
+
+### 背景/原因
+- 选择题希望更符合国内考试习惯，且更适合作为“词形/搭配/语法点”练习；同时统一中文界面以提升学习体验。
+
+### 如何验证
+- 运行：`npm run dev`
+- 在 “单词本” 按周点击 “练习”，只勾选“选择题（单项选择）”生成后检查题干是否为单空填空式、选项是否包含变形且唯一正确，并确认选项显示 A/B/C/D 标号。
+
+## 2026-03-07
+
+### 新增/修改内容
+- 练习/故事生成支持选择单词范围：当前分组、最近一周、最近一个月（按自然月回退 1 个月），以及手动勾选单词本中的任意单词。
+- 故事生成在所选单词数量过多时弹出提示，并允许用户选择是否继续生成。
+
+### 涉及文件
+- 修改：`src/components/word-review-list.tsx`（生成弹窗：选词范围 + 搜索勾选 + 故事二次确认）
+- 修改：`docs/PROJECT_OVERVIEW.md`（同步更新说明）
+
+### 背景/原因
+- 生成内容不一定只基于某一周的分组；支持按最近一周/最近一月或手动选词，可更灵活地复习与输出。
+
+### 如何验证
+- 运行：`npm run dev`
+- 在 “单词本” 任一周点击 “练习/故事”，分别切换“最近一周 / 最近一个月 / 手动选择”，确认生成使用所选单词集合；故事选择大量单词时应出现二次确认弹窗。
+
 ---
 
 ## 记录模板（复制后填写）

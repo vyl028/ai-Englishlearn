@@ -37,9 +37,9 @@ import type { CapturedWord } from "@/lib/types";
 
 const formSchema = z.object({
   id: z.string(),
-  word: z.string().min(1, "Please enter a word.").max(50, "Word must be 50 characters or less."),
-  partOfSpeech: z.string().min(1, "Please select a part of speech."),
-  definition: z.string().min(1, "Please enter a definition."),
+  word: z.string().min(1, "请输入单词。").max(50, "单词长度不能超过 50 个字符。"),
+  partOfSpeech: z.string().min(1, "请选择词性。"),
+  definition: z.string().min(1, "请输入释义。"),
   capturedAt: z.date(),
 });
 
@@ -92,9 +92,9 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Edit Word</DialogTitle>
+          <DialogTitle>编辑单词</DialogTitle>
           <DialogDescription>
-            Make changes to your captured word here. Click save when you're done.
+            在这里修改你的单词信息，完成后点击保存。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -104,7 +104,7 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
               name="word"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Word</FormLabel>
+                  <FormLabel>单词</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
@@ -117,11 +117,11 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
               name="partOfSpeech"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Part of Speech</FormLabel>
+                  <FormLabel>词性</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select..." />
+                        <SelectValue placeholder="请选择..." />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -141,7 +141,7 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
               name="definition"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Definition</FormLabel>
+                  <FormLabel>释义</FormLabel>
                   <FormControl>
                     <Textarea {...field} />
                   </FormControl>
@@ -150,10 +150,10 @@ export function EditWordDialog({ word, isOpen, onOpenChange, onWordUpdated }: Ed
               )}
             />
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>取消</Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
+                保存
               </Button>
             </DialogFooter>
           </form>

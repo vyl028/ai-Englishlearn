@@ -27,7 +27,7 @@ function buildFallbackPromptEn(q: any): string {
     case 'reorder':
       return `Reorder the parts to make a correct sentence using "${word}".`;
     case 'mcq':
-      return `Choose the best answer for "${word}".`;
+      return `Choose the best answer to complete the sentence: ____`;
     default:
       return `Practice question about "${word}".`;
   }
@@ -118,7 +118,7 @@ export async function generatePractice(input: GeneratePracticeInput): Promise<Ge
   const targets = shuffle(wordSlots.map((w, i) => ({ ...w, type: typeSlots[i] })));
 
   const systemPrompt = `You are an expert English teacher and exam designer for a Grade 9 student in mainland China.
-You create high-quality vocabulary practice questions.
+You create high-quality vocabulary practice questions, and your MCQ questions resemble typical Chinese English exam multiple-choice cloze questions (single blank).
 All prompts and sentences must be natural English.
 All explanations must be Simplified Chinese.
 You MUST output valid JSON only (no markdown, no extra commentary).`;
@@ -146,8 +146,13 @@ Each question object MUST include:
 - "usageZh": string (1-3 sentences, include collocations/register/common mistakes)
 
 For type="mcq":
-- "options": array of 4 strings (natural English)
+- "promptEn": an exam-style stem (single sentence or short dialogue) containing EXACTLY ONE blank placeholder "____"
+- "options": array of 4 strings (single word or short phrase)
 - "answerIndex": integer 0..3
+\n
+MCQ style examples (do NOT copy verbatim; create new contexts):
+- promptEn: "Tom ____ to school by bike every day." options: ["go", "goes", "went", "going"]
+- promptEn: "— I have two ____.\n— Really? What are their names?" options: ["cat", "cats", "cat's", "cats'"]
 
 For type="fill_blank":
 - "sentenceEn": an English sentence containing a blank placeholder "____" where the answer should go
@@ -160,6 +165,8 @@ For type="reorder":
 
 Rules:
 - The target word must appear in the correct answer for every question.
+- For type="mcq", do NOT use the style “Which sentence uses <word> correctly?”; instead, use Chinese-exam-style single-blank cloze questions.
+- For type="mcq", the correct option MUST be the target word or its inflected form (tense/plural/comparative/etc). The other options should be plausible distractors (often other inflections or common confusions), with EXACTLY one correct.
 - Keep sentences short and appropriate for Grade 9.
 - If the same word appears multiple times, use different contexts.
 - Avoid ambiguous reorder questions (must be uniquely solvable).

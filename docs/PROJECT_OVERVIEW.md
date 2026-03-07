@@ -21,7 +21,7 @@
 
 ## 2. 当前已实现功能（按用户视角）
 
-### 2.1 新增单词（New Words）
+### 2.1 新增单词
 入口：`src/app/page.tsx`
 
 组件：`src/components/word-capture-form.tsx`
@@ -41,16 +41,16 @@
 - 选择本地图片，读取为 Data URI
 - 同 Camera 流程进行识别并加入列表
 
-### 2.2 单词复习（My Words）
+### 2.2 单词复习（单词本）
 组件：`src/components/word-review-list.tsx`
 
 - 以“周”为单位分组展示（按捕获时间）
 - 每周可一键生成：
-  - **Practice**（可勾选题型：选择题/填空/句子重组；可设置题目数量，默认 10；提交后展示答案对比与讲解）：`generatePracticeAction`
-  - **Story**：`generateStoryAction`（生成并下载 PDF）
+  - **Practice**（可勾选题型：选择题/填空/句子重组；可设置题目数量，默认 10；可选择用于生成的单词范围；提交后展示答案对比与讲解）：`generatePracticeAction`
+  - **Story**（可选择用于生成的单词范围；生成并下载 PDF；单词数量过多时会提示并可选择是否继续）：`generateStoryAction`
 - 支持：
-  - 显示/隐藏释义（Switch）
-  - 展开 “Learn more” 查看拓展信息（搭配/同反义/例句/难度用法）
+  - 显示/隐藏释义（显示释义）
+  - 展开 “了解更多” 查看拓展信息（搭配/同反义/例句/难度用法）
   - 点击单词打开 Cambridge 词典页面（新标签页）
   - 编辑（本地更新）
   - 删除（带二次确认弹窗）
@@ -59,7 +59,8 @@
 组件：`src/components/practice-view.tsx`
 
 - 支持题型：选择题（MCQ）/填空题/句子重组题
-- 支持配置：题型勾选 + 题目数量（默认 10）
+- 支持配置：选词范围（当前分组/最近一周/最近一个月/手动选择）+ 题型勾选 + 题目数量（默认 10）
+- 选择题题干为更贴近国内英语试卷的“单项选择/单句填空（单空 ____）”风格；选项显示 A/B/C/D 标号
 - 提交后展示：答案对比、详细解析、语法讲解与词汇用法讲解
 
 ### 2.4 Story PDF（周故事）
@@ -68,6 +69,7 @@
 - AI 返回：`{ title, story, translation }`
 - 服务端使用 `jsPDF` 生成 PDF（中英分两页）
 - 返回 `data:` URI 到前端，由浏览器触发下载
+- 支持选词范围（当前分组/最近一周/最近一个月/手动选择）；当单词数量过多会弹窗确认是否继续生成
 
 ## 3. 与 Blueprint 的对齐情况
 
@@ -240,13 +242,13 @@ type CapturedWord = {
 → 生成多个 `CapturedWord` 并追加到列表
 
 ### 8.3 每周 Practice（练习）
-`WordReviewList` 点击 Practice（可配置题型勾选 + 题目数量）  
+`WordReviewList` 点击 Practice（可配置选词范围 + 题型勾选 + 题目数量）  
 → `src/app/actions.ts#generatePracticeAction`  
 → `src/ai/flows/generate-practice.ts#generatePractice`（返回 JSON array）  
 → `PracticeView` 展示与判分（本地判题 + 解析/语法/用法讲解）
 
 ### 8.4 每周 Story PDF
-`WordReviewList` 点击 Story  
+`WordReviewList` 点击 Story（可配置选词范围；单词过多会二次确认）  
 → `src/app/actions.ts#generateStoryAction`  
 → `src/ai/flows/generate-story.ts#generateStory`（返回 JSON object）  
 → `src/lib/pdf-server-utils.ts#generateStoryPdf` 生成 `datauristring`  

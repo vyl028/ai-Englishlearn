@@ -30,7 +30,7 @@ export async function getDefinitionAction(
   try {
     const result = await defineCapturedWord(data);
     if (!result.definition) {
-      return { success: false, error: "Could not get a definition for this word. Please try again." };
+      return { success: false, error: "无法获取该单词的释义，请重试。" };
     }
 
     const newWord: CapturedWord = {
@@ -46,7 +46,7 @@ export async function getDefinitionAction(
     return { success: true, data: newWord };
   } catch (error: any) {
     console.error(error);
-    return { success: false, error: error.message || "An error occurred while fetching the definition." };
+    return { success: false, error: error.message || "获取释义时发生错误。" };
   }
 }
 
@@ -57,14 +57,14 @@ export async function extractWordAndDefineAction(
     const result = await extractWordAndDefine({ photoDataUri });
     if (!result || result.length === 0) {
       console.log('No words found in result');
-      return { success: false, error: "Could not extract any words from the image. Please try again." };
+      return { success: false, error: "无法从图片中识别到单词，请重试。" };
     }
     console.log('Returning success with data:', result);
     return { success: true, data: result };
   } catch (error: any) {
     console.error('extractWordAndDefineAction error:', error);
     console.error('Error stack:', error.stack);
-    return { success: false, error: error.message || "An error occurred while analyzing the image." };
+    return { success: false, error: error.message || "分析图片时发生错误。" };
   }
 }
 
@@ -74,12 +74,12 @@ export async function generateQuizAction(
   try {
     const result = await generateQuiz(input);
     if (!result || !result.questions || result.questions.length === 0) {
-      return { success: false, error: "Could not generate a quiz. The model may have returned an empty result." };
+      return { success: false, error: "无法生成测验题，模型可能返回了空结果。" };
     }
     return { success: true, data: result };
   } catch (error: any) {
     console.error('generateQuizAction error:', error);
-    return { success: false, error: error.message || "An error occurred while generating the quiz." };
+    return { success: false, error: error.message || "生成测验题时发生错误。" };
   }
 }
 
@@ -89,12 +89,12 @@ export async function generatePracticeAction(
   try {
     const result = await generatePractice(input);
     if (!result || result.length === 0) {
-      return { success: false, error: "Could not generate practice questions. The model may have returned an empty result." };
+      return { success: false, error: "无法生成练习题，模型可能返回了空结果。" };
     }
     return { success: true, data: { questions: result } };
   } catch (error: any) {
     console.error('generatePracticeAction error:', error);
-    return { success: false, error: error.message || "An error occurred while generating practice questions." };
+    return { success: false, error: error.message || "生成练习题时发生错误。" };
   }
 }
 
@@ -104,12 +104,12 @@ export async function generateStoryAction(
   try {
     const result = await generateStory(input);
     if (!result || !result.story) {
-      return { success: false, error: "Could not generate a story. The model may have returned an empty result." };
+      return { success: false, error: "无法生成故事，模型可能返回了空结果。" };
     }
     const pdfDataUri = await generateStoryPdf(result);
     return { success: true, data: { ...result, pdfDataUri } };
   } catch (error: any) {
     console.error('generateStoryAction error:', error);
-    return { success: false, error: error.message || "An error occurred while generating the story." };
+    return { success: false, error: error.message || "生成故事时发生错误。" };
   }
 }

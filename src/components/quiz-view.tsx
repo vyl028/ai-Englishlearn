@@ -43,12 +43,12 @@ export function QuizView({ quizData, onBack }: QuizViewProps) {
         <Button variant="outline" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h2 className="text-2xl font-bold font-headline">Weekly Quiz</h2>
+        <h2 className="text-2xl font-bold font-headline">每周测验</h2>
       </div>
       {quizData.questions.map((q, index) => (
         <Card key={index}>
           <CardHeader>
-            <CardTitle>Question {index + 1}</CardTitle>
+            <CardTitle>第 {index + 1} 题</CardTitle>
             <CardDescription>{q.question}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -79,7 +79,7 @@ export function QuizView({ quizData, onBack }: QuizViewProps) {
       ))}
       {!submitted && (
         <Button onClick={handleSubmit} className="w-full">
-          Submit Answers
+          提交答案
         </Button>
       )}
     </div>
