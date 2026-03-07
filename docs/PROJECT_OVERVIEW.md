@@ -3,7 +3,7 @@
 更新时间：2026-03-07  
 代码仓库根目录：`D:\University\毕设\studio`
 
-> 目标：在不改动任何现有代码的前提下，梳理项目现状（功能、架构、关键文件、运行方式、风险点），为后续迭代开发提供“地图”。
+> 目标：梳理项目现状（功能、架构、关键文件、运行方式、风险点），为后续迭代开发提供“地图”。
 
 ## 1. 项目定位
 
@@ -44,7 +44,11 @@
 ### 2.2 单词复习（单词本）
 组件：`src/components/word-review-list.tsx`
 
-- 以“周”为单位分组展示（按捕获时间）
+- 顶部新增“自定义分组”列表（含“全部”视角）：
+  - 新增单词默认进入“默认分组”
+  - 支持分组管理：新建 / 重命名 / 删除（删除后单词自动移动到默认分组）
+  - 单词卡片支持“移动分组”
+- 在任意分组视角下，列表仍以“周”为单位分组展示（按捕获时间）
 - 每周可一键生成：
   - **Practice**（可勾选题型：选择题/填空/句子重组；可设置题目数量，默认 10；可选择用于生成的单词范围；提交后展示答案对比与讲解）：`generatePracticeAction`
   - **Story**（可选择用于生成的单词范围；生成并下载 PDF；单词数量过多时会提示并可选择是否继续）：`generateStoryAction`
@@ -59,7 +63,8 @@
 组件：`src/components/practice-view.tsx`
 
 - 支持题型：选择题（MCQ）/填空题/句子重组题
-- 支持配置：选词范围（当前分组/最近一周/最近一个月/手动选择）+ 题型勾选 + 题目数量（默认 10）
+- 支持配置：选词范围（分组下拉/最近一周/最近一个月/手动选择）+ 题型勾选 + 题目数量（默认 10）
+  - 最近一周/最近一个月按“全部单词（跨分组）”计算
 - 选择题题干为更贴近国内英语试卷的“单项选择/单句填空（单空 ____）”风格；选项显示 A/B/C/D 标号
 - 提交后展示：答案对比、详细解析、语法讲解与词汇用法讲解
 
@@ -69,7 +74,8 @@
 - AI 返回：`{ title, story, translation }`
 - 服务端使用 `jsPDF` 生成 PDF（中英分两页）
 - 返回 `data:` URI 到前端，由浏览器触发下载
-- 支持选词范围（当前分组/最近一周/最近一个月/手动选择）；当单词数量过多会弹窗确认是否继续生成
+- 支持选词范围（分组下拉/最近一周/最近一个月/手动选择）；当单词数量过多会弹窗确认是否继续生成
+  - 最近一周/最近一个月按“全部单词（跨分组）”计算
 
 ## 3. 与 Blueprint 的对齐情况
 
@@ -203,6 +209,8 @@ npm run genkit:watch
 type CapturedWord = {
   id: string;
   word: string;
+  // 自定义分组 id（旧数据可能缺失；缺失时视为默认分组）
+  groupId?: string;
   partOfSpeech: string;
   definition: string;
   enrichment?: WordEnrichment;
@@ -221,9 +229,12 @@ type CapturedWord = {
 ### 7.2 localStorage 持久化策略
 实现：`src/app/page.tsx`
 
-- key：`lexi-capture-words`
-- 保存前会**移除 `photoDataUri`**（避免把 base64 图片塞进 localStorage）
-- 读取后会把 `capturedAt` 从字符串转回 `Date`
+- 单词数据 key：`lexi-capture-words`
+  - 保存前会**移除 `photoDataUri`**（避免把 base64 图片塞进 localStorage）
+  - 读取后会把 `capturedAt` 从字符串转回 `Date`
+  - 旧数据若缺少 `groupId` 会自动归入默认分组
+- 分组列表 key：`lexi-capture-groups`
+- 当前选中分组 key：`lexi-capture-selected-group`
 
 ## 8. 关键业务流程（从代码映射）
 
@@ -232,23 +243,23 @@ type CapturedWord = {
 → `src/app/actions.ts#getDefinitionAction`  
 → `src/ai/flows/define-captured-word.ts#defineCapturedWord`  
 → `src/ai/gemini.ts#generateText`  
-→ 返回 `definition`，在前端追加到 `words` 并写入 localStorage
+→ 返回 `definition`，在前端追加到 `words`（默认分组）并写入 localStorage
 
 ### 8.2 拍照/上传 → OCR+释义（多词）→ 加入列表
 `WordCaptureForm.handleImageAnalysis`  
 → `src/app/actions.ts#extractWordAndDefineAction`  
 → `src/ai/flows/extract-word-and-define.ts#extractWordAndDefine`  
 → `src/ai/gemini.ts#generateJsonArray`（要求返回 JSON array）  
-→ 生成多个 `CapturedWord` 并追加到列表
+→ 生成多个 `CapturedWord` 并追加到列表（默认分组）
 
 ### 8.3 每周 Practice（练习）
-`WordReviewList` 点击 Practice（可配置选词范围 + 题型勾选 + 题目数量）  
+`WordReviewList` 点击 Practice（可配置选词范围：分组下拉/最近一周/最近一月/手动选择 + 题型勾选 + 题目数量）  
 → `src/app/actions.ts#generatePracticeAction`  
 → `src/ai/flows/generate-practice.ts#generatePractice`（返回 JSON array）  
 → `PracticeView` 展示与判分（本地判题 + 解析/语法/用法讲解）
 
 ### 8.4 每周 Story PDF
-`WordReviewList` 点击 Story（可配置选词范围；单词过多会二次确认）  
+`WordReviewList` 点击 Story（可配置选词范围：分组下拉/最近一周/最近一月/手动选择；单词过多会二次确认）  
 → `src/app/actions.ts#generateStoryAction`  
 → `src/ai/flows/generate-story.ts#generateStory`（返回 JSON object）  
 → `src/lib/pdf-server-utils.ts#generateStoryPdf` 生成 `datauristring`  

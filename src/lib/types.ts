@@ -4,11 +4,22 @@ import { z } from 'zod';
 export type CapturedWord = {
   id: string;
   word: string;
+  /**
+   * Optional custom group id for organizing words.
+   * Older localStorage entries may not have this field; treat missing as the default group.
+   */
+  groupId?: string;
   partOfSpeech: string;
   definition: string;
   enrichment?: WordEnrichment;
   capturedAt: Date;
   photoDataUri?: string;
+};
+
+export type WordGroup = {
+  id: string;
+  name: string;
+  isDefault?: boolean;
 };
 
 export const WordEnrichmentSchema = z.object({

@@ -7,11 +7,11 @@ import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { PracticeView } from '@/components/practice-view';
-import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType } from '@/lib/types';
+import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,8 +25,19 @@ import {
 
 type View = 'capture' | 'review' | 'practice';
 
+const WORDS_STORAGE_KEY = 'lexi-capture-words';
+const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
+const SELECTED_GROUP_STORAGE_KEY = 'lexi-capture-selected-group';
+
+const ALL_GROUP_ID = '__all__';
+const DEFAULT_GROUP_ID = 'default';
+const DEFAULT_GROUP: WordGroup = { id: DEFAULT_GROUP_ID, name: '默认分组', isDefault: true };
+
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
+  const [groups, setGroups] = useState<WordGroup[]>([DEFAULT_GROUP]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(ALL_GROUP_ID);
+  const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<View>('capture');
   const [editingWord, setEditingWord] = useState<CapturedWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -36,34 +47,111 @@ export default function Home() {
   const { toast } = useToast();
 
   useEffect(() => {
+    const normalizeGroups = (raw: any): WordGroup[] => {
+      const parsed = Array.isArray(raw) ? raw : [];
+      const cleaned: WordGroup[] = parsed
+        .filter((g) => g && typeof g.id === 'string' && typeof g.name === 'string')
+        .map((g) => ({ id: String(g.id), name: String(g.name), isDefault: Boolean(g.isDefault) }));
+
+      const hasDefault = cleaned.some((g) => g.id === DEFAULT_GROUP_ID || g.isDefault);
+      if (!hasDefault) {
+        cleaned.unshift(DEFAULT_GROUP);
+      } else if (!cleaned.some((g) => g.id === DEFAULT_GROUP_ID)) {
+        // Ensure the default id is always present for stable routing/migration.
+        const idx = cleaned.findIndex((g) => g.isDefault);
+        if (idx >= 0) {
+          cleaned[idx] = { ...cleaned[idx], id: DEFAULT_GROUP_ID, isDefault: true };
+        } else {
+          cleaned.unshift(DEFAULT_GROUP);
+        }
+      }
+
+      // Ensure exactly one default.
+      let defaultSeen = false;
+      return cleaned.map((g) => {
+        const isDefault = g.id === DEFAULT_GROUP_ID || g.isDefault;
+        if (!isDefault) return { ...g, isDefault: false };
+        if (defaultSeen) return { ...g, isDefault: false };
+        defaultSeen = true;
+        return { ...g, id: DEFAULT_GROUP_ID, isDefault: true };
+      });
+    };
+
+    const readJson = (key: string) => {
+      try {
+        const txt = localStorage.getItem(key);
+        if (!txt) return undefined;
+        return JSON.parse(txt);
+      } catch {
+        return undefined;
+      }
+    };
+
     try {
-      const storedWords = localStorage.getItem('lexi-capture-words');
-      if (storedWords) {
-        // When retrieving from localStorage, dates need to be converted back to Date objects
-        const parsedWords = JSON.parse(storedWords).map((word: any) => ({
-          ...word,
-          capturedAt: new Date(word.capturedAt),
-        }));
-        setWords(parsedWords);
+      const storedGroups = normalizeGroups(readJson(GROUPS_STORAGE_KEY));
+      setGroups(storedGroups);
+
+      const groupIds = new Set(storedGroups.map((g) => g.id));
+      const storedSelected = localStorage.getItem(SELECTED_GROUP_STORAGE_KEY);
+      if (storedSelected && (storedSelected === ALL_GROUP_ID || groupIds.has(storedSelected))) {
+        setSelectedGroupId(storedSelected);
+      } else {
+        setSelectedGroupId(ALL_GROUP_ID);
+      }
+
+      const rawWords = readJson(WORDS_STORAGE_KEY);
+      if (Array.isArray(rawWords)) {
+        const normalized = rawWords
+          .filter((w) => w && typeof w.id === 'string')
+          .map((w: any) => {
+            const capturedAt = new Date(w.capturedAt);
+            const groupId = typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : DEFAULT_GROUP_ID;
+            return {
+              ...w,
+              capturedAt: Number.isNaN(capturedAt.getTime()) ? new Date() : capturedAt,
+              groupId,
+            } as CapturedWord;
+          });
+        setWords(normalized);
       }
     } catch (error) {
       console.error("Failed to parse words from localStorage", error);
     }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
     // Save to localStorage, even if it's an empty array to clear it.
+    if (!hydrated) return;
     try {
-      localStorage.setItem('lexi-capture-words', JSON.stringify(words));
+      localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(words));
     } catch (error) {
       console.error("Failed to save words to localStorage", error);
     }
   }, [words]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
+    } catch (error) {
+      console.error("Failed to save groups to localStorage", error);
+    }
+  }, [groups]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(SELECTED_GROUP_STORAGE_KEY, selectedGroupId);
+    } catch (error) {
+      console.error("Failed to save selected group to localStorage", error);
+    }
+  }, [selectedGroupId]);
+
   const handleWordAdded = (newWord: CapturedWord) => {
     const { photoDataUri, ...wordToSave } = newWord;
     setWords((prevWords) => {
-      const updatedWords = [wordToSave, ...prevWords];
+      const updatedWords = [{ ...wordToSave, groupId: wordToSave.groupId || DEFAULT_GROUP_ID }, ...prevWords];
       return updatedWords;
     });
     setView('review');
@@ -71,7 +159,7 @@ export default function Home() {
   
   const handleMultipleWordsAdded = (newWords: CapturedWord[]) => {
     console.log('handleMultipleWordsAdded called with:', newWords);
-    const wordsToSave = newWords.map(({ photoDataUri, ...word }) => word);
+    const wordsToSave = newWords.map(({ photoDataUri, ...word }) => ({ ...word, groupId: word.groupId || DEFAULT_GROUP_ID }));
     console.log('Words to save:', wordsToSave);
     setWords((prevWords) => {
         const updatedWords = [...wordsToSave, ...prevWords];
@@ -104,6 +192,32 @@ export default function Home() {
 
   const cancelDelete = () => {
     setWordToDelete(null);
+  };
+
+  const handleAddGroup = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const newGroup: WordGroup = { id: generateId(), name: trimmed, isDefault: false };
+    setGroups((prev) => [...prev, newGroup]);
+    setSelectedGroupId(newGroup.id);
+  };
+
+  const handleRenameGroup = (groupId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name: trimmed } : g)));
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+    if (groupId === DEFAULT_GROUP_ID) return;
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    setWords((prev) => prev.map((w) => ((w.groupId || DEFAULT_GROUP_ID) === groupId ? { ...w, groupId: DEFAULT_GROUP_ID } : w)));
+    setSelectedGroupId((prev) => (prev === groupId ? ALL_GROUP_ID : prev));
+  };
+
+  const handleMoveWordToGroup = (wordId: string, groupId: string) => {
+    if (!groupId) return;
+    setWords((prev) => prev.map((w) => (w.id === wordId ? { ...w, groupId } : w)));
   };
 
   const handleGeneratePractice = async (
@@ -176,7 +290,22 @@ export default function Home() {
       case 'capture':
         return <WordCaptureForm onWordAdded={handleWordAdded} onMultipleWordsAdded={handleMultipleWordsAdded} />;
       case 'review':
-        return <WordReviewList words={words} onEditWord={handleEditWord} onDeleteWord={handleDeleteWord} onGeneratePractice={handleGeneratePractice} onGenerateStory={handleGenerateStory} />;
+        return (
+          <WordReviewList
+            words={words}
+            groups={groups}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={setSelectedGroupId}
+            onAddGroup={handleAddGroup}
+            onRenameGroup={handleRenameGroup}
+            onDeleteGroup={handleDeleteGroup}
+            onMoveWordToGroup={handleMoveWordToGroup}
+            onEditWord={handleEditWord}
+            onDeleteWord={handleDeleteWord}
+            onGeneratePractice={handleGeneratePractice}
+            onGenerateStory={handleGenerateStory}
+          />
+        );
       case 'practice':
         if (practiceData) {
           return <PracticeView practiceData={practiceData} onBack={() => setView('review')} />;

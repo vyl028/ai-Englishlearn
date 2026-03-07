@@ -3,14 +3,15 @@
 
 import { useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
-import type { CapturedWord, PracticeQuestionType } from '@/lib/types';
+import type { CapturedWord, PracticeQuestionType, WordGroup } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,13 @@ import {
 
 interface WordReviewListProps {
   words: CapturedWord[];
+  groups: WordGroup[];
+  selectedGroupId: string;
+  onSelectGroup: (groupId: string) => void;
+  onAddGroup: (name: string) => void;
+  onRenameGroup: (groupId: string, name: string) => void;
+  onDeleteGroup: (groupId: string) => void;
+  onMoveWordToGroup: (wordId: string, groupId: string) => void;
   onEditWord: (word: CapturedWord) => void;
   onDeleteWord: (word: CapturedWord) => void;
   onGeneratePractice: (words: CapturedWord[], options: { questionCount: number; allowedTypes: PracticeQuestionType[] }) => void;
@@ -37,6 +45,9 @@ interface WordReviewListProps {
 
 type GeneratorMode = 'practice' | 'story';
 type WordPickScope = 'group' | 'week' | 'month' | 'manual';
+
+const ALL_GROUP_ID = '__all__';
+const DEFAULT_GROUP_ID = 'default';
 
 const groupWordsByWeek = (words: CapturedWord[]) => {
   if (!words || words.length === 0) {
@@ -59,8 +70,31 @@ const groupWordsByWeek = (words: CapturedWord[]) => {
   return grouped;
 };
 
-export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePractice, onGenerateStory }: WordReviewListProps) {
+export function WordReviewList({
+  words,
+  groups,
+  selectedGroupId,
+  onSelectGroup,
+  onAddGroup,
+  onRenameGroup,
+  onDeleteGroup,
+  onMoveWordToGroup,
+  onEditWord,
+  onDeleteWord,
+  onGeneratePractice,
+  onGenerateStory,
+}: WordReviewListProps) {
   const [showDefinition, setShowDefinition] = useState(false);
+
+  const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState('');
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [movingWord, setMovingWord] = useState<CapturedWord | null>(null);
+  const [moveTargetGroupId, setMoveTargetGroupId] = useState<string>(DEFAULT_GROUP_ID);
 
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('practice');
@@ -69,6 +103,7 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
   const [wordSearch, setWordSearch] = useState('');
   const [selectedWordIds, setSelectedWordIds] = useState<Set<string>>(new Set());
   const [storyConfirmOpen, setStoryConfirmOpen] = useState(false);
+  const [generatorGroupId, setGeneratorGroupId] = useState<string>(selectedGroupId || ALL_GROUP_ID);
 
   const [questionCountText, setQuestionCountText] = useState('10');
   const [typeSelection, setTypeSelection] = useState<Record<PracticeQuestionType, boolean>>({
@@ -80,19 +115,27 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
   const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
   const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
 
-  const sortedWords = [...words].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
-  const selectedWords = sortedWords.filter(w => selectedWordIds.has(w.id));
+  const defaultGroupId = groups.find((g) => g.id === DEFAULT_GROUP_ID || g.isDefault)?.id || DEFAULT_GROUP_ID;
+  const getWordGroupId = (w: CapturedWord) => (w.groupId && typeof w.groupId === 'string' ? w.groupId : defaultGroupId);
+
+  const allSortedWords = [...words].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
+  const viewWords = selectedGroupId === ALL_GROUP_ID
+    ? allSortedWords
+    : allSortedWords.filter((w) => getWordGroupId(w) === selectedGroupId);
+
+  const selectedWords = allSortedWords.filter(w => selectedWordIds.has(w.id));
 
   const now = new Date();
   const cutoffWeek = subWeeks(now, 1);
   const cutoffMonth = subMonths(now, 1);
-  const recentWeekWords = sortedWords.filter(w => new Date(w.capturedAt) >= cutoffWeek);
-  const recentMonthWords = sortedWords.filter(w => new Date(w.capturedAt) >= cutoffMonth);
+  // Option B: recent ranges are across ALL words (跨分组).
+  const recentWeekWords = allSortedWords.filter(w => new Date(w.capturedAt) >= cutoffWeek);
+  const recentMonthWords = allSortedWords.filter(w => new Date(w.capturedAt) >= cutoffMonth);
 
   const normalizedSearch = wordSearch.trim().toLowerCase();
   const filteredWords = normalizedSearch.length === 0
-    ? sortedWords
-    : sortedWords.filter(w => {
+    ? allSortedWords
+    : allSortedWords.filter(w => {
       const word = w.word.toLowerCase();
       const pos = (w.partOfSpeech || '').toLowerCase();
       const def = (w.definition || '').toLowerCase();
@@ -134,7 +177,7 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
   };
 
   // Group words by week
-  const groupedWords = words.reduce((acc, word) => {
+  const groupedWords = viewWords.reduce((acc, word) => {
     const weekStart = getWeekStart(word.capturedAt);
     const weekKey = weekStart.toISOString().split('T')[0];
     if (!acc[weekKey]) {
@@ -142,7 +185,7 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
     }
     acc[weekKey].push(word);
     return acc;
-  }, {} as { [key: string]: typeof words });
+  }, {} as Record<string, CapturedWord[]>);
 
   const weekKeys = Object.keys(groupedWords).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
@@ -157,27 +200,35 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
      window.open(url, '_blank');
    };
 
-   const setSelectionFromWords = (pickedWords: CapturedWord[]) => {
-     setSelectedWordIds(new Set(pickedWords.map(w => w.id)));
-   };
+    const setSelectionFromWords = (pickedWords: CapturedWord[]) => {
+      setSelectedWordIds(new Set(pickedWords.map(w => w.id)));
+    };
 
-   const applyScope = (nextScope: WordPickScope) => {
-     setWordPickScope(nextScope);
-     if (nextScope === 'manual') return;
-     if (nextScope === 'group') return setSelectionFromWords(contextGroupWords);
-     if (nextScope === 'week') return setSelectionFromWords(recentWeekWords);
-     if (nextScope === 'month') return setSelectionFromWords(recentMonthWords);
-   };
+    const applyScope = (nextScope: WordPickScope) => {
+      setWordPickScope(nextScope);
+      if (nextScope === 'manual') return;
+      if (nextScope === 'group') {
+        const targetGroupId = generatorGroupId || selectedGroupId || ALL_GROUP_ID;
+        const groupWords = targetGroupId === ALL_GROUP_ID
+          ? allSortedWords
+          : allSortedWords.filter((w) => getWordGroupId(w) === targetGroupId);
+        return setSelectionFromWords(groupWords);
+      }
+      if (nextScope === 'week') return setSelectionFromWords(recentWeekWords);
+      if (nextScope === 'month') return setSelectionFromWords(recentMonthWords);
+    };
 
-   const openGenerator = (mode: GeneratorMode, weekWords: CapturedWord[]) => {
-     setGeneratorMode(mode);
-     setContextGroupWords(weekWords);
-     setWordPickScope('group');
-     setSelectionFromWords(weekWords);
-     setWordSearch('');
-     setStoryConfirmOpen(false);
-     setGeneratorOpen(true);
-   };
+    const openGenerator = (mode: GeneratorMode, weekWords: CapturedWord[]) => {
+      setGeneratorMode(mode);
+      setContextGroupWords(weekWords);
+      // Default to manual selection (pre-selected words from the week card).
+      setWordPickScope('manual');
+      setSelectionFromWords(weekWords);
+      setWordSearch('');
+      setStoryConfirmOpen(false);
+      setGeneratorGroupId(selectedGroupId || ALL_GROUP_ID);
+      setGeneratorOpen(true);
+    };
 
    const toggleWord = (id: string, checked: boolean) => {
      setSelectedWordIds(prev => {
@@ -203,66 +254,133 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
      if (wordPickScope !== 'manual') setWordPickScope('manual');
    };
 
-   const handleGenerate = () => {
-     if (!canGenerate) return;
-     if (generatorMode === 'practice') {
-       onGeneratePractice(selectedWords, { questionCount, allowedTypes: selectedTypes });
-       setGeneratorOpen(false);
-       return;
-     }
+    const handleGenerate = () => {
+      if (!canGenerate) return;
+      if (generatorMode === 'practice') {
+        onGeneratePractice(selectedWords, { questionCount, allowedTypes: selectedTypes });
+        setGeneratorOpen(false);
+        return;
+      }
 
      // story
      if (isStoryTooMany) {
        setStoryConfirmOpen(true);
        return;
      }
-     onGenerateStory(selectedWords);
-     setGeneratorOpen(false);
-   };
-  
-   return (
-     <>
-     <div className="space-y-6">
-        <div className="flex items-center justify-between gap-3">
+      onGenerateStory(selectedWords);
+      setGeneratorOpen(false);
+    };
+
+    const openMoveDialog = (w: CapturedWord) => {
+      setMovingWord(w);
+      setMoveTargetGroupId(getWordGroupId(w));
+      setMoveOpen(true);
+    };
+
+    const groupCounts = allSortedWords.reduce((acc, w) => {
+      const gid = getWordGroupId(w);
+      acc[gid] = (acc[gid] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const defaultGroupName = groups.find((g) => g.id === defaultGroupId)?.name || '默认分组';
+    const groupToDelete = deleteGroupId ? groups.find((g) => g.id === deleteGroupId) : undefined;
+    const deleteWordCount = groupToDelete ? (groupCounts[groupToDelete.id] || 0) : 0;
+
+    const startRename = (g: WordGroup) => {
+      setEditingGroupId(g.id);
+      setEditingGroupName(g.name);
+    };
+
+    const cancelRename = () => {
+      setEditingGroupId(null);
+      setEditingGroupName('');
+    };
+
+    const saveRename = () => {
+      if (!editingGroupId) return;
+      onRenameGroup(editingGroupId, editingGroupName);
+      cancelRename();
+    };
+   
+    return (
+      <>
+      <div className="space-y-6">
+         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Sparkles className="h-6 w-6 text-primary" />
             <h2 className="text-2xl font-bold font-headline">我的单词本</h2>
           </div>
-          <div className="flex items-center space-x-2">
-            <Switch id="show-definition" checked={showDefinition} onCheckedChange={setShowDefinition} />
-            <Label htmlFor="show-definition">显示释义</Label>
-          </div>
-        </div>
+           <div className="flex items-center space-x-2">
+             <Switch id="show-definition" checked={showDefinition} onCheckedChange={setShowDefinition} />
+             <Label htmlFor="show-definition">显示释义</Label>
+           </div>
+         </div>
 
-      {words.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed rounded-lg bg-card">
-          <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-medium">还没有收集到单词</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            去「新增单词」添加你的第一个单词。
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {weekKeys.map((weekKey) => (
-            <div key={weekKey}>
-              <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-lg font-semibold text-foreground mb-3">
-          {formatWeekRange(getWeekStart(new Date(weekKey)), getWeekEnd(new Date(weekKey)))}
-        </h3>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openGenerator('practice', groupedWords[weekKey])}>
-                    <ListChecks className="h-4 w-4 mr-2" />
-                    练习
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => openGenerator('story', groupedWords[weekKey])}>
-                    <Newspaper className="h-4 w-4 mr-2" />
-                    故事
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {groupedWords[weekKey].map((word) => (
+         <div className="space-y-2">
+           <div className="flex items-center justify-between gap-3">
+             <div className="flex items-center gap-2 overflow-x-auto pb-1">
+               <Button
+                 type="button"
+                 size="sm"
+                 variant={selectedGroupId === ALL_GROUP_ID ? "default" : "secondary"}
+                 onClick={() => onSelectGroup(ALL_GROUP_ID)}
+               >
+                 全部
+                 <span className="ml-2 text-xs text-muted-foreground">{allSortedWords.length}</span>
+               </Button>
+               {groups.map((g) => (
+                 <Button
+                   key={g.id}
+                   type="button"
+                   size="sm"
+                   variant={selectedGroupId === g.id ? "default" : "secondary"}
+                   onClick={() => onSelectGroup(g.id)}
+                 >
+                   {g.name}
+                   <span className="ml-2 text-xs text-muted-foreground">{groupCounts[g.id] || 0}</span>
+                 </Button>
+               ))}
+             </div>
+             <Button type="button" variant="outline" size="sm" onClick={() => setGroupManagerOpen(true)}>
+               <Folders className="mr-2 h-4 w-4" />
+               分组管理
+             </Button>
+           </div>
+           <div className="text-xs text-muted-foreground">
+             分组用于管理单词集合；下方仍按日期分周展示。
+           </div>
+         </div>
+
+      {viewWords.length === 0 ? (
+         <div className="text-center py-16 border-2 border-dashed rounded-lg bg-card">
+           <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
+           <h3 className="mt-4 text-lg font-medium">当前分组还没有单词</h3>
+           <p className="mt-1 text-sm text-muted-foreground">
+             去「新增单词」添加你的第一个单词。
+           </p>
+         </div>
+       ) : (
+         <div className="space-y-8">
+           {weekKeys.map((weekKey) => (
+             <div key={weekKey}>
+               <div className="flex justify-between items-center mb-3">
+                         <h3 className="text-lg font-semibold text-foreground mb-3">
+           {formatWeekRange(getWeekStart(new Date(weekKey)), getWeekEnd(new Date(weekKey)))}
+         </h3>
+                 <div className="flex items-center gap-2">
+                   <Button variant="outline" size="sm" onClick={() => openGenerator('practice', groupedWords[weekKey])}>
+                     <ListChecks className="h-4 w-4 mr-2" />
+                     练习
+                   </Button>
+                   <Button variant="outline" size="sm" onClick={() => openGenerator('story', groupedWords[weekKey])}>
+                     <Newspaper className="h-4 w-4 mr-2" />
+                     故事
+                   </Button>
+                 </div>
+               </div>
+               <div className="space-y-2">
+                 {groupedWords[weekKey].map((word) => (
                   <Card key={word.id} className="w-full">
                     <CardContent className="p-3">
                       <div className="flex items-center justify-between">
@@ -275,16 +393,25 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
                               <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
                                   {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
                               </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
-                                  <Pencil className="h-4 w-4" />
-                                  <span className="sr-only">编辑单词</span>
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(word); }}>
-                                  <Trash className="h-4 w-4" />
-                                  <span className="sr-only">删除单词</span>
-                              </Button>
-                          </div>
-                      </div>
+                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
+                                   <Pencil className="h-4 w-4" />
+                                   <span className="sr-only">编辑单词</span>
+                               </Button>
+                               <Button
+                                 variant="ghost"
+                                 size="icon"
+                                 className="h-8 w-8"
+                                 onClick={(e) => { e.stopPropagation(); openMoveDialog(word); }}
+                               >
+                                   <FolderInput className="h-4 w-4" />
+                                   <span className="sr-only">移动分组</span>
+                               </Button>
+                               <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(word); }}>
+                                   <Trash className="h-4 w-4" />
+                                   <span className="sr-only">删除单词</span>
+                               </Button>
+                           </div>
+                       </div>
 
                       <Accordion type="single" collapsible className="mt-2">
                         <AccordionItem value="details" className="border-none">
@@ -369,25 +496,51 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
     </div>
 
     <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{generatorMode === 'practice' ? '生成练习' : '生成故事'}</DialogTitle>
           <DialogDescription>
             {generatorMode === 'practice' ? '选择单词范围、题型与题目数量。' : '选择用于生成故事的单词。'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
           <div className="space-y-2">
             <div className="text-sm font-medium">选择单词</div>
             <RadioGroup
               value={wordPickScope}
               onValueChange={(v) => applyScope(v as WordPickScope)}
-              className="grid grid-cols-2 gap-3"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
             >
-              <div className="flex items-center gap-2 rounded-md border p-2">
-                <RadioGroupItem id="scope-group" value="group" />
-                <Label htmlFor="scope-group" className="cursor-pointer">当前分组（{contextGroupWords.length}）</Label>
+              <div className="rounded-md border p-3 space-y-2 sm:col-span-2">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="scope-group" value="group" />
+                  <Label htmlFor="scope-group" className="cursor-pointer">分组</Label>
+                </div>
+                <Select
+                  value={generatorGroupId}
+                  onValueChange={(v) => {
+                    setGeneratorGroupId(v);
+                    setWordPickScope('group');
+                    const groupWords = v === ALL_GROUP_ID
+                      ? allSortedWords
+                      : allSortedWords.filter((w) => getWordGroupId(w) === v);
+                    setSelectionFromWords(groupWords);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="请选择分组..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_GROUP_ID}>全部（{allSortedWords.length}）</SelectItem>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>{g.name}（{groupCounts[g.id] || 0}）</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground">
+                  选择分组后将自动选中该分组内的全部单词（可继续手动调整）。
+                </div>
               </div>
               <div className="flex items-center gap-2 rounded-md border p-2">
                 <RadioGroupItem id="scope-week" value="week" />
@@ -404,16 +557,16 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
             </RadioGroup>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <Input
               value={wordSearch}
               onChange={(e) => setWordSearch(e.target.value)}
               placeholder="搜索单词 / 词性 / 释义..."
             />
-            <Button type="button" variant="outline" size="sm" onClick={selectAllFiltered}>
+            <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={selectAllFiltered}>
               全选
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={clearSelection}>
+            <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={clearSelection}>
               清空
             </Button>
           </div>
@@ -505,11 +658,11 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
             />
             <div className="text-xs text-muted-foreground">默认 10 题，最多 30 题。</div>
           </div>
-          </>
-          )}
-        </div>
+           </>
+           )}
+         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => setGeneratorOpen(false)}>取消</Button>
           <Button onClick={handleGenerate} disabled={!canGenerate}>
             {generatorMode === 'practice' ? '生成练习' : '生成故事'}
@@ -538,6 +691,191 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePrac
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <Dialog
+      open={groupManagerOpen}
+      onOpenChange={(open) => {
+        setGroupManagerOpen(open);
+        if (!open) {
+          cancelRename();
+          setNewGroupName('');
+        }
+      }}
+    >
+      <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>分组管理</DialogTitle>
+          <DialogDescription>
+            新建、重命名或删除分组。删除分组后，该分组的单词会移动到“{defaultGroupName}”。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-6 pr-1">
+          <div className="space-y-2">
+            <div className="text-sm font-medium">新建分组</div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Input
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="例如：九年级·Unit 3"
+              />
+              <Button
+                type="button"
+                onClick={() => {
+                  const trimmed = newGroupName.trim();
+                  if (!trimmed) return;
+                  onAddGroup(trimmed);
+                  setNewGroupName('');
+                }}
+              >
+                创建
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-medium">已有分组</div>
+            <div className="space-y-2">
+              {groups.map((g) => {
+                const isEditing = editingGroupId === g.id;
+                const isDefault = g.id === defaultGroupId || g.isDefault;
+                return (
+                  <div key={g.id} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border p-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {isEditing ? (
+                        <Input
+                          value={editingGroupName}
+                          onChange={(e) => setEditingGroupName(e.target.value)}
+                          placeholder="请输入分组名称"
+                        />
+                      ) : (
+                        <>
+                          <div className="font-medium truncate">{g.name}</div>
+                          {isDefault && <Badge variant="secondary">默认</Badge>}
+                          <span className="text-xs text-muted-foreground">
+                            {groupCounts[g.id] || 0} 个单词
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 justify-end">
+                      {isEditing ? (
+                        <>
+                          <Button type="button" size="sm" onClick={saveRename}>
+                            保存
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={cancelRename}>
+                            取消
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button type="button" size="sm" variant="outline" onClick={() => startRename(g)}>
+                            重命名
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={isDefault}
+                            onClick={() => setDeleteGroupId(g.id)}
+                          >
+                            删除
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              提示：默认分组不可删除，但可以重命名。
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="shrink-0">
+          <Button type="button" variant="outline" onClick={() => setGroupManagerOpen(false)}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={!!deleteGroupId} onOpenChange={(open) => { if (!open) setDeleteGroupId(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认删除分组？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将删除分组“{groupToDelete?.name}”。该分组的 {deleteWordCount} 个单词将移动到“{defaultGroupName}”。此操作无法撤销。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => {
+              if (!deleteGroupId) return;
+              onDeleteGroup(deleteGroupId);
+              setDeleteGroupId(null);
+            }}
+          >
+            删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <Dialog open={moveOpen} onOpenChange={(open) => { setMoveOpen(open); if (!open) setMovingWord(null); }}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>移动到分组</DialogTitle>
+          <DialogDescription>
+            将单词移动到指定分组中。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">单词</div>
+            <div className="font-medium">{movingWord?.word}</div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>目标分组</Label>
+            <Select value={moveTargetGroupId} onValueChange={setMoveTargetGroupId}>
+              <SelectTrigger>
+                <SelectValue placeholder="请选择分组..." />
+              </SelectTrigger>
+              <SelectContent>
+                {groups.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>取消</Button>
+          <Button
+            type="button"
+            onClick={() => {
+              if (!movingWord) return;
+              onMoveWordToGroup(movingWord.id, moveTargetGroupId);
+              setMoveOpen(false);
+              setMovingWord(null);
+            }}
+          >
+            移动
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
    );
 }
