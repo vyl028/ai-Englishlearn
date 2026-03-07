@@ -60,6 +60,9 @@
 ### 新增/修改内容
 - 新增“单词智能拓展（Enrichment）”：在新增单词（手动输入/图片识别）时，LLM 会同步生成常见搭配、同反义词、例句、难度与用法分析，并随单词一起存入本地单词本。
 - 复习列表新增 “Learn more” 展示区，用户无需跳转外部词典即可查看核心学习信息（仍保留原 Cambridge 外链点击行为）。
+- 本地 `.env` 增加 OpenAI 相关环境变量（`AI_PROVIDER=openai` + `OPENAI_API_KEY`），用于切换到 OpenAI 作为 LLM Provider。
+- 本地 `.env` 配置 `OPENAI_BASE_URL` 指向 OpenAI-compatible 服务地址，用于绕开 `api.openai.com` 不可达的网络问题。
+- 本地 `.env` 配置 `OPENAI_MODEL` 为 OpenAI-compatible 服务侧“可用模型”，避免默认 `gpt-4o-mini` 在该服务下无渠道导致的 `model_not_found`。
 
 ### 涉及文件
 - 修改：`src/lib/types.ts`（新增 enrichment 结构与相关 schema/type）
@@ -69,6 +72,7 @@
 - 修改：`src/components/word-capture-form.tsx`（图片识别添加到单词本时保留 enrichment）
 - 修改：`src/components/word-review-list.tsx`（新增 enrichment 展示）
 - 修改：`src/components/edit-word-dialog.tsx`（编辑时保留 enrichment，避免丢失）
+- 修改：`.env`（仅本地使用，内容不应记录在此）
 
 ### 背景/原因
 - 现有单词本仅存释义；加入搭配/同反义/例句/用法分析后，学习信息更完整，且不依赖外部跳转。
