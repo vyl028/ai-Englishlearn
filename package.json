@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs dev --turbopack -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "ai:dev": "node --loader tsx src/ai/server.ts",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "build": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs build",
+    "start": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs start",
+    "lint": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs lint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
