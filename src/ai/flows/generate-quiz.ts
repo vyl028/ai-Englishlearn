@@ -1,6 +1,6 @@
 'use server';
 
-import { generateJsonArray } from '@/ai/gemini';
+import { generateJsonArray } from '@/ai/llm';
 import {
   GenerateQuizInput,
   GenerateQuizInputSchema,
@@ -23,7 +23,6 @@ For each question, you MUST provide all of the following fields: "question", "op
   const data = await generateJsonArray<GenerateQuizOutput>({
     systemPrompt,
     userPrompt,
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     schemaHint: 'Return ONLY a valid JSON array of question objects, no markdown, no commentary.'
   });
 

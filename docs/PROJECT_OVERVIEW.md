@@ -89,8 +89,9 @@
 - 表单：`react-hook-form` + `zod` + `@hookform/resolvers`
 
 ### 4.3 AI
-- `@google/generative-ai`：Gemini SDK
-- 自建封装：`src/ai/gemini.ts`
+- 默认使用 **Gemini**（`@google/generative-ai`）：`src/ai/gemini.ts`
+- 新增统一 AI 入口：`src/ai/llm.ts`（支持 Gemini / OpenAI / OpenAI-compatible）
+- OpenAI 兼容封装：`src/ai/openai.ts`
 - Flow（其实是普通的 server-side 函数 + Zod 校验）：`src/ai/flows/*`
 - 依赖中包含 `genkit` / `@genkit-ai/*`，但当前主要逻辑已转为 **直接调用 Gemini SDK**（见 `src/ai/genkit.ts` 注释）。
 
@@ -154,7 +155,7 @@
 
 ### 6.1 前置条件
 - Node.js + npm（建议 Node 18+，具体以 Next.js 15 的要求为准）
-- 配置 Gemini API Key（见环境变量）
+- 配置 AI Provider 的 API Key（见环境变量）
 
 ### 6.2 常用命令（来自 `package.json`）
 
@@ -199,6 +200,13 @@ type CapturedWord = {
   photoDataUri?: string;
 };
 ```
+
+### 6.4 环境变量（AI 相关）
+推荐做法：复制 `.env.example` 为 `.env`，再按需填写。
+
+- `AI_PROVIDER`：`gemini`（默认）或 `openai`
+- Gemini：`GOOGLE_API_KEY`（或兼容的 `GEMINI_API_KEY`）、`GEMINI_MODEL`、可选 `GEMINI_BASE_URL`
+- OpenAI / OpenAI-compatible：`OPENAI_API_KEY`、`OPENAI_MODEL`、可选 `OPENAI_BASE_URL`（默认 `https://api.openai.com/v1`）
 
 ### 7.2 localStorage 持久化策略
 实现：`src/app/page.tsx`
@@ -349,4 +357,3 @@ type CapturedWord = {
 - PDF 生成：`src/lib/pdf-server-utils.ts`
 - 类型定义：`src/lib/types.ts`
 - 样式入口：`src/app/globals.css`
-

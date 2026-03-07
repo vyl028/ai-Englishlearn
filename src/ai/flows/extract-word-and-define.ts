@@ -4,7 +4,7 @@
  * @fileOverview Extract English words (with part of speech) from an image and provide Chinese definitions.
  */
 
-import { generateJsonArray } from '@/ai/gemini';
+import { generateJsonArray } from '@/ai/llm';
 import {
   ExtractWordAndDefineInput,
   ExtractWordAndDefineInputSchema,
@@ -22,7 +22,6 @@ export async function extractWordAndDefine(input: ExtractWordAndDefineInput): Pr
     systemPrompt,
     userPrompt,
     image: { dataUri: input.photoDataUri },
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     schemaHint: 'Return ONLY valid compact JSON array, no markdown, no commentary.'
   });
 

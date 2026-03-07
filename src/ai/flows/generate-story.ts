@@ -1,6 +1,6 @@
 'use server';
 
-import { generateJsonArray } from '@/ai/gemini';
+import { generateJsonArray } from '@/ai/llm';
 import {
   GenerateStoryInput,
   GenerateStoryInputSchema,
@@ -24,7 +24,6 @@ Your output MUST be a single, valid JSON object containing "title", "story", and
   const data = await generateJsonArray<GenerateStoryOutput>({
     systemPrompt,
     userPrompt,
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     schemaHint: 'Return ONLY a valid JSON object with "title", "story", and "translation" fields, no markdown, no commentary.'
   });
 

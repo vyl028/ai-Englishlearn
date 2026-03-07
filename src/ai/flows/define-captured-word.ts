@@ -4,7 +4,7 @@
  * @fileOverview Define a captured English word by providing its Chinese definition.
  */
 
-import { generateText } from '@/ai/gemini';
+import { generateText } from '@/ai/llm';
 import {
   DefineCapturedWordInput,
   DefineCapturedWordInputSchema,
@@ -22,7 +22,6 @@ export async function defineCapturedWord(input: DefineCapturedWordInput): Promis
     systemPrompt,
     userPrompt,
     image: input.photoDataUri ? { dataUri: input.photoDataUri } : undefined,
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   });
 
   const definition = text.trim();

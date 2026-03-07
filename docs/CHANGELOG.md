@@ -28,6 +28,33 @@
 - 运行：`npm run dev`
 - 访问：`http://localhost:9002`
 
+## 2026-03-07
+
+### 新增/修改内容
+- 新增统一 LLM 入口 `src/ai/llm.ts`：通过 `AI_PROVIDER` 在 Gemini / OpenAI（含 OpenAI-compatible base URL）间切换。
+- 新增 OpenAI 适配 `src/ai/openai.ts`：支持 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`（用于 OpenAI-compatible 接口）。
+- 将现有 AI flows 从直接依赖 `@/ai/gemini` 改为依赖 `@/ai/llm`，为后续扩展更多模型做准备。
+- 新增 `.env.example`，便于以“复制并填写”的方式配置不同 Provider 的 Key 与模型。
+
+### 涉及文件
+- 修改：`.gitignore`（允许提交 `.env.example`，继续忽略 `.env*`）
+- 新增：`src/ai/llm.ts`
+- 新增：`src/ai/openai.ts`
+- 修改：`src/ai/flows/define-captured-word.ts`
+- 修改：`src/ai/flows/extract-word-and-define.ts`
+- 修改：`src/ai/flows/generate-quiz.ts`
+- 修改：`src/ai/flows/generate-story.ts`
+- 修改：`src/ai/genkit.ts`
+- 新增：`.env.example`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 现有实现绑定 Gemini；当网络/配额不可用时无法替换。抽象统一入口后，可通过环境变量切换到 OpenAI 或任意 OpenAI-compatible 服务。
+
+### 如何验证
+- Gemini（默认）：配置 `GOOGLE_API_KEY`，运行 `npm run dev` 并触发“释义/识别/Quiz/Story”相关功能。
+- OpenAI：配置 `AI_PROVIDER=openai` + `OPENAI_API_KEY`（必要时设置 `OPENAI_MODEL` / `OPENAI_BASE_URL`），同上验证。
+
 ---
 
 ## 记录模板（复制后填写）
@@ -46,4 +73,3 @@
 
 #### 如何验证
 - （如何确认改动有效）
-
