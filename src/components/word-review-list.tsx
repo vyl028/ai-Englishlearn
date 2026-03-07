@@ -3,21 +3,23 @@
 
 import { useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, FileText, Newspaper, ListChecks } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
-import type { CapturedWord } from '@/lib/types';
+import type { CapturedWord, PracticeQuestionType } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface WordReviewListProps {
   words: CapturedWord[];
   onEditWord: (word: CapturedWord) => void;
   onDeleteWord: (word: CapturedWord) => void;
-  onGenerateQuiz: (words: CapturedWord[]) => void;
-  onGeneratePractice: (words: CapturedWord[]) => void;
+  onGeneratePractice: (words: CapturedWord[], options: { questionCount: number; allowedTypes: PracticeQuestionType[] }) => void;
   onGenerateStory: (words: CapturedWord[]) => void;
 }
 
@@ -42,10 +44,23 @@ const groupWordsByWeek = (words: CapturedWord[]) => {
   return grouped;
 };
 
-export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz, onGeneratePractice, onGenerateStory }: WordReviewListProps) {
+export function WordReviewList({ words, onEditWord, onDeleteWord, onGeneratePractice, onGenerateStory }: WordReviewListProps) {
   const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set());
   const [showDefinitions, setShowDefinitions] = useState<{ [key: string]: boolean }>({});
   const [showDefinition, setShowDefinition] = useState(false);
+
+  const [practiceDialogOpen, setPracticeDialogOpen] = useState(false);
+  const [practiceDialogWords, setPracticeDialogWords] = useState<CapturedWord[]>([]);
+  const [questionCountText, setQuestionCountText] = useState('10');
+  const [typeSelection, setTypeSelection] = useState<Record<PracticeQuestionType, boolean>>({
+    mcq: true,
+    fill_blank: true,
+    reorder: true,
+  });
+
+  const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
+  const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
+  const canGeneratePractice = practiceDialogWords.length > 0 && selectedTypes.length > 0;
 
   const formatWeekRange = (startDate: Date, endDate: Date) => {
     const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
@@ -98,8 +113,20 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz
      const url = `https://dictionary.cambridge.org/zhs/%E8%AF%8D%E5%85%B8/%E8%8B%B1%E8%AF%AD-%E6%B1%89%E8%AF%AD-%E7%AE%80%E4%BD%93/${encodeURIComponent(word)}`;
      window.open(url, '_blank');
    };
+
+   const openPracticeDialog = (weekWords: CapturedWord[]) => {
+     setPracticeDialogWords(weekWords);
+     setPracticeDialogOpen(true);
+   };
+
+   const handleGeneratePractice = () => {
+     if (!canGeneratePractice) return;
+     onGeneratePractice(practiceDialogWords, { questionCount, allowedTypes: selectedTypes });
+     setPracticeDialogOpen(false);
+   };
  
    return (
+     <>
      <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -129,11 +156,7 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz
           {formatWeekRange(getWeekStart(new Date(weekKey)), getWeekEnd(new Date(weekKey)))}
         </h3>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onGenerateQuiz(groupedWords[weekKey])}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Quiz
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => onGeneratePractice(groupedWords[weekKey])}>
+                  <Button variant="outline" size="sm" onClick={() => openPracticeDialog(groupedWords[weekKey])}>
                     <ListChecks className="h-4 w-4 mr-2" />
                     Practice
                   </Button>
@@ -249,5 +272,71 @@ export function WordReviewList({ words, onEditWord, onDeleteWord, onGenerateQuiz
         </div>
       )}
     </div>
-  );
+
+    <Dialog open={practiceDialogOpen} onOpenChange={setPracticeDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Generate Practice</DialogTitle>
+          <DialogDescription>
+            Choose question types and how many questions to generate.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Question types</div>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="type-mcq"
+                  checked={typeSelection.mcq}
+                  onCheckedChange={(checked) => setTypeSelection(prev => ({ ...prev, mcq: checked === true }))}
+                />
+                <Label htmlFor="type-mcq">Multiple Choice (MCQ)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="type-fill"
+                  checked={typeSelection.fill_blank}
+                  onCheckedChange={(checked) => setTypeSelection(prev => ({ ...prev, fill_blank: checked === true }))}
+                />
+                <Label htmlFor="type-fill">Fill in the Blank</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="type-reorder"
+                  checked={typeSelection.reorder}
+                  onCheckedChange={(checked) => setTypeSelection(prev => ({ ...prev, reorder: checked === true }))}
+                />
+                <Label htmlFor="type-reorder">Sentence Reordering</Label>
+              </div>
+            </div>
+            {selectedTypes.length === 0 && (
+              <div className="text-sm text-destructive">Select at least one question type.</div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="question-count">Number of questions</Label>
+            <Input
+              id="question-count"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={30}
+              value={questionCountText}
+              onChange={(e) => setQuestionCountText(e.target.value)}
+            />
+            <div className="text-xs text-muted-foreground">Default is 10. Maximum is 30.</div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setPracticeDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleGeneratePractice} disabled={!canGeneratePractice}>Generate</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
+   );
 }

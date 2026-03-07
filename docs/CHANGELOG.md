@@ -118,6 +118,26 @@
 - 运行：`npm run dev`
 - 在 “My Words” 页面点击 “Practice”，确认能正常生成题目并显示每题的英文提示。
 
+## 2026-03-07
+
+### 新增/修改内容
+- 合并原 “Quiz（选择题）” 与 “Practice（多题型）” 为同一练习入口：在 “Practice” 中通过勾选题型实现“仅选择题”或“混合题型”练习。
+- Practice 生成改为“随机混合题型 + 可配置题目数量（默认 10）”，不再强制每个单词各生成 3 种题型各 1 题。
+
+### 涉及文件
+- 修改：`src/lib/types.ts`（Practice 输入增加 `questionCount` / `allowedTypes`，并抽出 `PracticeQuestionTypeSchema`）
+- 修改：`src/ai/flows/generate-practice.ts`（随机生成 targets，按勾选题型混合出题）
+- 修改：`src/components/word-review-list.tsx`（Practice 配置弹窗：题型勾选 + 题量）
+- 修改：`src/app/page.tsx`（移除单独 Quiz 视图入口，统一走 Practice）
+- 修改：`docs/PROJECT_OVERVIEW.md`（更新功能与流程说明）
+
+### 背景/原因
+- 原 Quiz 与 Practice 功能重叠且入口分散；合并后更易理解，也便于按需生成题型组合与控制题量，降低一次生成过大导致超时的风险。
+
+### 如何验证
+- 运行：`npm run dev`
+- 在 “My Words” 页面点击 “Practice”，在弹窗中勾选题型与设置题量后生成；确认题型混合符合勾选项，且能正常判题与展示讲解。
+
 ---
 
 ## 记录模板（复制后填写）

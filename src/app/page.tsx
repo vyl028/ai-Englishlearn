@@ -6,11 +6,10 @@ import { BookCopy, PlusSquare, BookOpen, Trash, Loader2 } from 'lucide-react';
 import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
-import { QuizView } from '@/components/quiz-view';
 import { PracticeView } from '@/components/practice-view';
-import type { CapturedWord, GeneratePracticeOutput, GenerateQuizOutput } from '@/lib/types';
+import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { generatePracticeAction, generateQuizAction, generateStoryAction } from '@/app/actions';
+import { generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -24,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type View = 'capture' | 'review' | 'quiz' | 'practice';
+type View = 'capture' | 'review' | 'practice';
 
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
@@ -32,7 +31,6 @@ export default function Home() {
   const [editingWord, setEditingWord] = useState<CapturedWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
-  const [quizData, setQuizData] = useState<{ questions: GenerateQuizOutput } | null>(null);
   const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -108,30 +106,16 @@ export default function Home() {
     setWordToDelete(null);
   };
 
-  const handleGenerateQuiz = async (quizWords: CapturedWord[]) => {
-    setIsLoading(true);
-    const input = {
-      words: quizWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
-    };
-    const result = await generateQuizAction(input);
-    if (result.success && result.data) {
-      setQuizData(result.data);
-      setView('quiz');
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Quiz Generation Failed",
-        description: result.error || "An unexpected error occurred.",
-      });
-    }
-    setIsLoading(false);
-  };
-
-  const handleGeneratePractice = async (practiceWords: CapturedWord[]) => {
+  const handleGeneratePractice = async (
+    practiceWords: CapturedWord[],
+    options: { questionCount: number; allowedTypes: PracticeQuestionType[] }
+  ) => {
     setIsLoading(true);
     toast({ title: "Generating Practice...", description: "Your questions are being created by AI. This may take a moment." });
     const input = {
       words: practiceWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
+      questionCount: options.questionCount,
+      allowedTypes: options.allowedTypes,
     };
     const result = await generatePracticeAction(input);
     if (result.success && result.data) {
@@ -192,12 +176,7 @@ export default function Home() {
       case 'capture':
         return <WordCaptureForm onWordAdded={handleWordAdded} onMultipleWordsAdded={handleMultipleWordsAdded} />;
       case 'review':
-        return <WordReviewList words={words} onEditWord={handleEditWord} onDeleteWord={handleDeleteWord} onGenerateQuiz={handleGenerateQuiz} onGeneratePractice={handleGeneratePractice} onGenerateStory={handleGenerateStory} />;
-      case 'quiz':
-        if (quizData) {
-          return <QuizView quizData={quizData} onBack={() => setView('review')} />;
-        }
-        return null; // Or a fallback UI
+        return <WordReviewList words={words} onEditWord={handleEditWord} onDeleteWord={handleDeleteWord} onGeneratePractice={handleGeneratePractice} onGenerateStory={handleGenerateStory} />;
       case 'practice':
         if (practiceData) {
           return <PracticeView practiceData={practiceData} onBack={() => setView('review')} />;

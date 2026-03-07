@@ -107,13 +107,18 @@ export type GenerateQuizOutput = z.infer<typeof GenerateQuizOutputSchema>;
 
 
 // Schema for generating practice questions (multiple types)
+export const PracticeQuestionTypeSchema = z.enum(['mcq', 'fill_blank', 'reorder']);
+export type PracticeQuestionType = z.infer<typeof PracticeQuestionTypeSchema>;
+
 export const GeneratePracticeInputSchema = z.object({
   words: z.array(WordInputSchema),
+  questionCount: z.coerce.number().int().min(1).max(30).optional(),
+  allowedTypes: z.array(PracticeQuestionTypeSchema).min(1).optional(),
 });
 export type GeneratePracticeInput = z.infer<typeof GeneratePracticeInputSchema>;
 
 const PracticeQuestionBaseSchema = z.object({
-  type: z.enum(['mcq', 'fill_blank', 'reorder']),
+  type: PracticeQuestionTypeSchema,
   word: z.string().describe('The target word for this question.'),
   promptEn: z.string().describe('The question prompt in English.'),
   analysisZh: z.string().describe('Detailed explanation in Chinese.'),

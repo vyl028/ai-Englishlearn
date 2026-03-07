@@ -13,7 +13,7 @@
 - 借助 **LLM（Gemini / OpenAI 等）** 生成：
   - 单词的（字典风格）中文释义
   - 单词拓展信息（搭配 / 同反义词 / 例句 / 难度与用法分析）
-  - 每周词汇的选择题测验（Quiz）
+  - 每周词汇练习题（支持选择题/填空/句子重组，可配置题型与题量）
   - 包含这些词汇的短故事 + 中文翻译，并生成 PDF
 - 当前持久化方式为：**浏览器 localStorage（单机/单浏览器）**
 
@@ -46,8 +46,7 @@
 
 - 以“周”为单位分组展示（按捕获时间）
 - 每周可一键生成：
-  - **Quiz**：`generateQuizAction`
-  - **Practice**（多题型练习：选择题/填空/句子重组 + 答案对比与讲解）：`generatePracticeAction`
+  - **Practice**（可勾选题型：选择题/填空/句子重组；可设置题目数量，默认 10；提交后展示答案对比与讲解）：`generatePracticeAction`
   - **Story**：`generateStoryAction`（生成并下载 PDF）
 - 支持：
   - 显示/隐藏释义（Switch）
@@ -56,11 +55,12 @@
   - 编辑（本地更新）
   - 删除（带二次确认弹窗）
 
-### 2.3 Quiz（周测）
-组件：`src/components/quiz-view.tsx`
+### 2.3 Practice（练习）
+组件：`src/components/practice-view.tsx`
 
-- 对每个单词生成 1 道 4 选 1 选择题
-- 提交后标记正确/错误，并展示中文解析（`analysis` 字段）
+- 支持题型：选择题（MCQ）/填空题/句子重组题
+- 支持配置：题型勾选 + 题目数量（默认 10）
+- 提交后展示：答案对比、详细解析、语法讲解与词汇用法讲解
 
 ### 2.4 Story PDF（周故事）
 服务端生成：`src/lib/pdf-server-utils.ts`
@@ -76,7 +76,7 @@
 - ✅ Word Capture（相机/上传/手输）
 - ✅ Definition Lookup（LLM 中文释义）
 - ⚠️ Data Storage（当前为 localStorage；未接入数据库/多端同步）
-- ✅ Review（复习列表 + Quiz + Story）
+- ✅ Review（复习列表 + Practice + Story）
 
 ## 4. 技术栈与关键依赖
 
@@ -239,11 +239,11 @@ type CapturedWord = {
 → `src/ai/gemini.ts#generateJsonArray`（要求返回 JSON array）  
 → 生成多个 `CapturedWord` 并追加到列表
 
-### 8.3 每周 Quiz
-`WordReviewList` 点击 Quiz  
-→ `src/app/actions.ts#generateQuizAction`  
-→ `src/ai/flows/generate-quiz.ts#generateQuiz`（返回 JSON array）  
-→ `QuizView` 展示与判分（依赖 `answer`/`analysis` 字段）
+### 8.3 每周 Practice（练习）
+`WordReviewList` 点击 Practice（可配置题型勾选 + 题目数量）  
+→ `src/app/actions.ts#generatePracticeAction`  
+→ `src/ai/flows/generate-practice.ts#generatePractice`（返回 JSON array）  
+→ `PracticeView` 展示与判分（本地判题 + 解析/语法/用法讲解）
 
 ### 8.4 每周 Story PDF
 `WordReviewList` 点击 Story  
@@ -357,8 +357,8 @@ type CapturedWord = {
 - 主页/视图切换：`src/app/page.tsx`
 - Server Actions（AI 调用入口）：`src/app/actions.ts`
 - 采集表单（Text/Camera/Upload）：`src/components/word-capture-form.tsx`
-- 复习列表（按周分组/Quiz/Story）：`src/components/word-review-list.tsx`
-- Quiz UI：`src/components/quiz-view.tsx`
+- 复习列表（按周分组/Practice/Story）：`src/components/word-review-list.tsx`
+- Practice UI：`src/components/practice-view.tsx`
 - 编辑弹窗：`src/components/edit-word-dialog.tsx`
 - AI 封装：`src/ai/gemini.ts`
 - AI flows：`src/ai/flows/*`
