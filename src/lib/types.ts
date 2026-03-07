@@ -6,7 +6,7 @@ export type CapturedWord = {
   word: string;
   /**
    * Optional custom group id for organizing words.
-   * Older localStorage entries may not have this field; treat missing as the default group.
+   * Older localStorage entries may not have this field; treat missing as ungrouped (visible in the "All" view).
    */
   groupId?: string;
   partOfSpeech: string;
@@ -19,7 +19,6 @@ export type CapturedWord = {
 export type WordGroup = {
   id: string;
   name: string;
-  isDefault?: boolean;
 };
 
 export const WordEnrichmentSchema = z.object({

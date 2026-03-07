@@ -9,7 +9,8 @@ import {
   GenerateQuizInput,
   GenerateQuizOutput,
   GenerateStoryInput,
-  GenerateStoryOutput
+  GenerateStoryOutput,
+  GenerateStoryOutputSchema
 } from "@/lib/types";
 import { defineCapturedWord } from '@/ai/flows/define-captured-word';
 import { extractWordAndDefine } from '@/ai/flows/extract-word-and-define';
@@ -100,16 +101,28 @@ export async function generatePracticeAction(
 
 export async function generateStoryAction(
   input: GenerateStoryInput
-): Promise<{ success: boolean; data?: GenerateStoryOutput & { pdfDataUri?: string }; error?: string }> {
+): Promise<{ success: boolean; data?: GenerateStoryOutput; error?: string }> {
   try {
     const result = await generateStory(input);
     if (!result || !result.story) {
       return { success: false, error: "无法生成故事，模型可能返回了空结果。" };
     }
-    const pdfDataUri = await generateStoryPdf(result);
-    return { success: true, data: { ...result, pdfDataUri } };
+    return { success: true, data: result };
   } catch (error: any) {
     console.error('generateStoryAction error:', error);
     return { success: false, error: error.message || "生成故事时发生错误。" };
+  }
+}
+
+export async function exportStoryPdfAction(
+  story: GenerateStoryOutput
+): Promise<{ success: boolean; data?: { pdfDataUri: string }; error?: string }> {
+  try {
+    const parsed = GenerateStoryOutputSchema.parse(story);
+    const pdfDataUri = await generateStoryPdf(parsed);
+    return { success: true, data: { pdfDataUri } };
+  } catch (error: any) {
+    console.error('exportStoryPdfAction error:', error);
+    return { success: false, error: error.message || "导出 PDF 时发生错误。" };
   }
 }

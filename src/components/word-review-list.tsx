@@ -47,7 +47,7 @@ type GeneratorMode = 'practice' | 'story';
 type WordPickScope = 'group' | 'week' | 'month' | 'manual';
 
 const ALL_GROUP_ID = '__all__';
-const DEFAULT_GROUP_ID = 'default';
+const UNGROUPED_GROUP_ID = '__ungrouped__';
 
 const groupWordsByWeek = (words: CapturedWord[]) => {
   if (!words || words.length === 0) {
@@ -84,7 +84,7 @@ export function WordReviewList({
   onGeneratePractice,
   onGenerateStory,
 }: WordReviewListProps) {
-  const [showDefinition, setShowDefinition] = useState(false);
+  const [definitionOpenIds, setDefinitionOpenIds] = useState<Set<string>>(new Set());
 
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -94,7 +94,7 @@ export function WordReviewList({
 
   const [moveOpen, setMoveOpen] = useState(false);
   const [movingWord, setMovingWord] = useState<CapturedWord | null>(null);
-  const [moveTargetGroupId, setMoveTargetGroupId] = useState<string>(DEFAULT_GROUP_ID);
+  const [moveTargetGroupId, setMoveTargetGroupId] = useState<string>(UNGROUPED_GROUP_ID);
 
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('practice');
@@ -115,8 +115,8 @@ export function WordReviewList({
   const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
   const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
 
-  const defaultGroupId = groups.find((g) => g.id === DEFAULT_GROUP_ID || g.isDefault)?.id || DEFAULT_GROUP_ID;
-  const getWordGroupId = (w: CapturedWord) => (w.groupId && typeof w.groupId === 'string' ? w.groupId : defaultGroupId);
+  const groupIds = new Set(groups.map((g) => g.id));
+  const getWordGroupId = (w: CapturedWord) => (typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : undefined);
 
   const allSortedWords = [...words].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
   const viewWords = selectedGroupId === ALL_GROUP_ID
@@ -273,17 +273,26 @@ export function WordReviewList({
 
     const openMoveDialog = (w: CapturedWord) => {
       setMovingWord(w);
-      setMoveTargetGroupId(getWordGroupId(w));
+      const curr = getWordGroupId(w);
+      setMoveTargetGroupId(curr || UNGROUPED_GROUP_ID);
       setMoveOpen(true);
+    };
+
+    const setDefinitionOpen = (wordId: string, open: boolean) => {
+      setDefinitionOpenIds((prev) => {
+        const next = new Set(prev);
+        if (open) next.add(wordId);
+        else next.delete(wordId);
+        return next;
+      });
     };
 
     const groupCounts = allSortedWords.reduce((acc, w) => {
       const gid = getWordGroupId(w);
-      acc[gid] = (acc[gid] || 0) + 1;
+      if (gid) acc[gid] = (acc[gid] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const defaultGroupName = groups.find((g) => g.id === defaultGroupId)?.name || '默认分组';
     const groupToDelete = deleteGroupId ? groups.find((g) => g.id === deleteGroupId) : undefined;
     const deleteWordCount = groupToDelete ? (groupCounts[groupToDelete.id] || 0) : 0;
 
@@ -307,40 +316,29 @@ export function WordReviewList({
       <>
       <div className="space-y-6">
          <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Sparkles className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-bold font-headline">我的单词本</h2>
-          </div>
-           <div className="flex items-center space-x-2">
-             <Switch id="show-definition" checked={showDefinition} onCheckedChange={setShowDefinition} />
-             <Label htmlFor="show-definition">显示释义</Label>
+           <div className="flex items-center gap-3">
+             <Sparkles className="h-6 w-6 text-primary" />
+             <h2 className="text-2xl font-bold font-headline">我的单词本</h2>
            </div>
-         </div>
+          </div>
 
          <div className="space-y-2">
            <div className="flex items-center justify-between gap-3">
-             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-               <Button
-                 type="button"
-                 size="sm"
-                 variant={selectedGroupId === ALL_GROUP_ID ? "default" : "secondary"}
-                 onClick={() => onSelectGroup(ALL_GROUP_ID)}
-               >
-                 全部
-                 <span className="ml-2 text-xs text-muted-foreground">{allSortedWords.length}</span>
-               </Button>
-               {groups.map((g) => (
-                 <Button
-                   key={g.id}
-                   type="button"
-                   size="sm"
-                   variant={selectedGroupId === g.id ? "default" : "secondary"}
-                   onClick={() => onSelectGroup(g.id)}
-                 >
-                   {g.name}
-                   <span className="ml-2 text-xs text-muted-foreground">{groupCounts[g.id] || 0}</span>
-                 </Button>
-               ))}
+             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1">
+               <Label htmlFor="group-select" className="text-sm text-muted-foreground shrink-0">分组</Label>
+               <Select value={selectedGroupId} onValueChange={onSelectGroup}>
+                 <SelectTrigger id="group-select" className="w-full sm:w-[280px]">
+                   <SelectValue placeholder="请选择分组..." />
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value={ALL_GROUP_ID}>全部（{allSortedWords.length}）</SelectItem>
+                   {groups.map((g) => (
+                     <SelectItem key={g.id} value={g.id}>
+                       {g.name}（{groupCounts[g.id] || 0}）
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
              </div>
              <Button type="button" variant="outline" size="sm" onClick={() => setGroupManagerOpen(true)}>
                <Folders className="mr-2 h-4 w-4" />
@@ -352,10 +350,12 @@ export function WordReviewList({
            </div>
          </div>
 
-      {viewWords.length === 0 ? (
+       {viewWords.length === 0 ? (
          <div className="text-center py-16 border-2 border-dashed rounded-lg bg-card">
            <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
-           <h3 className="mt-4 text-lg font-medium">当前分组还没有单词</h3>
+           <h3 className="mt-4 text-lg font-medium">
+             {selectedGroupId === ALL_GROUP_ID ? '还没有收集到单词' : '当前分组还没有单词'}
+           </h3>
            <p className="mt-1 text-sm text-muted-foreground">
              去「新增单词」添加你的第一个单词。
            </p>
@@ -383,16 +383,24 @@ export function WordReviewList({
                  {groupedWords[weekKey].map((word) => (
                   <Card key={word.id} className="w-full">
                     <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                          <div className="flex-grow flex items-center gap-2 overflow-hidden">
-                              <span className="font-bold text-lg cursor-pointer hover:underline" onClick={() => handleWordClick(word.word)}>{word.word}</span>
-                              <Badge variant="secondary" className="capitalize shrink-0">{word.partOfSpeech}</Badge>
-                              {showDefinition && <p className="text-muted-foreground truncate">{word.definition}</p>}
-                          </div>
-                          <div className="flex items-center flex-shrink-0 ml-4">
-                              <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
-                                  {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
-                              </div>
+                       <div className="flex items-center justify-between">
+                           <div className="flex-grow flex items-center gap-2 overflow-hidden">
+                               <span className="font-bold text-lg cursor-pointer hover:underline" onClick={() => handleWordClick(word.word)}>{word.word}</span>
+                               <Badge variant="secondary" className="capitalize shrink-0">{word.partOfSpeech}</Badge>
+                               {definitionOpenIds.has(word.id) && <p className="text-muted-foreground truncate">{word.definition}</p>}
+                           </div>
+                           <div className="flex items-center flex-shrink-0 ml-4">
+                               <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
+                                   {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
+                               </div>
+                               <div className="flex items-center gap-2 mr-1">
+                                 <Label htmlFor={`def-${word.id}`} className="text-xs text-muted-foreground">释义</Label>
+                                 <Switch
+                                   id={`def-${word.id}`}
+                                   checked={definitionOpenIds.has(word.id)}
+                                   onCheckedChange={(v) => setDefinitionOpen(word.id, v === true)}
+                                 />
+                               </div>
                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
                                    <Pencil className="h-4 w-4" />
                                    <span className="sr-only">编辑单词</span>
@@ -706,7 +714,7 @@ export function WordReviewList({
         <DialogHeader className="shrink-0">
           <DialogTitle>分组管理</DialogTitle>
           <DialogDescription>
-            新建、重命名或删除分组。删除分组后，该分组的单词会移动到“{defaultGroupName}”。
+            新建、重命名或删除分组。删除分组后，该分组的单词会变为未分组（可在“全部”中查看并重新分配）。
           </DialogDescription>
         </DialogHeader>
 
@@ -738,7 +746,6 @@ export function WordReviewList({
             <div className="space-y-2">
               {groups.map((g) => {
                 const isEditing = editingGroupId === g.id;
-                const isDefault = g.id === defaultGroupId || g.isDefault;
                 return (
                   <div key={g.id} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border p-3">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -751,7 +758,6 @@ export function WordReviewList({
                       ) : (
                         <>
                           <div className="font-medium truncate">{g.name}</div>
-                          {isDefault && <Badge variant="secondary">默认</Badge>}
                           <span className="text-xs text-muted-foreground">
                             {groupCounts[g.id] || 0} 个单词
                           </span>
@@ -778,7 +784,6 @@ export function WordReviewList({
                             type="button"
                             size="sm"
                             variant="destructive"
-                            disabled={isDefault}
                             onClick={() => setDeleteGroupId(g.id)}
                           >
                             删除
@@ -789,9 +794,6 @@ export function WordReviewList({
                   </div>
                 );
               })}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              提示：默认分组不可删除，但可以重命名。
             </div>
           </div>
         </div>
@@ -809,7 +811,7 @@ export function WordReviewList({
         <AlertDialogHeader>
           <AlertDialogTitle>确认删除分组？</AlertDialogTitle>
           <AlertDialogDescription>
-            将删除分组“{groupToDelete?.name}”。该分组的 {deleteWordCount} 个单词将移动到“{defaultGroupName}”。此操作无法撤销。
+            将删除分组“{groupToDelete?.name}”。该分组的 {deleteWordCount} 个单词将变为未分组（仅在“全部”中可见）。此操作无法撤销。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -850,6 +852,7 @@ export function WordReviewList({
                 <SelectValue placeholder="请选择分组..." />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={UNGROUPED_GROUP_ID}>未分组（仅在“全部”中显示）</SelectItem>
                 {groups.map((g) => (
                   <SelectItem key={g.id} value={g.id}>
                     {g.name}

@@ -7,9 +7,10 @@ import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { PracticeView } from '@/components/practice-view';
-import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup } from '@/lib/types';
+import { StoryView } from '@/components/story-view';
+import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { generatePracticeAction, generateStoryAction } from '@/app/actions';
+import { exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import {
@@ -23,19 +24,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type View = 'capture' | 'review' | 'practice';
+type View = 'capture' | 'review' | 'practice' | 'story';
 
 const WORDS_STORAGE_KEY = 'lexi-capture-words';
 const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
 const SELECTED_GROUP_STORAGE_KEY = 'lexi-capture-selected-group';
 
 const ALL_GROUP_ID = '__all__';
-const DEFAULT_GROUP_ID = 'default';
-const DEFAULT_GROUP: WordGroup = { id: DEFAULT_GROUP_ID, name: '默认分组', isDefault: true };
+const UNGROUPED_GROUP_ID = '__ungrouped__';
 
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
-  const [groups, setGroups] = useState<WordGroup[]>([DEFAULT_GROUP]);
+  const [groups, setGroups] = useState<WordGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(ALL_GROUP_ID);
   const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<View>('capture');
@@ -43,38 +43,27 @@ export default function Home() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
   const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
+  const [storyData, setStoryData] = useState<GenerateStoryOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     const normalizeGroups = (raw: any): WordGroup[] => {
       const parsed = Array.isArray(raw) ? raw : [];
-      const cleaned: WordGroup[] = parsed
+      const cleaned = parsed
         .filter((g) => g && typeof g.id === 'string' && typeof g.name === 'string')
-        .map((g) => ({ id: String(g.id), name: String(g.name), isDefault: Boolean(g.isDefault) }));
+        .map((g) => ({ id: String(g.id), name: String(g.name).trim() }))
+        // Reserved id and legacy "default" group id are not treated as user-defined groups.
+        .filter((g) => g.id !== ALL_GROUP_ID && g.id !== 'default' && g.name.length > 0);
 
-      const hasDefault = cleaned.some((g) => g.id === DEFAULT_GROUP_ID || g.isDefault);
-      if (!hasDefault) {
-        cleaned.unshift(DEFAULT_GROUP);
-      } else if (!cleaned.some((g) => g.id === DEFAULT_GROUP_ID)) {
-        // Ensure the default id is always present for stable routing/migration.
-        const idx = cleaned.findIndex((g) => g.isDefault);
-        if (idx >= 0) {
-          cleaned[idx] = { ...cleaned[idx], id: DEFAULT_GROUP_ID, isDefault: true };
-        } else {
-          cleaned.unshift(DEFAULT_GROUP);
-        }
+      const unique: WordGroup[] = [];
+      const seen = new Set<string>();
+      for (const g of cleaned) {
+        if (seen.has(g.id)) continue;
+        seen.add(g.id);
+        unique.push(g);
       }
-
-      // Ensure exactly one default.
-      let defaultSeen = false;
-      return cleaned.map((g) => {
-        const isDefault = g.id === DEFAULT_GROUP_ID || g.isDefault;
-        if (!isDefault) return { ...g, isDefault: false };
-        if (defaultSeen) return { ...g, isDefault: false };
-        defaultSeen = true;
-        return { ...g, id: DEFAULT_GROUP_ID, isDefault: true };
-      });
+      return unique;
     };
 
     const readJson = (key: string) => {
@@ -105,7 +94,7 @@ export default function Home() {
           .filter((w) => w && typeof w.id === 'string')
           .map((w: any) => {
             const capturedAt = new Date(w.capturedAt);
-            const groupId = typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : DEFAULT_GROUP_ID;
+            const groupId = typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : undefined;
             return {
               ...w,
               capturedAt: Number.isNaN(capturedAt.getTime()) ? new Date() : capturedAt,
@@ -150,8 +139,9 @@ export default function Home() {
 
   const handleWordAdded = (newWord: CapturedWord) => {
     const { photoDataUri, ...wordToSave } = newWord;
+    const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
     setWords((prevWords) => {
-      const updatedWords = [{ ...wordToSave, groupId: wordToSave.groupId || DEFAULT_GROUP_ID }, ...prevWords];
+      const updatedWords = [{ ...wordToSave, groupId: autoGroupId }, ...prevWords];
       return updatedWords;
     });
     setView('review');
@@ -159,7 +149,8 @@ export default function Home() {
   
   const handleMultipleWordsAdded = (newWords: CapturedWord[]) => {
     console.log('handleMultipleWordsAdded called with:', newWords);
-    const wordsToSave = newWords.map(({ photoDataUri, ...word }) => ({ ...word, groupId: word.groupId || DEFAULT_GROUP_ID }));
+    const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
+    const wordsToSave = newWords.map(({ photoDataUri, ...word }) => ({ ...word, groupId: autoGroupId }));
     console.log('Words to save:', wordsToSave);
     setWords((prevWords) => {
         const updatedWords = [...wordsToSave, ...prevWords];
@@ -197,7 +188,7 @@ export default function Home() {
   const handleAddGroup = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const newGroup: WordGroup = { id: generateId(), name: trimmed, isDefault: false };
+    const newGroup: WordGroup = { id: generateId(), name: trimmed };
     setGroups((prev) => [...prev, newGroup]);
     setSelectedGroupId(newGroup.id);
   };
@@ -209,15 +200,19 @@ export default function Home() {
   };
 
   const handleDeleteGroup = (groupId: string) => {
-    if (groupId === DEFAULT_GROUP_ID) return;
     setGroups((prev) => prev.filter((g) => g.id !== groupId));
-    setWords((prev) => prev.map((w) => ((w.groupId || DEFAULT_GROUP_ID) === groupId ? { ...w, groupId: DEFAULT_GROUP_ID } : w)));
+    setWords((prev) => prev.map((w) => (w.groupId === groupId ? { ...w, groupId: undefined } : w)));
     setSelectedGroupId((prev) => (prev === groupId ? ALL_GROUP_ID : prev));
   };
 
   const handleMoveWordToGroup = (wordId: string, groupId: string) => {
     if (!groupId) return;
-    setWords((prev) => prev.map((w) => (w.id === wordId ? { ...w, groupId } : w)));
+    setWords((prev) => prev.map((w) => {
+      if (w.id !== wordId) return w;
+      if (groupId === UNGROUPED_GROUP_ID) return { ...w, groupId: undefined };
+      if (!groups.some((g) => g.id === groupId)) return w;
+      return { ...w, groupId };
+    }));
   };
 
   const handleGeneratePractice = async (
@@ -247,24 +242,15 @@ export default function Home() {
 
   const handleGenerateStory = async (storyWords: CapturedWord[]) => {
     setIsLoading(true);
-    toast({ title: "正在生成故事...", description: "AI 正在生成故事与 PDF，请稍等片刻。" });
+    toast({ title: "正在生成故事...", description: "AI 正在生成故事内容，请稍等片刻。" });
     const input = {
       words: storyWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
     };
     const result = await generateStoryAction(input);
     if (result.success && result.data) {
-      toast({
-        title: "故事 PDF 已生成",
-        description: `已下载：${result.data.title}.pdf`,
-      });
-      if (result.data.pdfDataUri) {
-        const link = document.createElement('a');
-        link.href = result.data.pdfDataUri;
-        link.download = `${result.data.title.replace(/\s/g, '_')}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      setStoryData(result.data);
+      setView('story');
+      toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
     } else {
       toast({
         variant: "destructive",
@@ -273,6 +259,26 @@ export default function Home() {
       });
     }
     setIsLoading(false);
+  };
+
+  const handleExportStoryPdf = async (data: GenerateStoryOutput) => {
+    const result = await exportStoryPdfAction(data);
+    if (result.success && result.data?.pdfDataUri) {
+      const safeTitle = (data.title || 'story').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+      const link = document.createElement('a');
+      link.href = result.data.pdfDataUri;
+      link.download = `${safeTitle}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "PDF 已导出", description: `已下载：${safeTitle}.pdf` });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "导出失败",
+        description: result.error || "导出 PDF 时发生未知错误，请稍后重试。",
+      });
+    }
   };
 
   const renderContent = () => {
@@ -309,6 +315,17 @@ export default function Home() {
       case 'practice':
         if (practiceData) {
           return <PracticeView practiceData={practiceData} onBack={() => setView('review')} />;
+        }
+        return null;
+      case 'story':
+        if (storyData) {
+          return (
+            <StoryView
+              storyData={storyData}
+              onBack={() => setView('review')}
+              onExportPdf={() => handleExportStoryPdf(storyData)}
+            />
+          );
         }
         return null;
       default:
