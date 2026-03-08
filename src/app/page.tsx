@@ -139,27 +139,24 @@ export default function Home() {
     }
   }, [selectedGroupId]);
 
-  const handleWordAdded = (newWord: CapturedWord) => {
-    const { photoDataUri, ...wordToSave } = newWord;
+  const addWordsToBook = (incoming: CapturedWord[], options?: { navigateToReview?: boolean }) => {
     const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
-    setWords((prevWords) => {
-      const updatedWords = [{ ...wordToSave, groupId: autoGroupId }, ...prevWords];
-      return updatedWords;
-    });
-    setView('review');
+    const wordsToSave = incoming.map(({ photoDataUri, ...word }) => ({ ...word, groupId: autoGroupId }));
+    setWords((prevWords) => [...wordsToSave, ...prevWords]);
+    if (options?.navigateToReview) setView('review');
   };
   
+  const handleWordAdded = (newWord: CapturedWord) => {
+    addWordsToBook([newWord], { navigateToReview: true });
+  };
+
   const handleMultipleWordsAdded = (newWords: CapturedWord[]) => {
     console.log('handleMultipleWordsAdded called with:', newWords);
-    const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
-    const wordsToSave = newWords.map(({ photoDataUri, ...word }) => ({ ...word, groupId: autoGroupId }));
-    console.log('Words to save:', wordsToSave);
-    setWords((prevWords) => {
-        const updatedWords = [...wordsToSave, ...prevWords];
-        console.log('Updated words:', updatedWords);
-        return updatedWords;
-    });
-    setView('review');
+    addWordsToBook(newWords, { navigateToReview: true });
+  };
+
+  const handleAddWordsFromArticle = (newWords: CapturedWord[]) => {
+    addWordsToBook(newWords, { navigateToReview: false });
   };
 
   const handleEditWord = (word: CapturedWord) => {
@@ -333,7 +330,7 @@ export default function Home() {
       case 'essay':
         return <EssayReviewView />;
       case 'article':
-        return <ArticleReadingView />;
+        return <ArticleReadingView words={words} onAddWords={handleAddWordsFromArticle} />;
       default:
         return null;
     }

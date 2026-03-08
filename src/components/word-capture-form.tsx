@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, PlusCircle, Camera, Upload, X } from "lucide-react";
+import { Loader2, PlusCircle, Camera, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,15 +16,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getDefinitionAction, extractWordAndDefineAction } from "@/app/actions";
+import { defineTermAutoAction, extractWordAndDefineAction } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import type { CapturedWord } from "@/lib/types";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -32,21 +25,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateId } from "@/lib/utils";
 
 const formSchema = z.object({
-  word: z.string().min(1, "请输入单词。").max(50, "单词长度不能超过 50 个字符。"),
-  partOfSpeech: z.string().min(1, "请选择词性。"),
-  photoDataUri: z.string().optional(),
+  word: z.string().min(1, "请输入单词或短语。").max(100, "长度不能超过 100 个字符。"),
 });
-
-const partsOfSpeech = [
-  "noun",
-  "pronoun",
-  "verb",
-  "adjective",
-  "adverb",
-  "preposition",
-  "conjunction",
-  "interjection",
-];
 
 interface WordCaptureFormProps {
   onWordAdded: (word: CapturedWord) => void;
@@ -61,23 +41,17 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
   const [activeTab, setActiveTab] = React.useState("text");
-  const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       word: "",
-      partOfSpeech: "",
-      photoDataUri: "",
     },
   });
 
   const handleImageAnalysis = async (dataUri: string) => {
     setIsAnalyzing(true);
-    setCapturedImage(dataUri);
-    // We don't set photoDataUri in the form anymore for auto-analysis
-    // form.setValue('photoDataUri', dataUri);
 
     try {
       console.log('Starting image analysis with dataUri length:', dataUri.length);
@@ -87,22 +61,21 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       if (result.success && result.data) {
         const wordsFound = result.data;
         console.log('Words found:', wordsFound);
-        
+
+        const capturedAt = new Date();
         const newWords: CapturedWord[] = wordsFound.map(foundWord => ({
           id: generateId(),
           word: foundWord.word,
           partOfSpeech: foundWord.partOfSpeech,
           definition: foundWord.definition,
           enrichment: foundWord.enrichment,
-          capturedAt: new Date(),
+          capturedAt,
           photoDataUri: dataUri,
         }));
         console.log('New words created:', newWords);
         onMultipleWordsAdded(newWords);
         
         form.reset();
-        setCapturedImage(null);
-        form.setValue('photoDataUri', undefined);
         toast({
           title: `已识别 ${wordsFound.length} 个单词`,
           description: `已从图片中识别并生成释义。`,
@@ -114,9 +87,6 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
           title: "识别失败",
           description: result.error || "无法从图片中识别到单词。",
         });
-        // Clear image on failure so user can try again
-        setCapturedImage(null);
-        form.setValue('photoDataUri', undefined);
       }
     } catch (error) {
       console.error("Image analysis error:", error);
@@ -125,9 +95,6 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         title: "识别出错",
         description: "图片识别过程中发生未知错误。",
       });
-      // Clear image on error so user can try again
-      setCapturedImage(null);
-      form.setValue('photoDataUri', undefined);
     } finally {
       setIsAnalyzing(false);
     }
@@ -197,30 +164,71 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       event.target.value = "";
     }
   };
-  
-  React.useEffect(() => {
-    // When capturedImage is set, also set it in the form for manual submission
-    form.setValue('photoDataUri', capturedImage || undefined);
-  }, [capturedImage, form]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-    const result = await getDefinitionAction(values);
+    try {
+      const cleaned = String(values.word || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'“”‘’()[\]{}<>.,!?;:]+|[\s"'“”‘’()[\]{}<>.,!?;:]+$/g, '');
 
-    if (result.success && result.data) {
-      onWordAdded(result.data);
-      form.reset();
-      setCapturedImage(null);
-      form.setValue('photoDataUri', undefined);
-      // setActiveTab('text');
-    } else {
+      if (!cleaned) {
+        toast({ variant: "destructive", title: "请输入单词", description: "单词或短语不能为空。" });
+        return;
+      }
+
+      const result = await defineTermAutoAction({ term: cleaned });
+      if (result.success && result.data) {
+        const capturedAt = new Date();
+        const seenPos = new Set<string>();
+        const newWords: CapturedWord[] = [];
+
+        for (const it of result.data) {
+          const rawPos = String(it.partOfSpeech || '').trim();
+          const partOfSpeech = rawPos || (/\s/.test(cleaned) ? 'phrase' : 'noun');
+          const posKey = partOfSpeech.toLowerCase();
+          if (seenPos.has(posKey)) continue;
+          seenPos.add(posKey);
+
+          const definition = String(it.definition || '').trim();
+          if (!definition) continue;
+
+          newWords.push({
+            id: generateId(),
+            word: cleaned,
+            partOfSpeech,
+            definition,
+            enrichment: it.enrichment,
+            capturedAt,
+          });
+        }
+
+        if (newWords.length === 0) {
+          toast({ variant: "destructive", title: "添加失败", description: "模型未返回有效结果，请稍后重试。" });
+          return;
+        }
+
+        if (newWords.length === 1) onWordAdded(newWords[0]);
+        else onMultipleWordsAdded(newWords);
+
+        form.reset();
+        toast({
+          title: "已添加到单词本",
+          description: newWords.length === 1 ? `已添加：${cleaned}` : `已添加：${cleaned}（${newWords.map((w) => w.partOfSpeech).join(' / ')}）`,
+        });
+        // setActiveTab('text');
+        return;
+      }
+
       toast({
         variant: "destructive",
         title: "添加失败",
         description: result.error || "发生未知错误，请稍后重试。",
       });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   }
 
   return (
@@ -247,56 +255,19 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                         <span className="text-muted-foreground">正在识别图片...</span>
                     </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="word"
-                    render={({ field }) => (
-                      <FormItem className="md:col-span-2">
-                        <FormLabel>单词</FormLabel>
-                        <FormControl>
-                          <Input placeholder="例如：ephemeral" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="partOfSpeech"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>词性</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="请选择..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {partsOfSpeech.map((pos) => (
-                              <SelectItem key={pos} value={pos} className="capitalize">
-                                {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                 {capturedImage && !isAnalyzing && (
-                  <div className="space-y-2 pt-4">
-                    <FormLabel>图片预览（可选）</FormLabel>
-                    <div className="relative">
-                      <img src={capturedImage} alt="预览图片" className="rounded-md max-h-48 w-auto" />
-                       <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 bg-background/50 hover:bg-background/75" onClick={() => { setCapturedImage(null); }}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <FormField
+                  control={form.control}
+                  name="word"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>单词/短语</FormLabel>
+                      <FormControl>
+                        <Input placeholder="例如：ephemeral / take off" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <Button type="submit" disabled={isSubmitting || isAnalyzing} className="w-full sm:w-auto mt-6">
                   {isSubmitting ? (
                     <>

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { defineCapturedWord } from './flows/define-captured-word';
+import { defineTermAuto } from './flows/define-term-auto';
 import { extractWordAndDefine } from './flows/extract-word-and-define';
 
 const app = express();
@@ -46,6 +47,26 @@ app.post('/flows/extractWordAndDefineFlow', async (req, res) => {
     res.json({ result: { output: result } });
   } catch (error: any) {
     console.error('[AI Service] Error in extractWordAndDefineFlow:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint for defining a term with auto part-of-speech detection
+app.post('/flows/defineTermAutoFlow', async (req, res) => {
+  console.log(`[AI Service] Received request for defineTermAutoFlow.`);
+  try {
+    const input = req.body.data;
+    if (!input) {
+      console.error('[AI Service] Request body missing "data" field.');
+      return res.status(400).json({ error: 'Missing data in request body' });
+    }
+    console.log(`[AI Service] Calling AI model for defineTermAuto...`);
+    const result = await defineTermAuto(input);
+    console.log(`[AI Service] AI model returned a result for defineTermAuto.`);
+    console.log('[AI Service] Result payload:', JSON.stringify(result, null, 2));
+    res.json({ result: { output: result } });
+  } catch (error: any) {
+    console.error('[AI Service] Error in defineTermAutoFlow:', error);
     res.status(500).json({ error: error.message });
   }
 });

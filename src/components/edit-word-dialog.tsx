@@ -52,6 +52,7 @@ const partsOfSpeech = [
   "preposition",
   "conjunction",
   "interjection",
+  "phrase",
 ];
 
 interface EditWordDialogProps {

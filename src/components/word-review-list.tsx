@@ -70,6 +70,90 @@ const groupWordsByWeek = (words: CapturedWord[]) => {
   return grouped;
 };
 
+const POS_ORDER = [
+  'noun',
+  'pronoun',
+  'verb',
+  'adjective',
+  'adverb',
+  'preposition',
+  'conjunction',
+  'interjection',
+  'phrase',
+] as const;
+
+function normalizeTermKey(raw: string) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s"'“”‘’()[\]{}<>.,!?;:]+|[\s"'“”‘’()[\]{}<>.,!?;:]+$/g, '');
+}
+
+function normalizePosKey(raw: string) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function posOrderIndex(pos: string) {
+  const key = normalizePosKey(pos);
+  const idx = POS_ORDER.indexOf(key as any);
+  return idx === -1 ? POS_ORDER.length : idx;
+}
+
+type TermGroup = {
+  key: string;
+  display: string;
+  words: CapturedWord[];
+  latestCapturedAt: Date;
+};
+
+function groupWordsByTerm(words: CapturedWord[]): TermGroup[] {
+  const map = new Map<string, TermGroup>();
+
+  for (const w of words) {
+    const key = normalizeTermKey(w.word);
+    if (!key) continue;
+    const capturedAt = new Date(w.capturedAt);
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { key, display: w.word, words: [w], latestCapturedAt: capturedAt });
+      continue;
+    }
+
+    existing.words.push(w);
+    if (!Number.isNaN(capturedAt.getTime()) && capturedAt.getTime() >= existing.latestCapturedAt.getTime()) {
+      existing.latestCapturedAt = capturedAt;
+      existing.display = w.word;
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.latestCapturedAt.getTime() - a.latestCapturedAt.getTime());
+}
+
+function pickVariantsByPos(words: CapturedWord[]): CapturedWord[] {
+  const map = new Map<string, CapturedWord>();
+
+  for (const w of words) {
+    const key = normalizePosKey(w.partOfSpeech);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, w);
+      continue;
+    }
+
+    const tNew = new Date(w.capturedAt).getTime();
+    const tOld = new Date(existing.capturedAt).getTime();
+    if (tNew >= tOld) map.set(key, w);
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const diff = posOrderIndex(a.partOfSpeech) - posOrderIndex(b.partOfSpeech);
+    if (diff !== 0) return diff;
+    return a.partOfSpeech.localeCompare(b.partOfSpeech);
+  });
+}
+
 export function WordReviewList({
   words,
   groups,
@@ -84,7 +168,8 @@ export function WordReviewList({
   onGeneratePractice,
   onGenerateStory,
 }: WordReviewListProps) {
-  const [definitionOpenIds, setDefinitionOpenIds] = useState<Set<string>>(new Set());
+  const [definitionOpenKeys, setDefinitionOpenKeys] = useState<Set<string>>(new Set());
+  const [variantSelection, setVariantSelection] = useState<Record<string, string>>({});
 
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -278,11 +363,11 @@ export function WordReviewList({
       setMoveOpen(true);
     };
 
-    const setDefinitionOpen = (wordId: string, open: boolean) => {
-      setDefinitionOpenIds((prev) => {
+    const setDefinitionOpen = (key: string, open: boolean) => {
+      setDefinitionOpenKeys((prev) => {
         const next = new Set(prev);
-        if (open) next.add(wordId);
-        else next.delete(wordId);
+        if (open) next.add(key);
+        else next.delete(key);
         return next;
       });
     };
@@ -380,123 +465,186 @@ export function WordReviewList({
                  </div>
                </div>
                <div className="space-y-2">
-                 {groupedWords[weekKey].map((word) => (
-                  <Card key={word.id} className="w-full">
-                    <CardContent className="p-3">
-                       <div className="flex items-center justify-between">
+                 {groupWordsByTerm(groupedWords[weekKey]).map((g) => {
+                   const groupKey = `${weekKey}::${g.key}`;
+                   const variants = pickVariantsByPos(g.words);
+                   const selectedId = variantSelection[groupKey];
+                   const selected = variants.find((w) => w.id === selectedId) || variants[0];
+                   const isDefinitionOpen = definitionOpenKeys.has(groupKey);
+
+                   const selectVariant = (id: string) => {
+                     setVariantSelection((prev) => ({ ...prev, [groupKey]: id }));
+                   };
+
+                   return (
+                     <Card key={groupKey} className="w-full">
+                       <CardContent className="p-3">
+                         <div className="flex items-center justify-between">
                            <div className="flex-grow flex items-center gap-2 overflow-hidden">
-                               <span className="font-bold text-lg cursor-pointer hover:underline" onClick={() => handleWordClick(word.word)}>{word.word}</span>
-                               <Badge variant="secondary" className="capitalize shrink-0">{word.partOfSpeech}</Badge>
-                               {definitionOpenIds.has(word.id) && <p className="text-muted-foreground truncate">{word.definition}</p>}
+                             <span
+                               className="font-bold text-lg cursor-pointer hover:underline"
+                               onClick={() => handleWordClick(selected.word)}
+                             >
+                               {g.display}
+                             </span>
+
+                             {variants.length > 1 ? (
+                               <div className="flex flex-wrap items-center gap-1 shrink-0">
+                                 {variants.map((v) => (
+                                   <Button
+                                     key={v.id}
+                                     type="button"
+                                     size="sm"
+                                     variant={v.id === selected.id ? "secondary" : "outline"}
+                                     className="h-6 px-2 text-xs capitalize"
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       selectVariant(v.id);
+                                     }}
+                                   >
+                                     {v.partOfSpeech}
+                                   </Button>
+                                 ))}
+                               </div>
+                             ) : (
+                               <Badge variant="secondary" className="capitalize shrink-0">{selected.partOfSpeech}</Badge>
+                             )}
+
+                             {isDefinitionOpen && <p className="text-muted-foreground truncate">{selected.definition}</p>}
                            </div>
+
                            <div className="flex items-center flex-shrink-0 ml-4">
-                               <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
-                                   {formatDistanceToNow(new Date(word.capturedAt), { addSuffix: true })}
-                               </div>
-                               <div className="flex items-center gap-2 mr-1">
-                                 <Label htmlFor={`def-${word.id}`} className="text-xs text-muted-foreground">释义</Label>
-                                 <Switch
-                                   id={`def-${word.id}`}
-                                   checked={definitionOpenIds.has(word.id)}
-                                   onCheckedChange={(v) => setDefinitionOpen(word.id, v === true)}
-                                 />
-                               </div>
-                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(word); }}>
-                                   <Pencil className="h-4 w-4" />
-                                   <span className="sr-only">编辑单词</span>
-                               </Button>
-                               <Button
-                                 variant="ghost"
-                                 size="icon"
-                                 className="h-8 w-8"
-                                 onClick={(e) => { e.stopPropagation(); openMoveDialog(word); }}
-                               >
-                                   <FolderInput className="h-4 w-4" />
-                                   <span className="sr-only">移动分组</span>
-                               </Button>
-                               <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(word); }}>
-                                   <Trash className="h-4 w-4" />
-                                   <span className="sr-only">删除单词</span>
-                               </Button>
+                             <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
+                               {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
+                             </div>
+                             <div className="flex items-center gap-2 mr-1">
+                               <Label htmlFor={`def-${groupKey}`} className="text-xs text-muted-foreground">释义</Label>
+                               <Switch
+                                 id={`def-${groupKey}`}
+                                 checked={isDefinitionOpen}
+                                 onCheckedChange={(v) => setDefinitionOpen(groupKey, v === true)}
+                               />
+                             </div>
+                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
+                               <Pencil className="h-4 w-4" />
+                               <span className="sr-only">编辑单词</span>
+                             </Button>
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               className="h-8 w-8"
+                               onClick={(e) => { e.stopPropagation(); openMoveDialog(selected); }}
+                             >
+                               <FolderInput className="h-4 w-4" />
+                               <span className="sr-only">移动分组</span>
+                             </Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(selected); }}>
+                               <Trash className="h-4 w-4" />
+                               <span className="sr-only">删除单词</span>
+                             </Button>
                            </div>
-                       </div>
+                         </div>
 
-                      <Accordion type="single" collapsible className="mt-2">
-                        <AccordionItem value="details" className="border-none">
-                          <AccordionTrigger className="py-2 text-sm">
-                            了解更多
-                          </AccordionTrigger>
-                          <AccordionContent className="pb-1">
-                            {!word.enrichment ? (
-                              <p className="text-muted-foreground">暂无 AI 拓展内容。</p>
-                            ) : (
-                              <div className="space-y-3">
-                                <div>
-                                  <div className="text-xs font-semibold text-muted-foreground">难度与用法</div>
-                                  <div className="text-sm">
-                                    {word.enrichment.level?.cefr && (
-                                      <span className="mr-2">CEFR: {word.enrichment.level.cefr}</span>
-                                    )}
-                                    {word.enrichment.level?.usageZh && (
-                                      <p className="mt-1 text-muted-foreground">{word.enrichment.level.usageZh}</p>
-                                    )}
-                                  </div>
-                                </div>
+                         <Accordion type="single" collapsible className="mt-2">
+                           <AccordionItem value="details" className="border-none">
+                             <AccordionTrigger className="py-2 text-sm">
+                               了解更多
+                             </AccordionTrigger>
+                             <AccordionContent className="pb-1">
+                               {variants.length > 1 && (
+                                 <div className="flex flex-wrap items-center gap-2 pb-2">
+                                   <div className="text-xs font-semibold text-muted-foreground">词性</div>
+                                   <div className="flex flex-wrap items-center gap-1">
+                                     {variants.map((v) => (
+                                       <Button
+                                         key={v.id}
+                                         type="button"
+                                         size="sm"
+                                         variant={v.id === selected.id ? "secondary" : "outline"}
+                                         className="h-6 px-2 text-xs capitalize"
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           selectVariant(v.id);
+                                         }}
+                                       >
+                                         {v.partOfSpeech}
+                                       </Button>
+                                     ))}
+                                   </div>
+                                 </div>
+                               )}
 
-                                {Array.isArray(word.enrichment.collocations) && word.enrichment.collocations.length > 0 && (
-                                  <div>
-                                    <div className="text-xs font-semibold text-muted-foreground">常见搭配</div>
-                                    <ul className="mt-1 space-y-1 text-sm">
-                                      {word.enrichment.collocations.slice(0, 6).map((c, idx) => (
-                                        <li key={idx} className="text-muted-foreground">
-                                          <span className="text-foreground">{c.phrase}</span>
-                                          {c.meaningZh ? ` — ${c.meaningZh}` : ''}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
+                               {!selected.enrichment ? (
+                                 <p className="text-muted-foreground">暂无 AI 拓展内容。</p>
+                               ) : (
+                                 <div className="space-y-3">
+                                   <div>
+                                     <div className="text-xs font-semibold text-muted-foreground">难度与用法</div>
+                                     <div className="text-sm">
+                                       {selected.enrichment.level?.cefr && (
+                                         <span className="mr-2">CEFR: {selected.enrichment.level.cefr}</span>
+                                       )}
+                                       {selected.enrichment.level?.usageZh && (
+                                         <p className="mt-1 text-muted-foreground">{selected.enrichment.level.usageZh}</p>
+                                       )}
+                                     </div>
+                                   </div>
 
-                                {(Array.isArray(word.enrichment.synonyms) && word.enrichment.synonyms.length > 0) && (
-                                  <div>
-                                    <div className="text-xs font-semibold text-muted-foreground">同义词</div>
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                      {word.enrichment.synonyms.slice(0, 10).join(', ')}
-                                    </div>
-                                  </div>
-                                )}
+                                   {Array.isArray(selected.enrichment.collocations) && selected.enrichment.collocations.length > 0 && (
+                                     <div>
+                                       <div className="text-xs font-semibold text-muted-foreground">常见搭配</div>
+                                       <ul className="mt-1 space-y-1 text-sm">
+                                         {selected.enrichment.collocations.slice(0, 6).map((c, idx) => (
+                                           <li key={idx} className="text-muted-foreground">
+                                             <span className="text-foreground">{c.phrase}</span>
+                                             {c.meaningZh ? ` — ${c.meaningZh}` : ''}
+                                           </li>
+                                         ))}
+                                       </ul>
+                                     </div>
+                                   )}
 
-                                {(Array.isArray(word.enrichment.antonyms) && word.enrichment.antonyms.length > 0) && (
-                                  <div>
-                                    <div className="text-xs font-semibold text-muted-foreground">反义词</div>
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                      {word.enrichment.antonyms.slice(0, 10).join(', ')}
-                                    </div>
-                                  </div>
-                                )}
+                                   {(Array.isArray(selected.enrichment.synonyms) && selected.enrichment.synonyms.length > 0) && (
+                                     <div>
+                                       <div className="text-xs font-semibold text-muted-foreground">同义词</div>
+                                       <div className="mt-1 text-sm text-muted-foreground">
+                                         {selected.enrichment.synonyms.slice(0, 10).join(', ')}
+                                       </div>
+                                     </div>
+                                   )}
 
-                                {Array.isArray(word.enrichment.examples) && word.enrichment.examples.length > 0 && (
-                                  <div>
-                                    <div className="text-xs font-semibold text-muted-foreground">例句</div>
-                                    <ul className="mt-1 space-y-2 text-sm">
-                                      {word.enrichment.examples.slice(0, 5).map((ex, idx) => (
-                                        <li key={idx}>
-                                          <div className="text-foreground">{ex.en}</div>
-                                          <div className="text-muted-foreground">{ex.zh}</div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                                   {(Array.isArray(selected.enrichment.antonyms) && selected.enrichment.antonyms.length > 0) && (
+                                     <div>
+                                       <div className="text-xs font-semibold text-muted-foreground">反义词</div>
+                                       <div className="mt-1 text-sm text-muted-foreground">
+                                         {selected.enrichment.antonyms.slice(0, 10).join(', ')}
+                                       </div>
+                                     </div>
+                                   )}
+
+                                   {Array.isArray(selected.enrichment.examples) && selected.enrichment.examples.length > 0 && (
+                                     <div>
+                                       <div className="text-xs font-semibold text-muted-foreground">例句</div>
+                                       <ul className="mt-1 space-y-2 text-sm">
+                                         {selected.enrichment.examples.slice(0, 5).map((ex, idx) => (
+                                           <li key={idx}>
+                                             <div className="text-foreground">{ex.en}</div>
+                                             <div className="text-muted-foreground">{ex.zh}</div>
+                                           </li>
+                                         ))}
+                                       </ul>
+                                     </div>
+                                   )}
+                                 </div>
+                               )}
+                             </AccordionContent>
+                           </AccordionItem>
+                         </Accordion>
+                       </CardContent>
+                     </Card>
+                   );
+                 })}
+               </div>
             </div>
           ))}
         </div>

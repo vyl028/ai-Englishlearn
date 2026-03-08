@@ -91,6 +91,18 @@ const WordDefinitionSchema = z.object({
 export const ExtractWordAndDefineOutputSchema = z.array(WordDefinitionSchema);
 export type ExtractWordAndDefineOutput = z.infer<typeof ExtractWordAndDefineOutputSchema>;
 
+// Schema for defining a term (auto-detect part(s) of speech)
+export const DefineTermAutoInputSchema = z.object({
+  term: z.string().min(1).max(100).describe('The English word or phrase to define.'),
+  photoDataUri: z.string().optional().describe(
+    "An optional photo, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+  ),
+});
+export type DefineTermAutoInput = z.infer<typeof DefineTermAutoInputSchema>;
+
+export const DefineTermAutoOutputSchema = z.array(WordDefinitionSchema).min(1).max(6);
+export type DefineTermAutoOutput = z.infer<typeof DefineTermAutoOutputSchema>;
+
 
 // Schema for generating a quiz
 const WordInputSchema = z.object({

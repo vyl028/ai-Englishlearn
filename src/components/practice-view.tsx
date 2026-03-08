@@ -148,11 +148,7 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
                     <span>第 {index + 1} 题</span>
                     <Badge variant="secondary">{getTypeLabel(q.type)}</Badge>
                   </CardTitle>
-                  <CardDescription>
-                    <span className="font-medium text-foreground">词汇：{q.word}</span>
-                    <span className="mx-2 text-muted-foreground">·</span>
-                    {q.promptEn}
-                  </CardDescription>
+                  {q.type === "mcq" && <CardDescription className="whitespace-pre-wrap">{q.promptEn}</CardDescription>}
                 </div>
                 {submitted && (
                   <div className="pt-1">
@@ -224,8 +220,6 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
 
               {q.type === "reorder" && (
                 <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">点击碎片，按顺序组成正确句子。</div>
-
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-muted-foreground">你的选择</div>
                     <div className="flex flex-wrap gap-2">

@@ -3,6 +3,8 @@
 import {
   CapturedWord,
   DefineCapturedWordInput,
+  DefineTermAutoInput,
+  DefineTermAutoOutput,
   ExtractWordAndDefineOutput,
   GeneratePracticeInput,
   GeneratePracticeOutput,
@@ -17,6 +19,7 @@ import {
   StudyArticleOutput
 } from "@/lib/types";
 import { defineCapturedWord } from '@/ai/flows/define-captured-word';
+import { defineTermAuto } from '@/ai/flows/define-term-auto';
 import { extractWordAndDefine } from '@/ai/flows/extract-word-and-define';
 import { generatePractice } from '@/ai/flows/generate-practice';
 import { generateQuiz } from '@/ai/flows/generate-quiz';
@@ -73,6 +76,21 @@ export async function extractWordAndDefineAction(
     console.error('extractWordAndDefineAction error:', error);
     console.error('Error stack:', error.stack);
     return { success: false, error: error.message || "分析图片时发生错误。" };
+  }
+}
+
+export async function defineTermAutoAction(
+  input: DefineTermAutoInput
+): Promise<{ success: boolean; data?: DefineTermAutoOutput; error?: string }> {
+  try {
+    const result = await defineTermAuto(input);
+    if (!result || result.length === 0) {
+      return { success: false, error: "无法获取该词条的释义，请重试。" };
+    }
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('defineTermAutoAction error:', error);
+    return { success: false, error: error.message || "获取释义时发生错误。" };
   }
 }
 

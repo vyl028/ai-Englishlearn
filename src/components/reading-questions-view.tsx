@@ -67,12 +67,6 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
                 <div className="space-y-1">
                   <CardTitle className="text-base">第 {index + 1} 题</CardTitle>
                   <CardDescription className="whitespace-pre-wrap">{q.questionEn}</CardDescription>
-                  {(q.locate?.paragraphIndex || q.locate?.quoteEn) && (
-                    <div className="text-xs text-muted-foreground space-y-1 pt-1">
-                      {q.locate?.paragraphIndex && <div>定位：第 {q.locate.paragraphIndex} 段</div>}
-                      {q.locate?.quoteEn && <div className="whitespace-pre-wrap">原文：{q.locate.quoteEn}</div>}
-                    </div>
-                  )}
                 </div>
                 {submitted && (
                   <div className="pt-1">
@@ -133,7 +127,15 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
                     <AccordionItem value="explain" className="border-none">
                       <AccordionTrigger className="py-2 text-sm">答案与解析</AccordionTrigger>
                       <AccordionContent>
-                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">{q.analysisZh}</div>
+                        <div className="space-y-3">
+                          {(q.locate?.paragraphIndex || q.locate?.quoteEn) && (
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              {q.locate?.paragraphIndex && <div>定位：第 {q.locate.paragraphIndex} 段</div>}
+                              {q.locate?.quoteEn && <div className="whitespace-pre-wrap">原文：{q.locate.quoteEn}</div>}
+                            </div>
+                          )}
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">{q.analysisZh}</div>
+                        </div>
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>

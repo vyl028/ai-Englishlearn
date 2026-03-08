@@ -3,9 +3,10 @@
 import * as React from "react";
 import { Loader2, RotateCcw, Upload } from "lucide-react";
 
-import { extractTextFromFileAction, studyArticleAction } from "@/app/actions";
-import type { StudyArticleOutput } from "@/lib/types";
+import { defineTermAutoAction, extractTextFromFileAction, studyArticleAction } from "@/app/actions";
+import type { CapturedWord, StudyArticleOutput } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { generateId } from "@/lib/utils";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ReadingQuestionsView } from "@/components/reading-questions-view";
 
-export function ArticleReadingView() {
+interface ArticleReadingViewProps {
+  words: CapturedWord[];
+  onAddWords: (words: CapturedWord[]) => void;
+}
+
+function normalizeTermKey(raw: string) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/^[\s"'“”‘’()\[\]{}<>.,!?;:]+|[\s"'“”‘’()\[\]{}<>.,!?;:]+$/g, "");
+}
+
+function normalizePartOfSpeech(raw: string | undefined) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v) return undefined;
+  if (v === "noun" || v === "n" || v === "n.") return "noun";
+  if (v === "pronoun" || v === "pron" || v === "pron.") return "pronoun";
+  if (v === "verb" || v === "v" || v === "v.") return "verb";
+  if (v === "adjective" || v === "adj" || v === "adj.") return "adjective";
+  if (v === "adverb" || v === "adv" || v === "adv.") return "adverb";
+  if (v === "preposition" || v === "prep" || v === "prep.") return "preposition";
+  if (v === "conjunction" || v === "conj" || v === "conj.") return "conjunction";
+  if (v === "interjection" || v === "interj" || v === "interj.") return "interjection";
+  if (v === "phrase") return "phrase";
+  return undefined;
+}
+
+export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProps) {
   const { toast } = useToast();
 
   const [title, setTitle] = React.useState("");
@@ -29,8 +58,18 @@ export function ArticleReadingView() {
   const [result, setResult] = React.useState<StudyArticleOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [isParsingFile, setIsParsingFile] = React.useState(false);
+  const [addingKey, setAddingKey] = React.useState<string | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const existingWordKeys = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const w of words) {
+      const key = normalizeTermKey(w.word);
+      if (key) set.add(key);
+    }
+    return set;
+  }, [words]);
 
   const resetAll = () => {
     setTitle("");
@@ -123,6 +162,78 @@ export function ArticleReadingView() {
       });
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const addToWordBook = async (params: {
+    term: string;
+    meaningZh: string;
+    pos?: string;
+    noteZh?: string;
+    exampleEn?: string;
+    kind: "keyword" | "phrase";
+  }) => {
+    const rawTerm = String(params.term || "").trim();
+    const cleanedTerm = rawTerm.replace(
+      /^[\s"'“”‘’()\[\]{}<>.,!?;:]+|[\s"'“”‘’()\[\]{}<>.,!?;:]+$/g,
+      ""
+    );
+    const key = normalizeTermKey(cleanedTerm);
+    if (!key) {
+      toast({ variant: "destructive", title: "无法添加", description: "该词条为空或无效，请重试。" });
+      return;
+    }
+
+    if (existingWordKeys.has(key)) {
+      toast({ title: "已在单词本", description: `“${cleanedTerm}” 已在单词本中。` });
+      return;
+    }
+
+    setAddingKey(key);
+    try {
+      const res = await defineTermAutoAction({ term: cleanedTerm });
+      if (!res.success || !res.data) {
+        toast({
+          variant: "destructive",
+          title: "加入失败",
+          description: res.error || "无法生成词条内容，请稍后重试。",
+        });
+        return;
+      }
+
+      const capturedAt = new Date();
+      const seenPos = new Set<string>();
+      const newWords: CapturedWord[] = [];
+
+      for (const it of res.data) {
+        const rawPos = String(it.partOfSpeech || "").trim();
+        const partOfSpeech = rawPos || (/\s/.test(cleanedTerm) ? "phrase" : "noun");
+        const posKey = partOfSpeech.toLowerCase();
+        if (seenPos.has(posKey)) continue;
+        seenPos.add(posKey);
+
+        const definition = String(it.definition || "").trim();
+        if (!definition) continue;
+
+        newWords.push({
+          id: generateId(),
+          word: cleanedTerm,
+          partOfSpeech,
+          definition,
+          enrichment: it.enrichment,
+          capturedAt,
+        });
+      }
+
+      if (newWords.length === 0) {
+        toast({ variant: "destructive", title: "加入失败", description: "模型未返回有效结果，请稍后重试。" });
+        return;
+      }
+
+      onAddWords(newWords);
+      toast({ title: "已加入单词本", description: `已添加：${cleanedTerm}` });
+    } finally {
+      setAddingKey((prev) => (prev === key ? null : prev));
     }
   };
 
@@ -296,11 +407,40 @@ export function ArticleReadingView() {
           <div className="space-y-2">
             <div className="text-sm font-medium">关键词</div>
             <div className="space-y-2">
-              {r.keywords.map((k, i) => (
+                {r.keywords.map((k, i) => (
                 <div key={i} className="rounded-md border p-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{k.term}</span>
-                    {k.pos && <Badge variant="outline">{k.pos}</Badge>}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{k.term}</span>
+                      {k.pos && <Badge variant="outline">{k.pos}</Badge>}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={existingWordKeys.has(normalizeTermKey(k.term)) ? "secondary" : "outline"}
+                      disabled={addingKey === normalizeTermKey(k.term)}
+                      onClick={() =>
+                        void addToWordBook({
+                          kind: "keyword",
+                          term: k.term,
+                          meaningZh: k.meaningZh,
+                          pos: k.pos,
+                          noteZh: k.noteZh,
+                          exampleEn: k.exampleEn,
+                        })
+                      }
+                    >
+                      {addingKey === normalizeTermKey(k.term) ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          加入中...
+                        </>
+                      ) : existingWordKeys.has(normalizeTermKey(k.term)) ? (
+                        "已在单词本"
+                      ) : (
+                        "加入单词本"
+                      )}
+                    </Button>
                   </div>
                   <div className="text-sm text-muted-foreground whitespace-pre-wrap">{k.meaningZh}</div>
                   {k.noteZh && <div className="text-sm text-muted-foreground whitespace-pre-wrap">{k.noteZh}</div>}
@@ -321,7 +461,35 @@ export function ArticleReadingView() {
               <div className="space-y-2">
                 {r.phrases!.map((p, i) => (
                   <div key={i} className="rounded-md border p-3 space-y-2">
-                    <div className="font-medium">{p.phrase}</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-medium">{p.phrase}</div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={existingWordKeys.has(normalizeTermKey(p.phrase)) ? "secondary" : "outline"}
+                        disabled={addingKey === normalizeTermKey(p.phrase)}
+                        onClick={() =>
+                          void addToWordBook({
+                            kind: "phrase",
+                            term: p.phrase,
+                            meaningZh: p.meaningZh,
+                            noteZh: p.noteZh,
+                            exampleEn: p.exampleEn,
+                          })
+                        }
+                      >
+                        {addingKey === normalizeTermKey(p.phrase) ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            加入中...
+                          </>
+                        ) : existingWordKeys.has(normalizeTermKey(p.phrase)) ? (
+                          "已在单词本"
+                        ) : (
+                          "加入单词本"
+                        )}
+                      </Button>
+                    </div>
                     <div className="text-sm text-muted-foreground whitespace-pre-wrap">{p.meaningZh}</div>
                     {p.noteZh && <div className="text-sm text-muted-foreground whitespace-pre-wrap">{p.noteZh}</div>}
                     {p.exampleEn && (
@@ -515,4 +683,3 @@ export function ArticleReadingView() {
     </Card>
   );
 }
-
