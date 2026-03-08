@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Mic, Square, Volume2, VolumeX } from "lucide-react";
+import { Bot, Loader2, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 
+import { speakingChatAction } from "@/app/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,17 +11,69 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { generateId } from "@/lib/utils";
+import type { SpeakingChatIssue, SpeakingChatMessage } from "@/lib/types";
 
-type SpeechSessionKind = "target" | "attempt";
+type SpeechSessionKind = "target" | "attempt" | "chat";
 
 type AlignOp =
   | { type: "equal"; expected: string; heard: string }
   | { type: "substitute"; expected: string; heard: string }
   | { type: "delete"; expected: string }
   | { type: "insert"; heard: string };
+
+type SpeakingTargetLevel = "A2" | "B1" | "B2" | "C1";
+
+type SpeakingChatScenario = {
+  id: string;
+  labelZh: string;
+  scenarioEn: string;
+};
+
+const SPEAKING_CHAT_SCENARIOS: SpeakingChatScenario[] = [
+  {
+    id: "small_talk",
+    labelZh: "日常闲聊",
+    scenarioEn: "Casual small talk. Be friendly and natural. Ask simple follow-up questions.",
+  },
+  {
+    id: "school",
+    labelZh: "校园生活",
+    scenarioEn: "A conversation at school. Topics: classes, homework, friends, clubs, plans.",
+  },
+  {
+    id: "travel",
+    labelZh: "旅行出行",
+    scenarioEn: "Travel conversation. Topics: directions, transport, hotels, sightseeing.",
+  },
+  {
+    id: "restaurant",
+    labelZh: "餐厅点餐",
+    scenarioEn: "Restaurant conversation. Topics: ordering food, preferences, problems, payment.",
+  },
+  {
+    id: "ielts",
+    labelZh: "IELTS 口语",
+    scenarioEn: "IELTS speaking practice. Ask/answer like a real examiner but keep it conversational.",
+  },
+];
+
+type SpeakingChatTurnState = {
+  id: string;
+  userTextEn: string;
+  assistantReplyEn?: string;
+  feedbackZh?: string;
+  correctedUserEn?: string;
+  issues?: SpeakingChatIssue[];
+  scoreOverall?: number;
+  createdAt: number;
+};
 
 function normalizeForEval(text: string) {
   return String(text || "")
@@ -148,6 +201,17 @@ function buildSuggestions(params: {
   return suggestions;
 }
 
+function buildChatHistoryFromTurns(turns: SpeakingChatTurnState[]): SpeakingChatMessage[] {
+  const out: SpeakingChatMessage[] = [];
+  for (const t of turns) {
+    const userText = String(t.userTextEn || "").trim();
+    if (userText) out.push({ role: "user", contentEn: userText });
+    const assistantText = typeof t.assistantReplyEn === "string" ? t.assistantReplyEn.trim() : "";
+    if (assistantText) out.push({ role: "assistant", contentEn: assistantText });
+  }
+  return out.slice(-12);
+}
+
 function isLikelySecureContext() {
   if (typeof window === "undefined") return false;
   if (window.isSecureContext) return true;
@@ -166,13 +230,24 @@ function pickDefaultEnglishVoice(voices: SpeechSynthesisVoice[]) {
 }
 
 export function SpeakingTrainingView() {
+  const { toast } = useToast();
+
   const [targetText, setTargetText] = React.useState("");
   const [heardText, setHeardText] = React.useState("");
   const [interimText, setInterimText] = React.useState("");
 
   const [sessionKind, setSessionKind] = React.useState<SpeechSessionKind | null>(null);
   const [asrError, setAsrError] = React.useState<string | null>(null);
-  const [asrConfidence, setAsrConfidence] = React.useState<number | null>(null);
+  const [attemptCandidates, setAttemptCandidates] = React.useState<string[]>([]);
+  const [attemptCandidateIndex, setAttemptCandidateIndex] = React.useState<number>(0);
+
+  const [chatScenarioId, setChatScenarioId] = React.useState<string>(SPEAKING_CHAT_SCENARIOS[0]?.id || "small_talk");
+  const [chatLevel, setChatLevel] = React.useState<SpeakingTargetLevel>("B1");
+  const [chatDraft, setChatDraft] = React.useState<string>("");
+  const [chatTurns, setChatTurns] = React.useState<SpeakingChatTurnState[]>([]);
+  const [chatError, setChatError] = React.useState<string | null>(null);
+  const [isChatting, setIsChatting] = React.useState(false);
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   const [voices, setVoices] = React.useState<SpeechSynthesisVoice[]>([]);
   const [voiceUri, setVoiceUri] = React.useState<string>("");
@@ -186,11 +261,19 @@ export function SpeakingTrainingView() {
 
   const recognitionRef = React.useRef<any | null>(null);
   const finalTranscriptRef = React.useRef<string>("");
-  const finalConfidenceRef = React.useRef<number | null>(null);
+  const finalCandidatesRef = React.useRef<string[]>([]);
   const lastDisplayRef = React.useRef<string>("");
 
   const supportsAsr = React.useMemo(() => !!getSpeechRecognitionCtor(), []);
   const supportsTts = React.useMemo(() => typeof window !== "undefined" && "speechSynthesis" in window, []);
+
+  const chatScenarioEn = React.useMemo(() => {
+    return SPEAKING_CHAT_SCENARIOS.find((s) => s.id === chatScenarioId)?.scenarioEn || "";
+  }, [chatScenarioId]);
+
+  React.useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [chatTurns.length, isChatting]);
 
   React.useEffect(() => {
     if (!supportsTts) return;
@@ -218,9 +301,9 @@ export function SpeakingTrainingView() {
     setIsSpeaking(false);
   }, [supportsTts]);
 
-  const speak = React.useCallback(() => {
+  const speakText = React.useCallback((raw: string) => {
     if (!supportsTts) return;
-    const text = targetText.trim();
+    const text = String(raw || "").trim();
     if (!text) return;
 
     stopTts();
@@ -237,7 +320,13 @@ export function SpeakingTrainingView() {
 
     setIsSpeaking(true);
     synth.speak(utter);
-  }, [supportsTts, targetText, voices, voiceUri, rate, stopTts]);
+  }, [supportsTts, voices, voiceUri, rate, stopTts]);
+
+  const speak = React.useCallback(() => {
+    const text = targetText.trim();
+    if (!text) return;
+    speakText(text);
+  }, [speakText, targetText]);
 
   const stopRecognition = React.useCallback(() => {
     const rec = recognitionRef.current;
@@ -264,13 +353,119 @@ export function SpeakingTrainingView() {
     };
   }, [stopRecognition, stopTts]);
 
+  const applyAttemptTranscript = React.useCallback((transcript: string) => {
+    const finalText = String(transcript || "").trim();
+    setHeardText(finalText);
+    const align = alignTokens(tokenize(targetText), tokenize(finalText));
+    setOps(align.ops);
+    setScore(align.score);
+    setWer(align.wer);
+    setSuggestions(buildSuggestions({ expectedText: targetText, heardText: finalText, align }));
+  }, [targetText]);
+
+  const resetChat = React.useCallback(() => {
+    setChatDraft("");
+    setChatTurns([]);
+    setChatError(null);
+  }, []);
+
+  const sendChat = React.useCallback(async (raw: string) => {
+    const text = String(raw || "").trim();
+    if (!text) return;
+
+    if (text.length > 600) {
+      toast({
+        variant: "destructive",
+        title: "内容过长",
+        description: "单次发言建议不超过 600 个字符（可分多次说/发）。",
+      });
+      return;
+    }
+
+    const turnId = generateId();
+    const history = buildChatHistoryFromTurns(chatTurns);
+
+    setChatError(null);
+    setIsChatting(true);
+    setChatDraft("");
+    setChatTurns((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        userTextEn: text,
+        createdAt: Date.now(),
+      },
+    ]);
+
+    try {
+      const res = await speakingChatAction({
+        scenario: chatScenarioEn || undefined,
+        userTextEn: text,
+        history: history.length > 0 ? history : undefined,
+        targetLevel: chatLevel,
+      });
+
+      if (!res.success || !res.data) {
+        const msg = res.error || "口语对话失败，请稍后重试。";
+        setChatError(msg);
+        setChatTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  assistantReplyEn: "Sorry, I couldn't respond right now. Please try again.",
+                  feedbackZh: msg,
+                }
+              : t
+          )
+        );
+        return;
+      }
+
+      const data = res.data;
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId
+            ? {
+                ...t,
+                assistantReplyEn: data.assistantReplyEn,
+                feedbackZh: data.feedbackZh,
+                correctedUserEn: data.correctedUserEn,
+                issues: data.issues,
+                scoreOverall: data.scoreOverall,
+              }
+            : t
+        )
+      );
+    } catch (e: any) {
+      const msg = e?.message || "口语对话时发生未知错误。";
+      setChatError(msg);
+      setChatTurns((prev) =>
+        prev.map((t) =>
+          t.id === turnId
+            ? {
+                ...t,
+                assistantReplyEn: "Sorry, I couldn't respond right now. Please try again.",
+                feedbackZh: msg,
+              }
+            : t
+        )
+      );
+    } finally {
+      setIsChatting(false);
+    }
+  }, [chatLevel, chatScenarioEn, chatTurns, toast]);
+
   const startRecognition = React.useCallback((kind: SpeechSessionKind) => {
     setAsrError(null);
-    setAsrConfidence(null);
     setInterimText("");
     finalTranscriptRef.current = "";
-    finalConfidenceRef.current = null;
+    finalCandidatesRef.current = [];
     lastDisplayRef.current = "";
+    if (kind === "attempt") {
+      setAttemptCandidates([]);
+      setAttemptCandidateIndex(0);
+    }
 
     stopTts();
     stopRecognition();
@@ -303,7 +498,7 @@ export function SpeakingTrainingView() {
       try {
         const finals: string[] = [];
         const interims: string[] = [];
-        const confidences: number[] = [];
+        let firstFinalAlternatives: string[] | null = null;
 
         const results = event?.results;
         if (!results) return;
@@ -316,7 +511,15 @@ export function SpeakingTrainingView() {
 
           if (res.isFinal) {
             finals.push(t);
-            if (typeof alt?.confidence === "number") confidences.push(alt.confidence);
+            if (!firstFinalAlternatives) {
+              const alts: string[] = [];
+              const len = typeof res?.length === "number" ? res.length : 0;
+              for (let k = 0; k < len; k++) {
+                const tk = String(res?.[k]?.transcript || "").trim();
+                if (tk) alts.push(tk);
+              }
+              if (alts.length > 0) firstFinalAlternatives = alts;
+            }
           } else {
             interims.push(t);
           }
@@ -324,9 +527,18 @@ export function SpeakingTrainingView() {
 
         const finalText = finals.join(" ").replace(/\s+/g, " ").trim();
         finalTranscriptRef.current = finalText;
-        if (confidences.length > 0) {
-          const avg = confidences.reduce((a, b) => a + b, 0) / confidences.length;
-          finalConfidenceRef.current = Number.isFinite(avg) ? avg : null;
+        if (firstFinalAlternatives && finals.length <= 1) {
+          const unique: string[] = [];
+          const seen = new Set<string>();
+          for (const a of firstFinalAlternatives) {
+            const cleaned = a.replace(/\s+/g, " ").trim();
+            if (!cleaned) continue;
+            const key = cleaned.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            unique.push(cleaned);
+          }
+          finalCandidatesRef.current = unique.slice(0, 5);
         }
 
         const display = [...finals, ...interims].join(" ").replace(/\s+/g, " ").trim();
@@ -351,17 +563,18 @@ export function SpeakingTrainingView() {
 
     rec.onend = () => {
       const finalText = (finalTranscriptRef.current || lastDisplayRef.current || "").trim();
-      const conf = finalConfidenceRef.current;
+      const candidates = (finalCandidatesRef.current && finalCandidatesRef.current.length > 0)
+        ? finalCandidatesRef.current
+        : (finalText ? [finalText] : []);
 
       recognitionRef.current = null;
       setSessionKind(null);
       setInterimText("");
-      setAsrConfidence(typeof conf === "number" ? conf : null);
 
-      if (!finalText) return;
+      if (candidates.length === 0) return;
 
       if (kind === "target") {
-        setTargetText(finalText);
+        setTargetText(candidates[0]!);
         setHeardText("");
         setScore(null);
         setWer(null);
@@ -370,12 +583,26 @@ export function SpeakingTrainingView() {
         return;
       }
 
-      setHeardText(finalText);
-      const align = alignTokens(tokenize(targetText), tokenize(finalText));
-      setOps(align.ops);
-      setScore(align.score);
-      setWer(align.wer);
-      setSuggestions(buildSuggestions({ expectedText: targetText, heardText: finalText, align }));
+      if (kind === "chat") {
+        void sendChat(candidates[0]!);
+        return;
+      }
+
+      const expectedTokens = tokenize(targetText);
+      let bestIdx = 0;
+      let bestScore = -1;
+      for (let idx = 0; idx < candidates.length; idx++) {
+        const cand = candidates[idx]!;
+        const a = alignTokens(expectedTokens, tokenize(cand));
+        if (a.score > bestScore) {
+          bestScore = a.score;
+          bestIdx = idx;
+        }
+      }
+
+      setAttemptCandidates(candidates);
+      setAttemptCandidateIndex(bestIdx);
+      applyAttemptTranscript(candidates[bestIdx]!);
     };
 
     try {
@@ -384,7 +611,7 @@ export function SpeakingTrainingView() {
       setAsrError(e?.message || "无法启动语音识别。");
       stopRecognition();
     }
-  }, [stopRecognition, stopTts, supportsAsr, targetText]);
+  }, [applyAttemptTranscript, sendChat, stopRecognition, stopTts, supportsAsr]);
 
   const canEvaluate = targetText.trim().length > 0;
 
@@ -470,7 +697,8 @@ export function SpeakingTrainingView() {
                   setWer(null);
                   setSuggestions([]);
                   setOps([]);
-                  setAsrConfidence(null);
+                  setAttemptCandidates([]);
+                  setAttemptCandidateIndex(0);
                   setAsrError(null);
                   setInterimText("");
                 }}
@@ -576,7 +804,7 @@ export function SpeakingTrainingView() {
             </div>
           </div>
 
-          {(sessionKind === "attempt" || interimText) && (
+          {sessionKind === "attempt" && (
             <div className="space-y-2">
               <Label>实时识别（预览）</Label>
               <Input readOnly value={interimText || "…"} className="text-muted-foreground" />
@@ -590,25 +818,43 @@ export function SpeakingTrainingView() {
                 <Textarea readOnly value={heardText} className="min-h-[80px]" />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {attemptCandidates.length > 1 && (
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>匹配度</Label>
-                    <div className="text-sm font-medium">{score ?? 0}%</div>
-                  </div>
-                  <Progress value={score ?? 0} />
-                  {typeof wer === "number" && (
-                    <div className="text-xs text-muted-foreground">WER：{wer.toFixed(2)}（越低越好）</div>
-                  )}
+                  <Label>识别候选（可切换）</Label>
+                  <Select
+                    value={String(attemptCandidateIndex)}
+                    onValueChange={(v) => {
+                      const idx = Number(v);
+                      if (!Number.isFinite(idx)) return;
+                      if (!attemptCandidates[idx]) return;
+                      setAttemptCandidateIndex(idx);
+                      applyAttemptTranscript(attemptCandidates[idx]!);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择候选" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {attemptCandidates.map((c, idx) => (
+                        <SelectItem key={idx} value={String(idx)}>
+                          {c.length > 80 ? `${c.slice(0, 80)}…` : c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">已默认选择匹配度最高的候选。</div>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>识别置信度</Label>
-                    <div className="text-sm font-medium">{asrConfidence === null ? "-" : `${Math.round(asrConfidence * 100)}%`}</div>
-                  </div>
-                  <Progress value={asrConfidence === null ? 0 : Math.round(asrConfidence * 100)} />
-                  <div className="text-xs text-muted-foreground">置信度受环境噪音/口音影响，仅供参考。</div>
+              )}
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label>匹配度</Label>
+                  <div className="text-sm font-medium">{score ?? 0}%</div>
                 </div>
+                <Progress value={score ?? 0} />
+                {typeof wer === "number" && (
+                  <div className="text-xs text-muted-foreground">WER：{wer.toFixed(2)}（越低越好）</div>
+                )}
               </div>
 
               {(missingWords.length > 0 || extraWords.length > 0 || subs.length > 0) && (
@@ -649,6 +895,222 @@ export function SpeakingTrainingView() {
               )}
             </div>
           )}
+        </div>
+
+        <Separator />
+
+        <div className="rounded-md border p-3 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                AI 对话（口语）
+              </div>
+              <div className="text-xs text-muted-foreground">
+                说一句英语，AI 会用英语继续对话，并用中文给出纠错与改进建议（基于转写文本，不包含音频评估）。
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={resetChat} disabled={isChatting || sessionKind !== null}>
+                清空对话
+              </Button>
+            </div>
+          </div>
+
+          <Alert>
+            <AlertTitle>提示</AlertTitle>
+            <AlertDescription>
+              你说的话会被浏览器转写为文字，并发送到大语言模型生成回复与反馈，请勿包含隐私或敏感信息。
+            </AlertDescription>
+          </Alert>
+
+          {chatError && (
+            <Alert variant="destructive">
+              <AlertTitle>对话出错</AlertTitle>
+              <AlertDescription>{chatError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+            <div className="space-y-1">
+              <Label>场景</Label>
+              <Select
+                value={chatScenarioId}
+                onValueChange={(v) => {
+                  setChatScenarioId(v);
+                  resetChat();
+                }}
+                disabled={isChatting || sessionKind !== null}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择对话场景" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPEAKING_CHAT_SCENARIOS.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.labelZh}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>目标水平</Label>
+              <Select value={chatLevel} onValueChange={(v) => setChatLevel(v as SpeakingTargetLevel)} disabled={isChatting || sessionKind !== null}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择水平" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A2">A2（基础）</SelectItem>
+                  <SelectItem value="B1">B1（中级）</SelectItem>
+                  <SelectItem value="B2">B2（中高级）</SelectItem>
+                  <SelectItem value="C1">C1（高级）</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <ScrollArea className="h-[340px] rounded-md border bg-background">
+            <div className="p-3 space-y-3">
+              {chatTurns.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  还没有对话内容。点击“开始说话”说一句，或在下方输入一句英文后发送。
+                </div>
+              ) : (
+                chatTurns.map((t) => (
+                  <div key={t.id} className="space-y-2">
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground mb-1">你</div>
+                      <div className="whitespace-pre-wrap">{t.userTextEn}</div>
+                    </div>
+
+                    <div className="rounded-md border p-3 bg-muted/30">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="text-xs text-muted-foreground">AI（英文回复）</div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!t.assistantReplyEn || isSpeaking || sessionKind !== null}
+                          onClick={() => speakText(t.assistantReplyEn || "")}
+                        >
+                          <Volume2 className="mr-2 h-4 w-4" />
+                          播放
+                        </Button>
+                      </div>
+                      <div className="whitespace-pre-wrap">
+                        {t.assistantReplyEn ? t.assistantReplyEn : (isChatting ? "AI 正在回复..." : "（等待回复）")}
+                      </div>
+                    </div>
+
+                    {(t.feedbackZh || t.correctedUserEn || (t.issues?.length || 0) > 0 || typeof t.scoreOverall === "number") && (
+                      <div className="rounded-md border p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-muted-foreground">反馈与纠错（中文）</div>
+                          {typeof t.scoreOverall === "number" && (
+                            <Badge variant="secondary">评分 {t.scoreOverall}</Badge>
+                          )}
+                        </div>
+                        {t.correctedUserEn && (
+                          <div className="text-sm">
+                            <div className="font-medium">更自然表达（英文）</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">{t.correctedUserEn}</div>
+                          </div>
+                        )}
+                        {t.feedbackZh && (
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">{t.feedbackZh}</div>
+                        )}
+                        {(t.issues?.length || 0) > 0 && (
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium">重点问题</div>
+                            <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                              {t.issues!.slice(0, 6).map((it, idx) => (
+                                <li key={idx} className="whitespace-pre-wrap">
+                                  {it.suggestion}
+                                  {it.reasonZh ? `（${it.reasonZh}）` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+          </ScrollArea>
+
+          <div className="space-y-2">
+            <div className="flex items-end justify-between gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="chatDraft">你想说的话（英文）</Label>
+                <div className="text-xs text-muted-foreground">可输入文字，或用语音说一句后自动发送。</div>
+              </div>
+              {sessionKind === "chat" ? (
+                <Button type="button" size="sm" variant="outline" onClick={stopRecognition}>
+                  <Square className="mr-2 h-4 w-4" />
+                  停止说话
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!supportsAsr || sessionKind !== null || isChatting}
+                  onClick={() => startRecognition("chat")}
+                >
+                  <Mic className="mr-2 h-4 w-4" />
+                  开始说话
+                </Button>
+              )}
+            </div>
+
+            {sessionKind === "chat" && (
+              <Input readOnly value={interimText || "…"} className="text-muted-foreground" />
+            )}
+
+            <Textarea
+              id="chatDraft"
+              value={chatDraft}
+              onChange={(e) => setChatDraft(e.target.value)}
+              placeholder="例如：I want to improve my speaking. Can we practice?"
+              className="min-h-[80px]"
+              disabled={isChatting || sessionKind !== null}
+            />
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                onClick={() => sendChat(chatDraft)}
+                disabled={isChatting || sessionKind !== null || !chatDraft.trim()}
+                className="w-full sm:w-auto"
+              >
+                {isChatting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    正在发送...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    发送
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={stopTts}
+                disabled={!supportsTts || !isSpeaking}
+                className="w-full sm:w-auto"
+              >
+                <VolumeX className="mr-2 h-4 w-4" />
+                停止朗读
+              </Button>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

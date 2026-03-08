@@ -15,6 +15,8 @@ import {
   GenerateStoryOutputSchema,
   ReviewEssayInput,
   ReviewEssayOutput,
+  SpeakingChatInput,
+  SpeakingChatOutput,
   StudyArticleInput,
   StudyArticleOutput
 } from "@/lib/types";
@@ -25,6 +27,7 @@ import { generatePractice } from '@/ai/flows/generate-practice';
 import { generateQuiz } from '@/ai/flows/generate-quiz';
 import { generateStory } from '@/ai/flows/generate-story';
 import { reviewEssay } from '@/ai/flows/review-essay';
+import { speakingChat } from '@/ai/flows/speaking-chat';
 import { studyArticle } from '@/ai/flows/study-article';
 import { analyzeImage } from '@/ai/flows/analyze-image';
 import { generateId } from "@/lib/utils";
@@ -165,6 +168,21 @@ export async function reviewEssayAction(
   } catch (error: any) {
     console.error('reviewEssayAction error:', error);
     return { success: false, error: error.message || "作文批改时发生错误。" };
+  }
+}
+
+export async function speakingChatAction(
+  input: SpeakingChatInput
+): Promise<{ success: boolean; data?: SpeakingChatOutput; error?: string }> {
+  try {
+    const result = await speakingChat(input);
+    if (!result || !result.assistantReplyEn || !result.feedbackZh) {
+      return { success: false, error: "无法完成口语对话，模型可能返回了空结果。" };
+    }
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('speakingChatAction error:', error);
+    return { success: false, error: error.message || "口语对话时发生错误。" };
   }
 }
 

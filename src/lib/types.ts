@@ -415,3 +415,37 @@ export const StudyArticleOutputSchema = z.object({
   questions: z.array(ReadingQuestionSchema).optional(),
 });
 export type StudyArticleOutput = z.infer<typeof StudyArticleOutputSchema>;
+
+
+// Schema for speaking chat (ASR -> LLM -> TTS)
+export const SpeakingChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  contentEn: z.string().min(1).max(800),
+});
+export type SpeakingChatMessage = z.infer<typeof SpeakingChatMessageSchema>;
+
+export const SpeakingChatInputSchema = z.object({
+  scenario: z.string().max(120).optional().describe('Optional scenario for the speaking conversation.'),
+  userTextEn: z.string().min(1).max(600).describe('User utterance in English (ASR transcript or typed).'),
+  history: z.array(SpeakingChatMessageSchema).max(20).optional(),
+  targetLevel: z.enum(['A2', 'B1', 'B2', 'C1']).optional().describe('Target speaking level.'),
+});
+export type SpeakingChatInput = z.infer<typeof SpeakingChatInputSchema>;
+
+const SpeakingChatIssueSchema = z.object({
+  type: z.enum(['grammar', 'word_choice', 'fluency', 'coherence', 'other']).optional(),
+  original: z.string().optional(),
+  suggestion: z.string(),
+  reasonZh: z.string().optional(),
+});
+export type SpeakingChatIssue = z.infer<typeof SpeakingChatIssueSchema>;
+
+export const SpeakingChatOutputSchema = z.object({
+  kind: z.literal('speaking_chat'),
+  assistantReplyEn: z.string().min(1),
+  feedbackZh: z.string().min(1),
+  correctedUserEn: z.string().optional(),
+  issues: z.array(SpeakingChatIssueSchema).optional(),
+  scoreOverall: z.number().int().min(0).max(100).optional(),
+});
+export type SpeakingChatOutput = z.infer<typeof SpeakingChatOutputSchema>;
