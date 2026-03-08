@@ -90,6 +90,20 @@
   - 优化后的完整作文（英文）
   - 关键 Before/After 改写对照
 
+### 2.6 文章阅读（深度语言分析）
+组件：`src/components/article-reading-view.tsx`
+
+- 支持：粘贴英文文章文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf`）读取正文
+  - 文件解析 action：`extractTextFromFileAction`（服务端，复用作文上传解析逻辑）
+  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整）
+- 分析入口 action：`studyArticleAction` → flow：`studyArticle`（`src/ai/flows/study-article.ts`）
+- 输出内容（面向“教师式阅读辅导”）：
+  - 文章结构分析：段落主旨、段落角色、与前文逻辑关系（转折/因果/递进/举例等）
+  - 句法结构解析：从句、时态、语态、修饰结构等（代表性例句讲解）
+  - 难句拆解与重组：主干提取、从句拆解、简化表达与重写示范
+  - 关键词与核心短语提取（含中文释义/用法提示）
+  - 可选：阅读理解题生成（中国考试风格选择题），并在页面内完成作答、提交、查看答案与解析
+
 ## 3. 与 Blueprint 的对齐情况
 
 来源：`docs/blueprint.md`
@@ -389,9 +403,12 @@ type CapturedWord = {
 - Practice UI：`src/components/practice-view.tsx`
 - 编辑弹窗：`src/components/edit-word-dialog.tsx`
 - 作文批改 UI：`src/components/essay-review-view.tsx`
+- 文章阅读 UI：`src/components/article-reading-view.tsx`
+- 阅读理解题 UI：`src/components/reading-questions-view.tsx`
 - AI 封装：`src/ai/gemini.ts`
 - AI flows：`src/ai/flows/*`
+- 文章阅读 flow：`src/ai/flows/study-article.ts`
 - PDF 生成：`src/lib/pdf-server-utils.ts`
-- 文件解析（作文上传）：`src/lib/essay-file-utils.ts`
+- 文件解析（上传文本提取）：`src/lib/essay-file-utils.ts`
 - 类型定义：`src/lib/types.ts`
 - 样式入口：`src/app/globals.css`

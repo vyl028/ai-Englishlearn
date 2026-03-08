@@ -45,6 +45,31 @@
 - 运行：`npm run dev`
 - 进入“作文批改”，确认标题与“题目（可选）”文案已更新。
 
+## 2026-03-08
+
+### 新增/修改内容
+- 新增“文章阅读”功能：用户可上传或粘贴英文文章，系统输出结构分析、句法讲解、难句拆解与重组、关键词/短语提取。
+- 新增可选“题目”生成：生成中国考试风格的阅读理解题（选择题），并在页面内完成作答、提交与查看解析；答题交互逻辑与单词本练习一致。
+- 主页底部导航新增“文章阅读”入口。
+
+### 涉及文件
+- 新增：`src/ai/flows/study-article.ts`
+- 新增：`src/components/article-reading-view.tsx`
+- 新增：`src/components/reading-questions-view.tsx`
+- 修改：`src/components/essay-review-view.tsx`
+- 修改：`src/lib/types.ts`
+- 修改：`src/app/actions.ts`
+- 修改：`src/app/page.tsx`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 帮助用户在阅读真实语料时获得类似教师指导的理解支持（结构/句法/难句/词汇/题目）。
+
+### 如何验证
+- 运行：`npm run dev`
+- 进入“文章阅读”，粘贴或上传文章后点击“开始分析”，应看到“结构 / 句法 / 难句 / 词汇 / 题目”。开启“生成题目”后应可答题并查看答案与解析。
+- 运行：`npm run typecheck`
+
 ## 2026-03-07
 
 ### 新增/修改内容

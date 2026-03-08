@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ClipboardCopy, Loader2, RotateCcw, Upload } from "lucide-react";
 
-import { reviewEssayAction, extractEssayTextFromFileAction } from "@/app/actions";
+import { reviewEssayAction, extractTextFromFileAction } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewEssayOutput, EssayIssueCategory, EssayIssueSeverity } from "@/lib/types";
 
@@ -87,7 +87,7 @@ export function EssayReviewView() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await extractEssayTextFromFileAction(formData);
+      const res = await extractTextFromFileAction(formData);
       if (res.success && res.data?.text) {
         setText(res.data.text);
 

@@ -310,3 +310,96 @@ export type DefineWordsBatchInput = z.infer<typeof DefineWordsBatchInputSchema>;
 
 export const DefineWordsBatchOutputSchema = z.array(WordDefinitionSchema);
 export type DefineWordsBatchOutput = z.infer<typeof DefineWordsBatchOutputSchema>;
+
+// Schema for "Article Reading" deep language analysis
+export const StudyArticleInputSchema = z.object({
+  title: z.string().optional().describe('Optional English title of the article.'),
+  text: z.string().min(1).describe('English article text.'),
+  includeQuestions: z.coerce.boolean().optional().describe('Whether to generate reading comprehension questions.'),
+  questionCount: z.coerce.number().int().min(1).max(12).optional().describe('Number of questions to generate (1-12).'),
+});
+export type StudyArticleInput = z.infer<typeof StudyArticleInputSchema>;
+
+const ArticleParagraphSchema = z.object({
+  index: z.number().int().min(1).describe('1-based paragraph index.'),
+  mainIdeaZh: z.string().describe('Main idea of this paragraph in Chinese.'),
+  roleZh: z.string().optional().describe('Role of this paragraph in the overall structure (Chinese).'),
+  logicToPrevZh: z.string().optional().describe('Logical relation to the previous paragraph (Chinese).'),
+});
+
+const ParagraphRelationSchema = z.object({
+  from: z.number().int().min(1),
+  to: z.number().int().min(1),
+  relationZh: z.string(),
+});
+
+const ArticleStructureSchema = z.object({
+  overallMainIdeaZh: z.string().describe('Overall main idea of the article (Chinese).'),
+  outlineZh: z.string().optional().describe('A compact outline of the article (Chinese).'),
+  paragraphs: z.array(ArticleParagraphSchema).describe('Paragraph-by-paragraph analysis.'),
+  relations: z.array(ParagraphRelationSchema).optional().describe('Optional explicit paragraph relations.'),
+});
+
+const SyntaxHighlightSchema = z.object({
+  sentenceEn: z.string().describe('A representative sentence from the article (English).'),
+  pointsZh: z.array(z.string()).min(1).describe('Syntax notes in Chinese (clauses/tense/voice/etc.).'),
+});
+
+const ArticleSyntaxSchema = z.object({
+  overviewZh: z.string().describe('Overall syntax/grammar overview in Chinese.'),
+  highlights: z.array(SyntaxHighlightSchema).optional(),
+});
+
+const HardSentenceClauseSchema = z.object({
+  clauseEn: z.string().describe('Clause text (English).'),
+  functionZh: z.string().describe('Clause function/explanation (Chinese).'),
+});
+
+const HardSentenceSchema = z.object({
+  originalEn: z.string().describe('Original difficult sentence (English).'),
+  translationZh: z.string().optional().describe('Chinese translation of the sentence.'),
+  coreStructureEn: z.string().optional().describe('Core structure / main clause skeleton (English).'),
+  tenseVoiceZh: z.string().optional().describe('Tense/voice notes (Chinese).'),
+  clauses: z.array(HardSentenceClauseSchema).optional().describe('Clause breakdown.'),
+  explanationZh: z.string().optional().describe('Extra explanation in Chinese.'),
+  simplifiedEn: z.string().optional().describe('Simplified version (English).'),
+  rebuiltEn: z.string().optional().describe('Rebuilt / rephrased version (English).'),
+});
+
+const ArticleKeywordSchema = z.object({
+  term: z.string().describe('Keyword (English).'),
+  pos: z.string().optional().describe('Part of speech (best effort).'),
+  meaningZh: z.string().describe('Chinese meaning.'),
+  noteZh: z.string().optional().describe('Usage notes (Chinese).'),
+  exampleEn: z.string().optional().describe('Example sentence from the article (English).'),
+});
+
+const ArticlePhraseSchema = z.object({
+  phrase: z.string().describe('Core phrase (English).'),
+  meaningZh: z.string().describe('Chinese meaning.'),
+  noteZh: z.string().optional(),
+  exampleEn: z.string().optional(),
+});
+
+const ReadingQuestionSchema = z.object({
+  questionEn: z.string().describe('Question prompt in English.'),
+  options: z.array(z.string()).length(4).describe('4 answer options in English.'),
+  answerIndex: z.number().int().min(0).max(3).describe('Correct option index (0-3).'),
+  analysisZh: z.string().describe('Chinese explanation and reasoning.'),
+  locate: z.object({
+    paragraphIndex: z.number().int().min(1).optional(),
+    quoteEn: z.string().optional(),
+  }).optional(),
+});
+
+export const StudyArticleOutputSchema = z.object({
+  kind: z.literal('article_study'),
+  titleEn: z.string().optional(),
+  structure: ArticleStructureSchema,
+  syntax: ArticleSyntaxSchema,
+  hardSentences: z.array(HardSentenceSchema),
+  keywords: z.array(ArticleKeywordSchema),
+  phrases: z.array(ArticlePhraseSchema).optional(),
+  questions: z.array(ReadingQuestionSchema).optional(),
+});
+export type StudyArticleOutput = z.infer<typeof StudyArticleOutputSchema>;

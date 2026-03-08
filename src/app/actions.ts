@@ -12,7 +12,9 @@ import {
   GenerateStoryOutput,
   GenerateStoryOutputSchema,
   ReviewEssayInput,
-  ReviewEssayOutput
+  ReviewEssayOutput,
+  StudyArticleInput,
+  StudyArticleOutput
 } from "@/lib/types";
 import { defineCapturedWord } from '@/ai/flows/define-captured-word';
 import { extractWordAndDefine } from '@/ai/flows/extract-word-and-define';
@@ -20,6 +22,7 @@ import { generatePractice } from '@/ai/flows/generate-practice';
 import { generateQuiz } from '@/ai/flows/generate-quiz';
 import { generateStory } from '@/ai/flows/generate-story';
 import { reviewEssay } from '@/ai/flows/review-essay';
+import { studyArticle } from '@/ai/flows/study-article';
 import { generateId } from "@/lib/utils";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
 import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
@@ -184,5 +187,26 @@ export async function extractEssayTextFromFileAction(
   } catch (error: any) {
     console.error('extractEssayTextFromFileAction error:', error);
     return { success: false, error: error.message || "读取文件时发生错误。" };
+  }
+}
+
+export async function extractTextFromFileAction(
+  formData: FormData
+): Promise<{ success: boolean; data?: { text: string; warnings?: string[]; filename?: string }; error?: string }> {
+  return extractEssayTextFromFileAction(formData);
+}
+
+export async function studyArticleAction(
+  input: StudyArticleInput
+): Promise<{ success: boolean; data?: StudyArticleOutput; error?: string }> {
+  try {
+    const result = await studyArticle(input);
+    if (!result || !result.structure || !result.syntax) {
+      return { success: false, error: "无法完成文章分析，模型可能返回了空结果。" };
+    }
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('studyArticleAction error:', error);
+    return { success: false, error: error.message || "文章分析时发生错误。" };
   }
 }
