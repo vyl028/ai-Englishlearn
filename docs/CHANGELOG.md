@@ -4,6 +4,47 @@
 >
 > 注意：**不要**在此文件写入任何密钥/Token/账号密码等敏感信息（如 `.env` 内容），只描述“已新增/已配置”即可。
 
+## 2026-03-08
+
+### 新增/修改内容
+- 新增“作文批改（IELTS Writing Task 2）”功能：支持用户粘贴或上传英语作文，系统输出评分、错误点、优化建议与示范句，并给出修改前后对照与优化后的全文。
+- 新增作文文件解析：支持 `.txt` / `.md` / `.docx` / `.pdf` 上传读取（PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整）。
+- 主页底部导航新增“作文批改”入口，不影响原有单词本与练习/故事流程。
+- 补齐 `Analyze*` / `DefineWordsBatch` 相关类型定义，使 `npm run typecheck` 可通过。
+
+### 涉及文件
+- 新增：`src/ai/flows/review-essay.ts`
+- 新增：`src/components/essay-review-view.tsx`
+- 新增：`src/lib/essay-file-utils.ts`
+- 修改：`src/lib/types.ts`
+- 修改：`src/app/actions.ts`
+- 修改：`src/app/page.tsx`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 满足“上传或输入英语作文 → 自动批改与优化建议输出 → IELTS Task 2 参考评分/分级”的需求。
+
+### 如何验证
+- 运行：`npm run dev`
+- 进入“作文批改”，粘贴英文作文或上传文件，点击“开始批改”，应看到“评分 / 问题 / 优化后 / 对照”结果页签。
+- 运行：`npm run typecheck`
+
+## 2026-03-08
+
+### 新增/修改内容
+- 调整“作文批改”界面文案：将标题中的英文改为中文翻译；“Task 2 题目（可选）”改为“题目（可选）”，并同步更新提示语。
+
+### 涉及文件
+- 修改：`src/components/essay-review-view.tsx`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 统一全站中文 UI 文案，降低理解成本。
+
+### 如何验证
+- 运行：`npm run dev`
+- 进入“作文批改”，确认标题与“题目（可选）”文案已更新。
+
 ## 2026-03-07
 
 ### 新增/修改内容

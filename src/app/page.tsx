@@ -2,12 +2,13 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { BookCopy, PlusSquare, BookOpen, Trash, Loader2 } from 'lucide-react';
+import { BookCopy, FileText, PlusSquare, BookOpen, Trash, Loader2 } from 'lucide-react';
 import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { PracticeView } from '@/components/practice-view';
 import { StoryView } from '@/components/story-view';
+import { EssayReviewView } from '@/components/essay-review-view';
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
@@ -24,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type View = 'capture' | 'review' | 'practice' | 'story';
+type View = 'capture' | 'review' | 'practice' | 'story' | 'essay';
 
 const WORDS_STORAGE_KEY = 'lexi-capture-words';
 const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
@@ -328,6 +329,8 @@ export default function Home() {
           );
         }
         return null;
+      case 'essay':
+        return <EssayReviewView />;
       default:
         return null;
     }
@@ -356,7 +359,7 @@ export default function Home() {
 
       <footer className="sticky bottom-0 bg-card border-t z-10">
         <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 gap-4 h-16">
+          <div className="grid grid-cols-3 gap-2 h-16">
             <Button
               variant="ghost"
               className={cn(
@@ -378,6 +381,17 @@ export default function Home() {
             >
               <BookOpen />
               单词本
+            </Button>
+            <Button
+              variant="ghost"
+              className={cn(
+                "h-full text-base flex-col gap-1",
+                view === 'essay' ? 'text-primary' : 'text-muted-foreground'
+              )}
+              onClick={() => setView('essay')}
+            >
+              <FileText />
+              作文批改
             </Button>
           </div>
         </nav>

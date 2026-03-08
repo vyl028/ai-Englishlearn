@@ -10,15 +10,19 @@ import {
   GenerateQuizOutput,
   GenerateStoryInput,
   GenerateStoryOutput,
-  GenerateStoryOutputSchema
+  GenerateStoryOutputSchema,
+  ReviewEssayInput,
+  ReviewEssayOutput
 } from "@/lib/types";
 import { defineCapturedWord } from '@/ai/flows/define-captured-word';
 import { extractWordAndDefine } from '@/ai/flows/extract-word-and-define';
 import { generatePractice } from '@/ai/flows/generate-practice';
 import { generateQuiz } from '@/ai/flows/generate-quiz';
 import { generateStory } from '@/ai/flows/generate-story';
+import { reviewEssay } from '@/ai/flows/review-essay';
 import { generateId } from "@/lib/utils";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
+import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
 
 // In production, this should be configured via environment variables.
 // For a self-hosted setup, this will be the URL of your Genkit API service.
@@ -124,5 +128,61 @@ export async function exportStoryPdfAction(
   } catch (error: any) {
     console.error('exportStoryPdfAction error:', error);
     return { success: false, error: error.message || "导出 PDF 时发生错误。" };
+  }
+}
+
+export async function reviewEssayAction(
+  input: ReviewEssayInput
+): Promise<{ success: boolean; data?: ReviewEssayOutput; error?: string }> {
+  try {
+    const result = await reviewEssay(input);
+    if (!result || !result.revisedTextEn) {
+      return { success: false, error: "无法完成作文批改，模型可能返回了空结果。" };
+    }
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('reviewEssayAction error:', error);
+    return { success: false, error: error.message || "作文批改时发生错误。" };
+  }
+}
+
+export async function extractEssayTextFromFileAction(
+  formData: FormData
+): Promise<{ success: boolean; data?: { text: string; warnings?: string[]; filename?: string }; error?: string }> {
+  try {
+    const file = formData.get('file');
+    if (!file || !(file instanceof File)) {
+      return { success: false, error: "未找到上传的文件，请重试。" };
+    }
+
+    const filename = file.name || undefined;
+    const sizeLimitBytes = 8 * 1024 * 1024;
+    if (typeof file.size === 'number' && file.size > sizeLimitBytes) {
+      return { success: false, error: "文件过大（> 8MB）。建议复制粘贴正文或上传更小的文件。" };
+    }
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const ext = (filename || '').toLowerCase().split('.').pop() || '';
+
+    if (ext === 'txt' || ext === 'md' || file.type.startsWith('text/')) {
+      const text = extractTextFromTxtLike(buffer);
+      return { success: true, data: { text, filename } };
+    }
+
+    if (ext === 'docx' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const text = extractTextFromDocx(buffer);
+      return { success: true, data: { text, filename } };
+    }
+
+    if (ext === 'pdf' || file.type === 'application/pdf') {
+      const { text, warnings } = extractTextFromPdf(buffer);
+      return { success: true, data: { text, warnings, filename } };
+    }
+
+    return { success: false, error: "不支持的文件类型。请上传 .txt / .md / .docx / .pdf，或直接粘贴作文文本。" };
+  } catch (error: any) {
+    console.error('extractEssayTextFromFileAction error:', error);
+    return { success: false, error: error.message || "读取文件时发生错误。" };
   }
 }

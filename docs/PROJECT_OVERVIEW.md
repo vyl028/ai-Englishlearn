@@ -77,6 +77,19 @@
 - 支持选词范围（分组下拉/最近一周/最近一个月/手动选择）；当单词数量过多会弹窗确认是否继续生成
   - 最近一周/最近一个月按“全部单词（跨分组）”计算
 
+### 2.5 作文批改（雅思写作任务 2）
+组件：`src/components/essay-review-view.tsx`
+
+- 支持：粘贴英文作文文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf`）读取正文
+  - 文件解析 action：`extractEssayTextFromFileAction`（服务端）
+  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整）
+- 批改入口 action：`reviewEssayAction` → flow：`reviewEssay`（`src/ai/flows/review-essay.ts`）
+- LLM 输出：结构化 JSON，包含：
+  - 雅思写作任务 2 分项评分（TR/CC/LR/GRA）+ 总分（overall）与作文分级（CEFR）
+  - 问题清单（语法/拼写/时态/逻辑/衔接/用词等）+ 改进建议 + 示范句
+  - 优化后的完整作文（英文）
+  - 关键 Before/After 改写对照
+
 ## 3. 与 Blueprint 的对齐情况
 
 来源：`docs/blueprint.md`
@@ -375,8 +388,10 @@ type CapturedWord = {
 - 复习列表（按周分组/Practice/Story）：`src/components/word-review-list.tsx`
 - Practice UI：`src/components/practice-view.tsx`
 - 编辑弹窗：`src/components/edit-word-dialog.tsx`
+- 作文批改 UI：`src/components/essay-review-view.tsx`
 - AI 封装：`src/ai/gemini.ts`
 - AI flows：`src/ai/flows/*`
 - PDF 生成：`src/lib/pdf-server-utils.ts`
+- 文件解析（作文上传）：`src/lib/essay-file-utils.ts`
 - 类型定义：`src/lib/types.ts`
 - 样式入口：`src/app/globals.css`

@@ -179,3 +179,134 @@ export const GenerateStoryOutputSchema = z.object({
   translation: z.string().describe("The Chinese translation of the story."),
 });
 export type GenerateStoryOutput = z.infer<typeof GenerateStoryOutputSchema>;
+
+// Schema for reviewing an IELTS Writing Task 2 essay
+export const CefrLevelSchema = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'Unknown']);
+export type CefrLevel = z.infer<typeof CefrLevelSchema>;
+
+const IeltsBandSchema = z.preprocess((v) => {
+  if (typeof v === 'string' && v.trim() !== '') return Number(v);
+  return v;
+}, z.number().min(0).max(9));
+
+export const ReviewEssayInputSchema = z.object({
+  text: z.string().min(1).describe('The English essay text.'),
+  taskPrompt: z.string().optional().describe('Optional IELTS Writing Task 2 prompt (question) in English.'),
+});
+export type ReviewEssayInput = z.infer<typeof ReviewEssayInputSchema>;
+
+export const EssayIssueCategorySchema = z.enum([
+  'grammar',
+  'spelling',
+  'tense',
+  'logic',
+  'coherence',
+  'task_response',
+  'word_choice',
+  'punctuation',
+  'style',
+  'other',
+]);
+export type EssayIssueCategory = z.infer<typeof EssayIssueCategorySchema>;
+
+export const EssayIssueSeveritySchema = z.enum(['low', 'medium', 'high']);
+export type EssayIssueSeverity = z.infer<typeof EssayIssueSeveritySchema>;
+
+export const EssayIssueSchema = z.object({
+  category: EssayIssueCategorySchema,
+  original: z.string().optional().describe('Original snippet from the essay (English).'),
+  suggestion: z.string().describe('Suggested correction or rewrite (English).'),
+  explanationZh: z.string().describe('Chinese explanation of the issue and advice.'),
+  exampleEn: z.string().optional().describe('Optional example sentence in English.'),
+  exampleZh: z.string().optional().describe('Optional Chinese translation for the example.'),
+  severity: EssayIssueSeveritySchema.optional(),
+});
+export type EssayIssue = z.infer<typeof EssayIssueSchema>;
+
+export const EssayBeforeAfterSchema = z.object({
+  before: z.string().describe('Before rewrite snippet (English).'),
+  after: z.string().describe('After rewrite snippet (English).'),
+  reasonZh: z.string().optional().describe('Chinese reason for the change.'),
+});
+export type EssayBeforeAfter = z.infer<typeof EssayBeforeAfterSchema>;
+
+export const IeltsTask2ScoreSchema = z.object({
+  taskResponse: IeltsBandSchema,
+  coherenceCohesion: IeltsBandSchema,
+  lexicalResource: IeltsBandSchema,
+  grammaticalRangeAccuracy: IeltsBandSchema,
+  overallBand: IeltsBandSchema,
+});
+export type IeltsTask2Score = z.infer<typeof IeltsTask2ScoreSchema>;
+
+export const ReviewEssayOutputSchema = z.object({
+  kind: z.literal('ielts_task2_review'),
+  overallBand: IeltsBandSchema,
+  scores: IeltsTask2ScoreSchema,
+  level: z.object({
+    cefr: CefrLevelSchema,
+    commentZh: z.string().optional(),
+  }).optional(),
+  summaryZh: z.string(),
+  strengthsZh: z.array(z.string()).optional(),
+  weaknessesZh: z.array(z.string()).optional(),
+  issues: z.array(EssayIssueSchema),
+  beforeAfter: z.array(EssayBeforeAfterSchema).optional(),
+  revisedTextEn: z.string(),
+});
+export type ReviewEssayOutput = z.infer<typeof ReviewEssayOutputSchema>;
+
+// Extra schemas used by optional AI flows (analyze-image / analyze-sentence / define-words-batch)
+const CandidateWordSchema = z.object({
+  surface: z.string(),
+  lemma: z.string().optional(),
+  partOfSpeech: z.string().optional(),
+  reasonZh: z.string().optional(),
+});
+
+export const AnalyzeSentenceInputSchema = z.object({
+  text: z.string().min(1),
+  excludeWords: z.array(z.string()).optional(),
+  maxCandidates: z.coerce.number().int().min(1).max(50).optional(),
+  withExplanation: z.coerce.boolean().optional(),
+});
+export type AnalyzeSentenceInput = z.infer<typeof AnalyzeSentenceInputSchema>;
+
+export const AnalyzeSentenceOutputSchema = z.object({
+  textEn: z.string(),
+  candidateWords: z.array(CandidateWordSchema),
+  translationZh: z.string().optional(),
+  grammarNotesZh: z.string().optional(),
+});
+export type AnalyzeSentenceOutput = z.infer<typeof AnalyzeSentenceOutputSchema>;
+
+export const AnalyzeImageInputSchema = z.object({
+  photoDataUri: z.string(),
+  excludeWords: z.array(z.string()).optional(),
+  maxCandidates: z.coerce.number().int().min(1).max(50).optional(),
+});
+export type AnalyzeImageInput = z.infer<typeof AnalyzeImageInputSchema>;
+
+export const AnalyzeImageOutputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('word'),
+    words: ExtractWordAndDefineOutputSchema,
+  }),
+  z.object({
+    kind: z.literal('sentence'),
+    textEn: z.string(),
+    candidateWords: z.array(CandidateWordSchema),
+  }),
+]);
+export type AnalyzeImageOutput = z.infer<typeof AnalyzeImageOutputSchema>;
+
+export const DefineWordsBatchInputSchema = z.object({
+  words: z.array(z.object({
+    word: z.string(),
+    partOfSpeech: z.string(),
+  })).min(1).max(30),
+});
+export type DefineWordsBatchInput = z.infer<typeof DefineWordsBatchInputSchema>;
+
+export const DefineWordsBatchOutputSchema = z.array(WordDefinitionSchema);
+export type DefineWordsBatchOutput = z.infer<typeof DefineWordsBatchOutputSchema>;
