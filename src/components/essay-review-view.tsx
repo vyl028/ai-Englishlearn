@@ -170,23 +170,23 @@ export function EssayReviewView() {
       <CardHeader>
         <CardTitle>作文批改（雅思写作任务 2）</CardTitle>
         <CardDescription>
-          支持粘贴或上传作文（.txt / .md / .docx / .pdf），AI 将给出评分、错误点、优化建议与示范句，并输出修改前后对照。
+          支持粘贴或上传作文（.txt / .md / .docx / .pdf / 图片 OCR），AI 将给出评分、错误点、优化建议与示范句，并输出修改前后对照。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
           <AlertTitle>提示</AlertTitle>
           <AlertDescription>
-            作文内容会发送到大语言模型进行分析，请勿上传包含隐私或敏感信息的内容。PDF 若为扫描版可能无法正确提取文本。
+            作文内容会发送到大语言模型进行分析，请勿上传包含隐私或敏感信息的内容。PDF 若为扫描版可能无法正确提取文本；图片会进行 OCR 识别，建议检查识别结果并按需手动修正。
           </AlertDescription>
         </Alert>
 
         <div className="space-y-2">
-          <div className="text-sm font-medium">上传作文文件</div>
+          <div className="text-sm font-medium">上传作文文件/图片</div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            accept="image/*,.png,.jpg,.jpeg,.webp,.txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={handleFileChange}
           />

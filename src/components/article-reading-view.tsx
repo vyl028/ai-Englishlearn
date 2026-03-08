@@ -531,23 +531,23 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       <CardHeader>
         <CardTitle>文章阅读</CardTitle>
         <CardDescription>
-          上传或粘贴英文文章，AI 将提供结构分析、句法讲解、难句拆解、关键词/短语提取，并可选生成题目帮助理解。
+          上传或粘贴英文文章（支持图片识别），AI 将提供结构分析、句法讲解、难句拆解、关键词/短语提取，并可选生成题目帮助理解。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
           <AlertTitle>提示</AlertTitle>
           <AlertDescription>
-            文章内容会发送到大语言模型进行分析，请勿上传包含隐私或敏感信息的内容。PDF 若为扫描版可能无法正确提取文本。
+            文章内容会发送到大语言模型进行分析，请勿上传包含隐私或敏感信息的内容。PDF 若为扫描版可能无法正确提取文本；图片会进行 OCR 识别，建议检查识别结果并按需手动修正。
           </AlertDescription>
         </Alert>
 
         <div className="space-y-2">
-          <div className="text-sm font-medium">上传文章文件</div>
+          <div className="text-sm font-medium">上传文章文件/图片</div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            accept="image/*,.png,.jpg,.jpeg,.webp,.txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={handleFileChange}
           />

@@ -26,6 +26,7 @@ import { generateQuiz } from '@/ai/flows/generate-quiz';
 import { generateStory } from '@/ai/flows/generate-story';
 import { reviewEssay } from '@/ai/flows/review-essay';
 import { studyArticle } from '@/ai/flows/study-article';
+import { analyzeImage } from '@/ai/flows/analyze-image';
 import { generateId } from "@/lib/utils";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
 import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
@@ -201,7 +202,40 @@ export async function extractEssayTextFromFileAction(
       return { success: true, data: { text, warnings, filename } };
     }
 
-    return { success: false, error: "不支持的文件类型。请上传 .txt / .md / .docx / .pdf，或直接粘贴作文文本。" };
+    if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp' || file.type.startsWith('image/')) {
+      const mime =
+        (file.type && file.type.startsWith('image/'))
+          ? file.type
+          : ext === 'png'
+            ? 'image/png'
+            : ext === 'webp'
+              ? 'image/webp'
+              : 'image/jpeg';
+
+      const photoDataUri = `data:${mime};base64,${buffer.toString('base64')}`;
+      const out = await analyzeImage({ photoDataUri });
+
+      if (out.kind === 'sentence' && out.textEn && out.textEn.trim()) {
+        return {
+          success: true,
+          data: {
+            text: out.textEn.trim(),
+            warnings: ["已从图片识别文字（OCR）。建议检查是否有漏字/换行错误，并按需手动修正。"],
+            filename,
+          },
+        };
+      }
+
+      return {
+        success: false,
+        error: "未能从图片中识别到连贯的英文正文。请尝试更清晰的图片，或改用文本粘贴/文件上传。",
+      };
+    }
+
+    return {
+      success: false,
+      error: "不支持的文件类型。请上传 .txt / .md / .docx / .pdf / 图片（.png/.jpg/.jpeg/.webp），或直接粘贴英文正文。",
+    };
   } catch (error: any) {
     console.error('extractEssayTextFromFileAction error:', error);
     return { success: false, error: error.message || "读取文件时发生错误。" };

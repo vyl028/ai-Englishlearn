@@ -79,9 +79,9 @@
 ### 2.5 作文批改（雅思写作任务 2）
 组件：`src/components/essay-review-view.tsx`
 
-- 支持：粘贴英文作文文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf`）读取正文
+- 支持：粘贴英文作文文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf` / 图片 `.png/.jpg/.jpeg/.webp`）读取正文
   - 文件解析 action：`extractEssayTextFromFileAction`（服务端）
-  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整）
+  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整；图片会走 OCR 识别，建议检查排版/漏字）
 - 批改入口 action：`reviewEssayAction` → flow：`reviewEssay`（`src/ai/flows/review-essay.ts`）
 - LLM 输出：结构化 JSON，包含：
   - 雅思写作任务 2 分项评分（TR/CC/LR/GRA）+ 总分（overall）与作文分级（CEFR）
@@ -92,9 +92,9 @@
 ### 2.6 文章阅读（深度语言分析）
 组件：`src/components/article-reading-view.tsx`
 
-- 支持：粘贴英文文章文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf`）读取正文
+- 支持：粘贴英文文章文本，或上传文件（`.txt` / `.md` / `.docx` / `.pdf` / 图片 `.png/.jpg/.jpeg/.webp`）读取正文
   - 文件解析 action：`extractTextFromFileAction`（服务端，复用作文上传解析逻辑）
-  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整）
+  - 解析实现：`src/lib/essay-file-utils.ts`（DOCX 解析较可靠；PDF 为 best-effort，扫描版/特殊字体编码可能提取不完整；图片会走 OCR 识别，建议检查排版/漏字）
 - 分析入口 action：`studyArticleAction` → flow：`studyArticle`（`src/ai/flows/study-article.ts`）
 - 输出内容（面向“教师式阅读辅导”）：
   - 文章结构分析：段落主旨、段落角色、与前文逻辑关系（转折/因果/递进/举例等）
