@@ -12,15 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
 import type { SpeakingChatIssue, SpeakingChatMessage } from "@/lib/types";
 
 type SpeechSessionKind = "target" | "attempt" | "chat";
+type SpeakingSubView = "training" | "chat";
 
 type AlignOp =
   | { type: "equal"; expected: string; heard: string }
@@ -232,6 +234,8 @@ function pickDefaultEnglishVoice(voices: SpeechSynthesisVoice[]) {
 export function SpeakingTrainingView() {
   const { toast } = useToast();
 
+  const [subView, setSubView] = React.useState<SpeakingSubView>("training");
+
   const [targetText, setTargetText] = React.useState("");
   const [heardText, setHeardText] = React.useState("");
   const [interimText, setInterimText] = React.useState("");
@@ -253,6 +257,8 @@ export function SpeakingTrainingView() {
   const [voiceUri, setVoiceUri] = React.useState<string>("");
   const [rate, setRate] = React.useState<number>(1);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [ttsKey, setTtsKey] = React.useState<string | null>(null);
+  const ttsSessionRef = React.useRef(0);
 
   const [score, setScore] = React.useState<number | null>(null);
   const [wer, setWer] = React.useState<number | null>(null);
@@ -297,11 +303,13 @@ export function SpeakingTrainingView() {
 
   const stopTts = React.useCallback(() => {
     if (!supportsTts) return;
+    ttsSessionRef.current += 1;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
+    setTtsKey(null);
   }, [supportsTts]);
 
-  const speakText = React.useCallback((raw: string) => {
+  const speakText = React.useCallback((raw: string, key?: string) => {
     if (!supportsTts) return;
     const text = String(raw || "").trim();
     if (!text) return;
@@ -315,8 +323,19 @@ export function SpeakingTrainingView() {
     if (picked?.lang) utter.lang = picked.lang;
     utter.rate = rate;
 
-    utter.onend = () => setIsSpeaking(false);
-    utter.onerror = () => setIsSpeaking(false);
+    const sessionId = ttsSessionRef.current;
+    setTtsKey(key || null);
+
+    utter.onend = () => {
+      if (ttsSessionRef.current !== sessionId) return;
+      setIsSpeaking(false);
+      setTtsKey(null);
+    };
+    utter.onerror = () => {
+      if (ttsSessionRef.current !== sessionId) return;
+      setIsSpeaking(false);
+      setTtsKey(null);
+    };
 
     setIsSpeaking(true);
     synth.speak(utter);
@@ -325,7 +344,7 @@ export function SpeakingTrainingView() {
   const speak = React.useCallback(() => {
     const text = targetText.trim();
     if (!text) return;
-    speakText(text);
+    speakText(text, "tts:target");
   }, [speakText, targetText]);
 
   const stopRecognition = React.useCallback(() => {
@@ -437,6 +456,9 @@ export function SpeakingTrainingView() {
             : t
         )
       );
+      if (supportsTts) {
+        speakText(data.assistantReplyEn || "", `tts:ai:${turnId}`);
+      }
     } catch (e: any) {
       const msg = e?.message || "口语对话时发生未知错误。";
       setChatError(msg);
@@ -454,7 +476,7 @@ export function SpeakingTrainingView() {
     } finally {
       setIsChatting(false);
     }
-  }, [chatLevel, chatScenarioEn, chatTurns, toast]);
+  }, [chatLevel, chatScenarioEn, chatTurns, speakText, supportsTts, toast]);
 
   const startRecognition = React.useCallback((kind: SpeechSessionKind) => {
     setAsrError(null);
@@ -636,11 +658,13 @@ export function SpeakingTrainingView() {
     [ops]
   );
 
+  const isTargetSpeaking = isSpeaking && ttsKey === "tts:target";
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>听说训练</CardTitle>
-        <CardDescription>使用浏览器的语音识别（ASR）与语音合成（TTS）进行跟读训练与近似评估。</CardDescription>
+        <CardDescription>在下方选择“跟读训练”或“AI 对话”，进行口语输入、示范朗读与改进反馈。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
@@ -659,7 +683,22 @@ export function SpeakingTrainingView() {
           </Alert>
         )}
 
-        <div className="space-y-2">
+        <Tabs
+          value={subView}
+          onValueChange={(v) => {
+            stopTts();
+            stopRecognition();
+            setSubView(v === "chat" ? "chat" : "training");
+          }}
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="training">跟读训练</TabsTrigger>
+            <TabsTrigger value="chat">AI 对话</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="training" className="space-y-4">
+            <div className="space-y-2">
           <div className="flex items-end justify-between gap-2">
             <div className="space-y-1">
               <Label htmlFor="targetText">目标文本（英文）</Label>
@@ -729,13 +768,18 @@ export function SpeakingTrainingView() {
               <div className="text-xs text-muted-foreground">点击播放，先听一遍，再跟读。</div>
             </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" disabled={!supportsTts || !targetText.trim() || isSpeaking} onClick={speak}>
-                <Volume2 className="mr-2 h-4 w-4" />
-                播放
-              </Button>
-              <Button type="button" size="sm" variant="outline" disabled={!supportsTts || !isSpeaking} onClick={stopTts}>
-                <VolumeX className="mr-2 h-4 w-4" />
-                停止
+              <Button
+                type="button"
+                size="sm"
+                variant={isTargetSpeaking ? "outline" : "default"}
+                disabled={!supportsTts || !targetText.trim() || sessionKind !== null}
+                onClick={() => {
+                  if (isTargetSpeaking) stopTts();
+                  else speak();
+                }}
+              >
+                {isTargetSpeaking ? <VolumeX className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
+                {isTargetSpeaking ? "停止" : "播放"}
               </Button>
             </div>
           </div>
@@ -897,9 +941,10 @@ export function SpeakingTrainingView() {
           )}
         </div>
 
-        <Separator />
+          </TabsContent>
 
-        <div className="rounded-md border p-3 space-y-3">
+          <TabsContent value="chat" className="space-y-4">
+            <div className="rounded-md border p-3 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="text-sm font-medium flex items-center gap-2">
@@ -983,6 +1028,46 @@ export function SpeakingTrainingView() {
                     <div className="rounded-md border p-3">
                       <div className="text-xs text-muted-foreground mb-1">你</div>
                       <div className="whitespace-pre-wrap">{t.userTextEn}</div>
+
+                      {(t.feedbackZh || t.correctedUserEn || (t.issues?.length || 0) > 0 || typeof t.scoreOverall === "number") && (
+                        <Accordion type="single" collapsible className="mt-2">
+                          <AccordionItem value="details" className="border-none">
+                            <AccordionTrigger className="py-2 text-sm">查看评价与纠错</AccordionTrigger>
+                            <AccordionContent className="pb-1">
+                              <div className="rounded-md border p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs text-muted-foreground">反馈与纠错（中文）</div>
+                                  {typeof t.scoreOverall === "number" && (
+                                    <Badge variant="secondary">评分 {t.scoreOverall}</Badge>
+                                  )}
+                                </div>
+                                {t.correctedUserEn && (
+                                  <div className="text-sm">
+                                    <div className="font-medium">更自然表达（英文）</div>
+                                    <div className="text-muted-foreground whitespace-pre-wrap">{t.correctedUserEn}</div>
+                                  </div>
+                                )}
+                                {t.feedbackZh && (
+                                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">{t.feedbackZh}</div>
+                                )}
+                                {(t.issues?.length || 0) > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="text-sm font-medium">重点问题</div>
+                                    <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                                      {t.issues!.slice(0, 6).map((it, idx) => (
+                                        <li key={idx} className="whitespace-pre-wrap">
+                                          {it.suggestion}
+                                          {it.reasonZh ? `（${it.reasonZh}）` : ""}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      )}
                     </div>
 
                     <div className="rounded-md border p-3 bg-muted/30">
@@ -992,50 +1077,25 @@ export function SpeakingTrainingView() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={!t.assistantReplyEn || isSpeaking || sessionKind !== null}
-                          onClick={() => speakText(t.assistantReplyEn || "")}
+                          disabled={!supportsTts || !t.assistantReplyEn || sessionKind !== null}
+                          onClick={() => {
+                            const k = `tts:ai:${t.id}`;
+                            if (isSpeaking && ttsKey === k) stopTts();
+                            else speakText(t.assistantReplyEn || "", k);
+                          }}
                         >
-                          <Volume2 className="mr-2 h-4 w-4" />
-                          播放
+                          {isSpeaking && ttsKey === `tts:ai:${t.id}` ? (
+                            <VolumeX className="mr-2 h-4 w-4" />
+                          ) : (
+                            <Volume2 className="mr-2 h-4 w-4" />
+                          )}
+                          {isSpeaking && ttsKey === `tts:ai:${t.id}` ? "停止" : "播放"}
                         </Button>
                       </div>
                       <div className="whitespace-pre-wrap">
                         {t.assistantReplyEn ? t.assistantReplyEn : (isChatting ? "AI 正在回复..." : "（等待回复）")}
                       </div>
                     </div>
-
-                    {(t.feedbackZh || t.correctedUserEn || (t.issues?.length || 0) > 0 || typeof t.scoreOverall === "number") && (
-                      <div className="rounded-md border p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-muted-foreground">反馈与纠错（中文）</div>
-                          {typeof t.scoreOverall === "number" && (
-                            <Badge variant="secondary">评分 {t.scoreOverall}</Badge>
-                          )}
-                        </div>
-                        {t.correctedUserEn && (
-                          <div className="text-sm">
-                            <div className="font-medium">更自然表达（英文）</div>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{t.correctedUserEn}</div>
-                          </div>
-                        )}
-                        {t.feedbackZh && (
-                          <div className="text-sm text-muted-foreground whitespace-pre-wrap">{t.feedbackZh}</div>
-                        )}
-                        {(t.issues?.length || 0) > 0 && (
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium">重点问题</div>
-                            <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-                              {t.issues!.slice(0, 6).map((it, idx) => (
-                                <li key={idx} className="whitespace-pre-wrap">
-                                  {it.suggestion}
-                                  {it.reasonZh ? `（${it.reasonZh}）` : ""}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ))
               )}
@@ -1099,19 +1159,11 @@ export function SpeakingTrainingView() {
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={stopTts}
-                disabled={!supportsTts || !isSpeaking}
-                className="w-full sm:w-auto"
-              >
-                <VolumeX className="mr-2 h-4 w-4" />
-                停止朗读
-              </Button>
             </div>
           </div>
-        </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
