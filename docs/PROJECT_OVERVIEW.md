@@ -104,6 +104,15 @@
   - 提取到的词汇/短语支持一键加入单词本：加入时会调用与“新增单词”一致的词条生成逻辑（含完整“了解更多”）；若已存在则提示“已在单词本”
   - 可选：阅读理解题生成（中国考试风格选择题），并在页面内完成作答、提交、查看答案与解析
 
+### 2.7 听说训练（ASR / TTS）
+组件：`src/components/speaking-training-view.tsx`
+
+- 入口：主页底部导航 “听说训练”
+- ASR（语音识别）：支持语音输入单词/短句；跟读后识别转写为英文文本
+- TTS（语音合成）：对目标文本进行示范朗读（可选语音与语速）
+- 发音准确度评估：当前基于 ASR 转写的词级对齐（WER）与识别置信度给出近似分数，并列出漏读/多读/替换差异与改进建议
+- 注意：ASR 支持度与效果依赖浏览器与环境（Edge/Chrome 推荐）；麦克风权限通常需要 HTTPS 或 localhost
+
 ## 3. 与 Blueprint 的对齐情况
 
 来源：`docs/blueprint.md`
@@ -404,6 +413,7 @@ type CapturedWord = {
 - 编辑弹窗：`src/components/edit-word-dialog.tsx`
 - 作文批改 UI：`src/components/essay-review-view.tsx`
 - 文章阅读 UI：`src/components/article-reading-view.tsx`
+- 听说训练 UI（ASR/TTS）：`src/components/speaking-training-view.tsx`
 - 阅读理解题 UI：`src/components/reading-questions-view.tsx`
 - AI 封装：`src/ai/gemini.ts`
 - AI flows：`src/ai/flows/*`
