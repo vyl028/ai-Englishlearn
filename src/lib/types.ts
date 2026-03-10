@@ -9,6 +9,10 @@ export type CapturedWord = {
    * Older localStorage entries may not have this field; treat missing as ungrouped (visible in the "All" view).
    */
   groupId?: string;
+  /**
+   * Whether the user has marked this word as mastered (term-level status is kept in sync across duplicates by the UI).
+   */
+  mastered?: boolean;
   partOfSpeech: string;
   definition: string;
   enrichment?: WordEnrichment;

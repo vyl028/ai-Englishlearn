@@ -6,6 +6,7 @@ import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeek
 import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import type { CapturedWord, PracticeQuestionType, WordGroup } from '@/lib/types';
+import { normalizeTermKey } from '@/lib/gamification';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -39,6 +40,7 @@ interface WordReviewListProps {
   onMoveWordToGroup: (wordId: string, groupId: string) => void;
   onEditWord: (word: CapturedWord) => void;
   onDeleteWord: (word: CapturedWord) => void;
+  onToggleMastered: (termKey: string, mastered: boolean) => void;
   onGeneratePractice: (words: CapturedWord[], options: { questionCount: number; allowedTypes: PracticeQuestionType[] }) => void;
   onGenerateStory: (words: CapturedWord[]) => void;
 }
@@ -81,14 +83,6 @@ const POS_ORDER = [
   'interjection',
   'phrase',
 ] as const;
-
-function normalizeTermKey(raw: string) {
-  return String(raw || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s"'“”‘’()[\]{}<>.,!?;:]+|[\s"'“”‘’()[\]{}<>.,!?;:]+$/g, '');
-}
 
 function normalizePosKey(raw: string) {
   return String(raw || '').trim().toLowerCase();
@@ -165,6 +159,7 @@ export function WordReviewList({
   onMoveWordToGroup,
   onEditWord,
   onDeleteWord,
+  onToggleMastered,
   onGeneratePractice,
   onGenerateStory,
 }: WordReviewListProps) {
@@ -471,6 +466,7 @@ export function WordReviewList({
                    const selectedId = variantSelection[groupKey];
                    const selected = variants.find((w) => w.id === selectedId) || variants[0];
                    const isDefinitionOpen = definitionOpenKeys.has(groupKey);
+                   const isMastered = g.words.some((w) => w.mastered === true);
 
                    const selectVariant = (id: string) => {
                      setVariantSelection((prev) => ({ ...prev, [groupKey]: id }));
@@ -514,17 +510,27 @@ export function WordReviewList({
                            </div>
 
                            <div className="flex items-center flex-shrink-0 ml-4">
-                             <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
-                               {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
-                             </div>
-                             <div className="flex items-center gap-2 mr-1">
-                               <Label htmlFor={`def-${groupKey}`} className="text-xs text-muted-foreground">释义</Label>
-                               <Switch
-                                 id={`def-${groupKey}`}
-                                 checked={isDefinitionOpen}
-                                 onCheckedChange={(v) => setDefinitionOpen(groupKey, v === true)}
-                               />
-                             </div>
+                           <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
+                             {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
+                           </div>
+                            <div className="flex items-center gap-3 mr-1">
+                              <div className="flex items-center gap-2">
+                                <Label htmlFor={`master-${groupKey}`} className="text-xs text-muted-foreground">掌握</Label>
+                                <Switch
+                                  id={`master-${groupKey}`}
+                                  checked={isMastered}
+                                  onCheckedChange={(v) => onToggleMastered(g.key, v === true)}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Label htmlFor={`def-${groupKey}`} className="text-xs text-muted-foreground">释义</Label>
+                                <Switch
+                                  id={`def-${groupKey}`}
+                                  checked={isDefinitionOpen}
+                                  onCheckedChange={(v) => setDefinitionOpen(groupKey, v === true)}
+                                />
+                              </div>
+                            </div>
                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
                                <Pencil className="h-4 w-4" />
                                <span className="sr-only">编辑单词</span>

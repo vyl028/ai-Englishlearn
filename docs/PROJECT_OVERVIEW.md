@@ -53,6 +53,7 @@
   - **Story**（可选择用于生成的单词范围；生成后在页面展示；支持导出 PDF；单词数量过多时会提示并可选择是否继续）：`generateStoryAction`
 - 支持：
   - 每个单词卡片独立开关显示释义
+  - 单词卡片支持“掌握”标记（可标记/取消；用于掌握度与勋章解锁）
   - 同一单词支持多词性：在“了解更多”里用按钮切换查看不同词性的拓展信息（搭配/同反义/例句/难度用法）
   - 点击单词打开 Cambridge 词典页面（新标签页）
   - 编辑（本地更新）
@@ -117,6 +118,14 @@
   - 用户口语发言（ASR 转写）→ AI 英文回复（自动 TTS 朗读；朗读按钮再次点击可停止）→ 中文反馈与纠错建议（基于转写文本，不包含音频层面的发音评估）
   - 反馈与纠错默认折叠隐藏，需手动展开（按钮位于用户消息气泡内）
 - 注意：ASR 支持度与效果依赖浏览器与环境（Edge/Chrome 推荐）；麦克风权限通常需要 HTTPS 或 localhost
+
+### 2.8 成长系统（等级 / 勋章 / 学习曲线）
+入口：顶部“成长”按钮（显示等级）
+
+- 学习行为获得 XP，自动提升等级（新增单词 / 完成练习 / 生成故事 / 标记掌握 + 每日首次学习自动打卡）
+- 勋章：连续打卡（3/7/14 天）、掌握单词（10/100）自动解锁并永久保留
+- 学习记录可视化：展示近 7 天学习曲线（XP 与新增单词），并可切换 14/30 天
+- 数据持久化：localStorage `lexi-capture-gamification`
 
 ## 3. 与 Blueprint 的对齐情况
 
@@ -413,8 +422,9 @@ type CapturedWord = {
 - 主页/视图切换：`src/app/page.tsx`
 - Server Actions（AI 调用入口）：`src/app/actions.ts`
 - 采集表单（Text/Camera/Upload）：`src/components/word-capture-form.tsx`
-- 复习列表（按周分组/Practice/Story）：`src/components/word-review-list.tsx`
+- 复习列表（按周分组/Practice/Story/掌握标记）：`src/components/word-review-list.tsx`
 - Practice UI：`src/components/practice-view.tsx`
+- 成长面板（等级/勋章/学习曲线）：`src/components/growth-sheet.tsx`
 - 编辑弹窗：`src/components/edit-word-dialog.tsx`
 - 作文批改 UI：`src/components/essay-review-view.tsx`
 - 文章阅读 UI：`src/components/article-reading-view.tsx`
@@ -425,5 +435,6 @@ type CapturedWord = {
 - 文章阅读 flow：`src/ai/flows/study-article.ts`
 - PDF 生成：`src/lib/pdf-server-utils.ts`
 - 文件解析（上传文本提取）：`src/lib/essay-file-utils.ts`
+- 成长逻辑与持久化：`src/lib/gamification.ts`
 - 类型定义：`src/lib/types.ts`
 - 样式入口：`src/app/globals.css`

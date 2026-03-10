@@ -16,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 interface PracticeViewProps {
   practiceData: { questions: GeneratePracticeOutput };
   onBack: () => void;
+  onSubmitted?: (result: { correctCount: number; totalCount: number }) => void;
 }
 
 type AnswerState = {
@@ -57,7 +58,7 @@ function getTypeLabel(type: PracticeQuestion["type"]) {
   }
 }
 
-export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
+export function PracticeView({ practiceData, onBack, onSubmitted }: PracticeViewProps) {
   const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
   const [submitted, setSubmitted] = React.useState(false);
 
@@ -95,7 +96,11 @@ export function PracticeView({ practiceData, onBack }: PracticeViewProps) {
     return practiceData.questions.filter((q, idx) => isCorrect(q, idx)).length;
   }, [practiceData.questions, answers, submitted]);
 
-  const handleSubmit = () => setSubmitted(true);
+  const handleSubmit = () => {
+    const correct = practiceData.questions.filter((q, idx) => isCorrect(q, idx)).length;
+    setSubmitted(true);
+    onSubmitted?.({ correctCount: correct, totalCount: practiceData.questions.length });
+  };
 
   const renderExplanation = (q: PracticeQuestion) => (
     <Accordion type="single" collapsible>

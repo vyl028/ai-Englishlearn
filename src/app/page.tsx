@@ -2,16 +2,18 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { BookCopy, BookText, FileText, PlusSquare, BookOpen, Trash, Loader2, Mic } from 'lucide-react';
+import { BookCopy, BookText, FileText, PlusSquare, BookOpen, Trash, Loader2, Mic, Trophy } from 'lucide-react';
 import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { PracticeView } from '@/components/practice-view';
 import { StoryView } from '@/components/story-view';
+import { GrowthSheet } from '@/components/growth-sheet';
 import { EssayReviewView } from '@/components/essay-review-view';
 import { ArticleReadingView } from '@/components/article-reading-view';
 import { SpeakingTrainingView } from '@/components/speaking-training-view';
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
+import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
 import { Button } from '@/components/ui/button';
 import { exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -48,7 +50,10 @@ export default function Home() {
   const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
   const [storyData, setStoryData] = useState<GenerateStoryOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [gamification, setGamification] = useState<GamificationState>(() => createDefaultGamificationState());
+  const [growthOpen, setGrowthOpen] = useState(false);
   const { toast } = useToast();
+  const levelInfo = getLevelInfo(gamification.xp);
 
   useEffect(() => {
     const normalizeGroups = (raw: any): WordGroup[] => {
@@ -106,6 +111,9 @@ export default function Home() {
           });
         setWords(normalized);
       }
+
+      const rawGamification = readJson(GAMIFICATION_STORAGE_KEY);
+      setGamification(normalizeGamificationState(rawGamification));
     } catch (error) {
       console.error("Failed to parse words from localStorage", error);
     }
@@ -124,12 +132,26 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
+    setGamification((prev) => syncBadgesWithWords(prev, words));
+  }, [words]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     try {
       localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
     } catch (error) {
       console.error("Failed to save groups to localStorage", error);
     }
   }, [groups]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(GAMIFICATION_STORAGE_KEY, JSON.stringify(gamification));
+    } catch (error) {
+      console.error("Failed to save gamification state to localStorage", error);
+    }
+  }, [gamification]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -144,6 +166,9 @@ export default function Home() {
     const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
     const wordsToSave = incoming.map(({ photoDataUri, ...word }) => ({ ...word, groupId: autoGroupId }));
     setWords((prevWords) => [...wordsToSave, ...prevWords]);
+    if (wordsToSave.length > 0) {
+      setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: wordsToSave.length }));
+    }
     if (options?.navigateToReview) setView('review');
   };
   
@@ -158,6 +183,24 @@ export default function Home() {
 
   const handleAddWordsFromArticle = (newWords: CapturedWord[]) => {
     addWordsToBook(newWords, { navigateToReview: false });
+  };
+
+  const handleToggleMastered = (termKey: string, mastered: boolean) => {
+    const key = normalizeTermKey(termKey);
+    if (!key) return;
+
+    const anyMatch = words.some((w) => normalizeTermKey(w.word) === key);
+    if (!anyMatch) return;
+
+    const wasMastered = words.some((w) => normalizeTermKey(w.word) === key && w.mastered === true);
+
+    setWords((prev) =>
+      prev.map((w) => (normalizeTermKey(w.word) === key ? { ...w, mastered } : w))
+    );
+
+    if (mastered === true && !wasMastered) {
+      setGamification((prev) => applyLearningEvent(prev, { type: "mastery_marked", termKey: key }));
+    }
   };
 
   const handleEditWord = (word: CapturedWord) => {
@@ -250,6 +293,7 @@ export default function Home() {
     if (result.success && result.data) {
       setStoryData(result.data);
       setView('story');
+      setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
       toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
     } else {
       toast({
@@ -308,13 +352,24 @@ export default function Home() {
             onMoveWordToGroup={handleMoveWordToGroup}
             onEditWord={handleEditWord}
             onDeleteWord={handleDeleteWord}
+            onToggleMastered={handleToggleMastered}
             onGeneratePractice={handleGeneratePractice}
             onGenerateStory={handleGenerateStory}
           />
         );
       case 'practice':
         if (practiceData) {
-          return <PracticeView practiceData={practiceData} onBack={() => setView('review')} />;
+          return (
+            <PracticeView
+              practiceData={practiceData}
+              onBack={() => setView('review')}
+              onSubmitted={({ correctCount, totalCount }) => {
+                setGamification((prev) =>
+                  applyLearningEvent(prev, { type: "practice_completed", correctCount, totalCount })
+                );
+              }}
+            />
+          );
         }
         return null;
       case 'story':
@@ -350,6 +405,18 @@ export default function Home() {
                 LexiCapture
               </h1>
             </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setGrowthOpen(true)}
+            >
+              <Trophy className="h-4 w-4" />
+              <span className="hidden sm:inline">成长</span>
+              <span>Lv.{levelInfo.level}</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -444,6 +511,14 @@ export default function Home() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <GrowthSheet
+        open={growthOpen}
+        onOpenChange={setGrowthOpen}
+        gamification={gamification}
+        words={words}
+        defaultDays={7}
+      />
     </div>
   );
 }
