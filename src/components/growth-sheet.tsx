@@ -47,20 +47,21 @@ const BADGE_META: Record<
 };
 
 function getBadgeProgressText(id: BadgeId, state: GamificationState, stats: { masteredCount: number }) {
-  switch (id) {
-    case "streak_3":
-      return `最长连续：${state.streak.longest}/3`;
-    case "streak_7":
-      return `最长连续：${state.streak.longest}/7`;
-    case "streak_14":
-      return `最长连续：${state.streak.longest}/14`;
-    case "mastered_10":
-      return `已掌握：${stats.masteredCount}/10`;
-    case "mastered_100":
-      return `已掌握：${stats.masteredCount}/100`;
-    default:
-      return "";
-  }
+  const targets: Record<BadgeId, number> = {
+    streak_3: 3,
+    streak_7: 7,
+    streak_14: 14,
+    mastered_10: 10,
+    mastered_100: 100,
+  };
+
+  const target = targets[id] || 1;
+  const rawCurrent =
+    id.startsWith("streak_") ? state.streak.longest : stats.masteredCount;
+  const current = Math.max(0, Math.min(target, Math.floor(rawCurrent)));
+  const percent = Math.max(0, Math.min(100, (current / target) * 100));
+
+  return { current, target, percent, text: `${current}/${target}` };
 }
 
 export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDays = 7 }: GrowthSheetProps) {
@@ -87,20 +88,78 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
     });
   }, [dateKeys, gamification.daily]);
 
+  const weekKeys = React.useMemo(() => getRecentDateKeys(7, new Date()), [todayKey]);
+  const weekSummary = React.useMemo(() => {
+    let xpEarned = 0;
+    let wordsAdded = 0;
+    let practiceCompleted = 0;
+    let storiesGenerated = 0;
+    let activeDays = 0;
+
+    for (const k of weekKeys) {
+      const d = gamification.daily[k];
+      if (!d) continue;
+      xpEarned += d.xpEarned || 0;
+      wordsAdded += d.wordsAdded || 0;
+      practiceCompleted += d.practiceCompleted || 0;
+      storiesGenerated += d.storiesGenerated || 0;
+      if ((d.xpEarned || 0) > 0) activeDays += 1;
+    }
+
+    return { xpEarned, wordsAdded, practiceCompleted, storiesGenerated, activeDays };
+  }, [weekKeys, gamification.daily]);
+
   const rangeXp = React.useMemo(() => chartData.reduce((sum, d) => sum + d.xpEarned, 0), [chartData]);
   const rangeWords = React.useMemo(() => chartData.reduce((sum, d) => sum + d.wordsAdded, 0), [chartData]);
+  const hasChartData = React.useMemo(
+    () => chartData.some((d) => d.xpEarned > 0 || d.wordsAdded > 0),
+    [chartData]
+  );
 
   const badgeIds = React.useMemo(() => Object.keys(BADGE_META) as BadgeId[], []);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex flex-col">
+      <SheetContent side="right" className="flex flex-col sm:max-w-[560px]">
         <SheetHeader>
           <SheetTitle>成长</SheetTitle>
           <SheetDescription>等级、勋章与学习曲线会随着你的学习自动更新。</SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 flex-1 overflow-y-auto space-y-6 pr-1">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">本周摘要</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">获得 XP</div>
+                  <div className="text-2xl font-bold">{weekSummary.xpEarned}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">新增单词</div>
+                  <div className="text-2xl font-bold">{weekSummary.wordsAdded}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">完成练习</div>
+                  <div className="text-2xl font-bold">{weekSummary.practiceCompleted}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">生成故事</div>
+                  <div className="text-2xl font-bold">{weekSummary.storiesGenerated}</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {weekSummary.activeDays === 0 ? (
+                  <span>本周还没有学习记录，先从“新增单词”开始吧。</span>
+                ) : (
+                  <span>本周学习 {weekSummary.activeDays} / 7 天。</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">等级</CardTitle>
@@ -186,61 +245,67 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-[240px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                    <YAxis
-                      yAxisId="xp"
-                      width={36}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                    />
-                    <YAxis
-                      yAxisId="words"
-                      orientation="right"
-                      width={28}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                    />
-                    <Tooltip
-                      content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null;
-                        const xp = payload.find((p) => p.dataKey === "xpEarned")?.value ?? 0;
-                        const w = payload.find((p) => p.dataKey === "wordsAdded")?.value ?? 0;
-                        return (
-                          <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-md">
-                            <div className="font-medium">{label}</div>
-                            <div className="text-muted-foreground mt-1 space-y-0.5">
-                              <div>获得 XP：{xp}</div>
-                              <div>新增单词：{w}</div>
+              {hasChartData ? (
+                <div className="h-[240px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                      <YAxis
+                        yAxisId="xp"
+                        width={36}
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <YAxis
+                        yAxisId="words"
+                        orientation="right"
+                        width={28}
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const xp = payload.find((p) => p.dataKey === "xpEarned")?.value ?? 0;
+                          const w = payload.find((p) => p.dataKey === "wordsAdded")?.value ?? 0;
+                          return (
+                            <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-md">
+                              <div className="font-medium">{label}</div>
+                              <div className="text-muted-foreground mt-1 space-y-0.5">
+                                <div>获得 XP：{xp}</div>
+                                <div>新增单词：{w}</div>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar
-                      yAxisId="words"
-                      dataKey="wordsAdded"
-                      name="新增单词"
-                      fill="hsl(var(--chart-1))"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Line
-                      yAxisId="xp"
-                      type="monotone"
-                      dataKey="xpEarned"
-                      name="获得 XP"
-                      stroke="hsl(var(--chart-2))"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
+                          );
+                        }}
+                      />
+                      <Bar
+                        yAxisId="words"
+                        dataKey="wordsAdded"
+                        name="新增单词"
+                        fill="hsl(var(--chart-1))"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Line
+                        yAxisId="xp"
+                        type="monotone"
+                        dataKey="xpEarned"
+                        name="获得 XP"
+                        stroke="hsl(var(--chart-2))"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[240px] w-full flex items-center justify-center rounded-lg border bg-muted/20 text-sm text-muted-foreground">
+                  还没有学习记录，去新增单词或做一次练习吧。
+                </div>
+              )}
               <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <span className="inline-block h-2 w-2 rounded-sm bg-[hsl(var(--chart-1))]" />
@@ -264,13 +329,13 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
                   const meta = BADGE_META[id];
                   const unlocked = gamification.unlockedBadges.includes(id);
                   const Icon = meta.icon;
-                  const progressText = getBadgeProgressText(id, gamification, { masteredCount: wordStats.masteredCount });
+                  const progress = getBadgeProgressText(id, gamification, { masteredCount: wordStats.masteredCount });
                   return (
                     <div
                       key={id}
                       className={cn(
-                        "rounded-lg border p-3 flex gap-3 items-start",
-                        unlocked ? "bg-primary/5 border-primary/20" : "bg-card"
+                        "rounded-lg border p-3 flex gap-3 items-start transition-colors",
+                        unlocked ? "bg-primary/5 border-primary/20" : "bg-card hover:bg-muted/30"
                       )}
                     >
                       <div className={cn("mt-0.5", unlocked ? "text-primary" : "text-muted-foreground")}>
@@ -285,7 +350,13 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">{meta.description}</div>
                         {!unlocked && (
-                          <div className="text-xs text-muted-foreground mt-2">{progressText}</div>
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>进度</span>
+                              <span>{progress.text}</span>
+                            </div>
+                            <Progress value={progress.percent} className="h-2" />
+                          </div>
                         )}
                       </div>
                     </div>

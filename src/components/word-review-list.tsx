@@ -3,13 +3,12 @@
 
 import { useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import type { CapturedWord, PracticeQuestionType, WordGroup } from '@/lib/types';
 import { normalizeTermKey } from '@/lib/gamification';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +17,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -386,13 +386,14 @@ export function WordReviewList({
       setEditingGroupName('');
     };
 
-    const saveRename = () => {
+  const saveRename = () => {
       if (!editingGroupId) return;
       onRenameGroup(editingGroupId, editingGroupName);
       cancelRename();
     };
    
     return (
+      <TooltipProvider delayDuration={150}>
       <>
       <div className="space-y-6">
          <div className="flex items-center justify-between gap-3">
@@ -483,6 +484,14 @@ export function WordReviewList({
                              >
                                {g.display}
                              </span>
+                             {isMastered && (
+                               <Badge
+                                 variant="secondary"
+                                 className="h-6 px-2 text-xs bg-primary/10 text-primary hover:bg-primary/10 shrink-0"
+                               >
+                                 已掌握
+                               </Badge>
+                             )}
 
                              {variants.length > 1 ? (
                                <div className="flex flex-wrap items-center gap-1 shrink-0">
@@ -513,23 +522,48 @@ export function WordReviewList({
                            <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
                              {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
                            </div>
-                            <div className="flex items-center gap-3 mr-1">
-                              <div className="flex items-center gap-2">
-                                <Label htmlFor={`master-${groupKey}`} className="text-xs text-muted-foreground">掌握</Label>
-                                <Switch
-                                  id={`master-${groupKey}`}
-                                  checked={isMastered}
-                                  onCheckedChange={(v) => onToggleMastered(g.key, v === true)}
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Label htmlFor={`def-${groupKey}`} className="text-xs text-muted-foreground">释义</Label>
-                                <Switch
-                                  id={`def-${groupKey}`}
-                                  checked={isDefinitionOpen}
-                                  onCheckedChange={(v) => setDefinitionOpen(groupKey, v === true)}
-                                />
-                              </div>
+                            <div className="flex items-center gap-1 mr-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`h-8 w-8 ${isMastered ? "text-primary" : "text-muted-foreground"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onToggleMastered(g.key, !isMastered);
+                                    }}
+                                  >
+                                    {isMastered ? <CheckCircle className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                                    <span className="sr-only">{isMastered ? "取消掌握" : "标记为已掌握"}</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {isMastered ? "已掌握（点击取消）" : "标记为已掌握"}
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`h-8 w-8 ${isDefinitionOpen ? "text-foreground" : "text-muted-foreground"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDefinitionOpen(groupKey, !isDefinitionOpen);
+                                    }}
+                                  >
+                                    {isDefinitionOpen ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                    <span className="sr-only">{isDefinitionOpen ? "隐藏释义" : "显示释义"}</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {isDefinitionOpen ? "隐藏释义" : "显示释义"}
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
                                <Pencil className="h-4 w-4" />
@@ -1034,5 +1068,6 @@ export function WordReviewList({
       </DialogContent>
     </Dialog>
     </>
+   </TooltipProvider>
    );
 }

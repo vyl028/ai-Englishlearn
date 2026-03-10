@@ -410,12 +410,18 @@ export default function Home() {
               type="button"
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="h-10 px-3 gap-2"
               onClick={() => setGrowthOpen(true)}
+              title={`成长：Lv.${levelInfo.level}，还差 ${levelInfo.xpToNextLevel} XP 升级`}
             >
               <Trophy className="h-4 w-4" />
-              <span className="hidden sm:inline">成长</span>
-              <span>Lv.{levelInfo.level}</span>
+              <span className="text-sm font-semibold">Lv.{levelInfo.level}</span>
+              <span className="hidden sm:inline-flex items-center ml-1 w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <span
+                  className="h-full bg-primary"
+                  style={{ width: `${Math.round(levelInfo.progress * 100)}%` }}
+                />
+              </span>
             </Button>
           </div>
         </div>
