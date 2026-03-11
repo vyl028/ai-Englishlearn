@@ -2,7 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { BookCopy, BookText, FileText, PlusSquare, BookOpen, Trash, Loader2, Mic, Trophy } from 'lucide-react';
+import { Loader2, Trash, Trophy } from 'lucide-react';
+import { AppSidebar } from "@/components/app-sidebar";
 import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
@@ -12,12 +13,15 @@ import { GrowthSheet } from '@/components/growth-sheet';
 import { EssayReviewView } from '@/components/essay-review-view';
 import { ArticleReadingView } from '@/components/article-reading-view';
 import { SpeakingTrainingView } from '@/components/speaking-training-view';
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
+import { getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
 import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
 import { Button } from '@/components/ui/button';
 import { exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,8 +32,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-type View = 'capture' | 'review' | 'practice' | 'story' | 'essay' | 'article' | 'speaking';
 
 const WORDS_STORAGE_KEY = 'lexi-capture-words';
 const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
@@ -43,7 +45,7 @@ export default function Home() {
   const [groups, setGroups] = useState<WordGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(ALL_GROUP_ID);
   const [hydrated, setHydrated] = useState(false);
-  const [view, setView] = useState<View>('capture');
+  const [view, setView] = useState<AppView>('capture');
   const [editingWord, setEditingWord] = useState<CapturedWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
@@ -177,7 +179,6 @@ export default function Home() {
   };
 
   const handleMultipleWordsAdded = (newWords: CapturedWord[]) => {
-    console.log('handleMultipleWordsAdded called with:', newWords);
     addWordsToBook(newWords, { navigateToReview: true });
   };
 
@@ -394,107 +395,55 @@ export default function Home() {
     }
   };
 
+  const contentMaxWidthClass =
+    view === "essay" || view === "article" || view === "speaking" ? "max-w-5xl" : "max-w-3xl";
+  const viewDescription = getViewDescription(view);
+
   return (
-    <div className="min-h-screen bg-secondary/50 flex flex-col">
-      <header className="bg-card border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <BookCopy className="h-7 w-7 text-primary" />
-              <h1 className="text-2xl font-bold font-headline tracking-tight">
-                LexiCapture
-              </h1>
+    <SidebarProvider defaultOpen>
+      <AppSidebar view={view} onNavigate={setView} />
+      <SidebarInset>
+        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex h-14 items-center gap-2 px-4">
+            <SidebarTrigger />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold leading-tight truncate">{getViewLabel(view)}</div>
+              {viewDescription && (
+                <div className="hidden sm:block text-xs text-muted-foreground truncate">
+                  {viewDescription}
+                </div>
+              )}
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 px-3 gap-2"
-              onClick={() => setGrowthOpen(true)}
-              title={`成长：Lv.${levelInfo.level}，还差 ${levelInfo.xpToNextLevel} XP 升级`}
-            >
-              <Trophy className="h-4 w-4" />
-              <span className="text-sm font-semibold">Lv.{levelInfo.level}</span>
-              <span className="hidden sm:inline-flex items-center ml-1 w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <span
-                  className="h-full bg-primary"
-                  style={{ width: `${Math.round(levelInfo.progress * 100)}%` }}
-                />
-              </span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 px-3 gap-2"
+                onClick={() => setGrowthOpen(true)}
+                title={`成长：Lv.${levelInfo.level}，还差 ${levelInfo.xpToNextLevel} XP 升级`}
+              >
+                <Trophy className="h-4 w-4" />
+                <span className="text-sm font-semibold">Lv.{levelInfo.level}</span>
+                <span className="hidden md:inline-flex items-center ml-1 w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <span
+                    className="h-full bg-primary"
+                    style={{ width: `${Math.round(levelInfo.progress * 100)}%` }}
+                  />
+                </span>
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-        <div className="max-w-3xl mx-auto">
-          {renderContent()}
+        <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
+          <div className={cn("mx-auto w-full", contentMaxWidthClass)}>{renderContent()}</div>
         </div>
-      </main>
+      </SidebarInset>
 
-      <footer className="sticky bottom-0 bg-card border-t z-10">
-        <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-5 gap-2 h-16">
-            <Button
-              variant="ghost"
-              className={cn(
-                "h-full text-base flex-col gap-1",
-                view === 'capture' ? 'text-primary' : 'text-muted-foreground'
-              )}
-              onClick={() => setView('capture')}
-            >
-              <PlusSquare />
-              新增单词
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                "h-full text-base flex-col gap-1",
-                view === 'review' ? 'text-primary' : 'text-muted-foreground'
-              )}
-              onClick={() => setView('review')}
-            >
-              <BookOpen />
-              单词本
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                "h-full text-base flex-col gap-1",
-                view === 'speaking' ? 'text-primary' : 'text-muted-foreground'
-              )}
-              onClick={() => setView('speaking')}
-            >
-              <Mic />
-              听说训练
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                "h-full text-base flex-col gap-1",
-                view === 'article' ? 'text-primary' : 'text-muted-foreground'
-              )}
-              onClick={() => setView('article')}
-            >
-              <BookText />
-              文章阅读
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                "h-full text-base flex-col gap-1",
-                view === 'essay' ? 'text-primary' : 'text-muted-foreground'
-              )}
-              onClick={() => setView('essay')}
-            >
-              <FileText />
-              作文批改
-            </Button>
-          </div>
-        </nav>
-      </footer>
-      <EditWordDialog 
+      <EditWordDialog
         word={editingWord}
         isOpen={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
@@ -525,6 +474,6 @@ export default function Home() {
         words={words}
         defaultDays={7}
       />
-    </div>
+    </SidebarProvider>
   );
 }

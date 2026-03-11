@@ -158,9 +158,9 @@ export function PracticeView({ practiceData, onBack, onSubmitted }: PracticeView
                 {submitted && (
                   <div className="pt-1">
                     {correct ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-600" />
+                      <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                     )}
                   </div>
                 )}
@@ -178,13 +178,13 @@ export function PracticeView({ practiceData, onBack, onSubmitted }: PracticeView
                     const isCorrectOption = optionIndex === q.answerIndex;
                     const isSelected = answers[index]?.mcq === optionIndex;
 
-                    const className = submitted
-                      ? isCorrectOption
-                        ? "text-green-600 font-bold"
-                        : isSelected
-                          ? "text-red-600 line-through"
-                          : "text-muted-foreground"
-                      : "";
+                  const className = submitted
+                    ? isCorrectOption
+                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                      : isSelected
+                        ? "text-rose-600 dark:text-rose-400 line-through"
+                        : "text-muted-foreground"
+                    : "";
 
                     return (
                       <div key={optionIndex} className="flex items-center space-x-2">
@@ -193,14 +193,18 @@ export function PracticeView({ practiceData, onBack, onSubmitted }: PracticeView
                           <span className="font-mono text-xs text-muted-foreground">
                             {String.fromCharCode(65 + optionIndex)}.
                           </span>
-                          <span>{option}</span>
-                          {submitted && isCorrectOption && <CheckCircle className="ml-2 h-4 w-4 text-green-600" />}
-                          {submitted && isSelected && !isCorrectOption && <XCircle className="ml-2 h-4 w-4 text-red-600" />}
-                        </Label>
-                      </div>
-                    );
-                  })}
-                </RadioGroup>
+                        <span>{option}</span>
+                        {submitted && isCorrectOption && (
+                          <CheckCircle className="ml-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        {submitted && isSelected && !isCorrectOption && (
+                          <XCircle className="ml-2 h-4 w-4 text-rose-600 dark:text-rose-400" />
+                        )}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
               )}
 
               {q.type === "fill_blank" && (

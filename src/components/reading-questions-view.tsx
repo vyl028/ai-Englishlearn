@@ -71,9 +71,9 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
                 {submitted && (
                   <div className="pt-1">
                     {correct ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <XCircle className="h-5 w-5 text-red-600" />
+                      <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                     )}
                   </div>
                 )}
@@ -92,9 +92,9 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
 
                   const className = submitted
                     ? isCorrectOption
-                      ? "text-green-600 font-bold"
+                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
                       : isSelected
-                        ? "text-red-600 line-through"
+                        ? "text-rose-600 dark:text-rose-400 line-through"
                         : "text-muted-foreground"
                     : "";
 
@@ -106,8 +106,12 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
                           {String.fromCharCode(65 + optionIndex)}.
                         </span>
                         <span>{option}</span>
-                        {submitted && isCorrectOption && <CheckCircle className="ml-2 h-4 w-4 text-green-600" />}
-                        {submitted && isSelected && !isCorrectOption && <XCircle className="ml-2 h-4 w-4 text-red-600" />}
+                        {submitted && isCorrectOption && (
+                          <CheckCircle className="ml-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        {submitted && isSelected && !isCorrectOption && (
+                          <XCircle className="ml-2 h-4 w-4 text-rose-600 dark:text-rose-400" />
+                        )}
                       </Label>
                     </div>
                   );

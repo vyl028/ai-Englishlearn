@@ -4,6 +4,38 @@
 >
 > 注意：**不要**在此文件写入任何密钥/Token/账号密码等敏感信息（如 `.env` 内容），只描述“已新增/已配置”即可。
 
+## 2026-03-11
+
+### 新增/修改内容
+- 全站 UI/布局优化：主导航从底部栏调整为**侧边栏**（桌面端常驻，移动端抽屉），顶部栏统一展示当前模块标题与快捷操作。
+- 新增**深色模式切换**：记住你的选择，并在页面加载前应用主题，减少闪烁。
+- 视觉与可读性优化：补齐中文字体回退、全局 `color-scheme`、选中态；答题正确/错误颜色在深色模式下更清晰。
+- 清理页面与采集流程中不必要的前端 `console.log`。
+
+### 涉及文件
+- 新增：`src/components/app-sidebar.tsx`
+- 新增：`src/components/theme-toggle.tsx`
+- 新增：`src/lib/app-view.ts`
+- 修改：`src/app/page.tsx`
+- 修改：`src/app/layout.tsx`
+- 修改：`src/app/globals.css`
+- 修改：`tailwind.config.ts`
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/components/practice-view.tsx`
+- 修改：`src/components/reading-questions-view.tsx`
+- 修改：`src/components/quiz-view.tsx`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 提升“英语学习软件”整体质感与一致性；侧边栏更适合桌面端长期使用；深色模式便于夜间学习。
+
+### 如何验证
+- 运行：`npm run dev`
+- 切换侧边栏导航，确认“新增单词/单词本/听说训练/文章阅读/作文批改”可正常切换。
+- 点击右上角主题按钮切换深色模式，刷新后确认主题保留。
+- 进入练习/阅读理解题，提交后确认正确/错误高亮在深色模式下仍清晰。
+- 运行：`npm run typecheck`
+
 ## 2026-03-10
 
 ### 新增/修改内容

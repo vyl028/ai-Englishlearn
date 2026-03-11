@@ -259,11 +259,11 @@ export function EssayReviewView() {
 
         {result && (
           <Tabs defaultValue="score" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="score">评分</TabsTrigger>
-              <TabsTrigger value="issues">问题</TabsTrigger>
-              <TabsTrigger value="revised">优化后</TabsTrigger>
-              <TabsTrigger value="compare">对照</TabsTrigger>
+            <TabsList className="w-full justify-start overflow-x-auto">
+              <TabsTrigger value="score" className="shrink-0">评分</TabsTrigger>
+              <TabsTrigger value="issues" className="shrink-0">问题</TabsTrigger>
+              <TabsTrigger value="revised" className="shrink-0">优化后</TabsTrigger>
+              <TabsTrigger value="compare" className="shrink-0">对照</TabsTrigger>
             </TabsList>
 
             <TabsContent value="score" className="space-y-4 mt-4">

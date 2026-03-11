@@ -654,12 +654,12 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
 
         {result && (
           <Tabs defaultValue="structure" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="structure">结构</TabsTrigger>
-              <TabsTrigger value="syntax">句法</TabsTrigger>
-              <TabsTrigger value="hard">难句</TabsTrigger>
-              <TabsTrigger value="vocab">词汇</TabsTrigger>
-              <TabsTrigger value="questions">题目</TabsTrigger>
+            <TabsList className="w-full justify-start overflow-x-auto">
+              <TabsTrigger value="structure" className="shrink-0">结构</TabsTrigger>
+              <TabsTrigger value="syntax" className="shrink-0">句法</TabsTrigger>
+              <TabsTrigger value="hard" className="shrink-0">难句</TabsTrigger>
+              <TabsTrigger value="vocab" className="shrink-0">词汇</TabsTrigger>
+              <TabsTrigger value="questions" className="shrink-0">题目</TabsTrigger>
             </TabsList>
 
             <TabsContent value="structure" className="mt-4">

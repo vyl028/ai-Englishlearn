@@ -32,8 +32,8 @@ export function QuizView({ quizData, onBack }: QuizViewProps) {
     const isCorrect = option === question.answer;
     const isSelected = answers[questionIndex] === option;
 
-    if (isCorrect) return 'text-green-600 font-bold';
-    if (isSelected && !isCorrect) return 'text-red-600 line-through';
+    if (isCorrect) return 'text-emerald-600 dark:text-emerald-400 font-semibold';
+    if (isSelected && !isCorrect) return 'text-rose-600 dark:text-rose-400 line-through';
     return 'text-muted-foreground';
   };
 
@@ -62,8 +62,12 @@ export function QuizView({ quizData, onBack }: QuizViewProps) {
                   <RadioGroupItem value={option} id={`q${index}-o${optionIndex}`} />
                   <Label htmlFor={`q${index}-o${optionIndex}`} className={cn("flex items-center", getResultColor(index, option))}>
                     {option}
-                    {submitted && option === q.answer && <CheckCircle className="ml-2 h-4 w-4 text-green-600" />}
-                    {submitted && answers[index] === option && option !== q.answer && <XCircle className="ml-2 h-4 w-4 text-red-600" />}
+                    {submitted && option === q.answer && (
+                      <CheckCircle className="ml-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                    {submitted && answers[index] === option && option !== q.answer && (
+                      <XCircle className="ml-2 h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    )}
                   </Label>
                 </div>
               ))}

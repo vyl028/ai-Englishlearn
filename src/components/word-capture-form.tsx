@@ -54,13 +54,10 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     setIsAnalyzing(true);
 
     try {
-      console.log('Starting image analysis with dataUri length:', dataUri.length);
       const result = await extractWordAndDefineAction(dataUri);
-      console.log('extractWordAndDefineAction result:', result);
       
       if (result.success && result.data) {
         const wordsFound = result.data;
-        console.log('Words found:', wordsFound);
 
         const capturedAt = new Date();
         const newWords: CapturedWord[] = wordsFound.map(foundWord => ({
@@ -72,7 +69,6 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
           capturedAt,
           photoDataUri: dataUri,
         }));
-        console.log('New words created:', newWords);
         onMultipleWordsAdded(newWords);
         
         form.reset();

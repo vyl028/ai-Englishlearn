@@ -1,6 +1,6 @@
 # LexiCapture（studio）项目概览
 
-更新时间：2026-03-08  
+更新时间：2026-03-11  
 代码仓库根目录：`D:\University\毕设\studio`
 
 > 目标：梳理项目现状（功能、架构、关键文件、运行方式、风险点），为后续迭代开发提供“地图”。
@@ -16,6 +16,7 @@
   - 每周词汇练习题（支持选择题/填空/句子重组，可配置题型与题量）
   - 包含这些词汇的短故事 + 中文翻译，并支持导出 PDF
 - 当前持久化方式为：**浏览器 localStorage（单机/单浏览器）**
+- 界面：桌面端以**侧边栏**作为主导航（移动端为抽屉）；支持**浅色/深色模式**切换
 
 > `docs/blueprint.md` 中提到的“存入数据库”目前尚未落地（代码里仍是 localStorage）。
 
@@ -108,7 +109,7 @@
 ### 2.7 听说训练（ASR / TTS）
 组件：`src/components/speaking-training-view.tsx`
 
-- 入口：主页底部导航 “听说训练”
+- 入口：侧边栏导航 “听说训练”
 - 页面内分为两个页签：**跟读训练** / **AI 对话**
 - 跟读训练：
   - ASR（语音识别）：支持语音输入目标文本；跟读后识别转写为英文文本
@@ -420,6 +421,9 @@ type CapturedWord = {
 ## 15. 关键文件速查表
 
 - 主页/视图切换：`src/app/page.tsx`
+- 侧边栏导航：`src/components/app-sidebar.tsx`
+- 主题切换（深色模式）：`src/components/theme-toggle.tsx`
+- 视图元信息：`src/lib/app-view.ts`
 - Server Actions（AI 调用入口）：`src/app/actions.ts`
 - 采集表单（Text/Camera/Upload）：`src/components/word-capture-form.tsx`
 - 复习列表（按周分组/Practice/Story/掌握标记）：`src/components/word-review-list.tsx`
