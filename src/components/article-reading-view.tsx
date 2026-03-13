@@ -184,11 +184,6 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       return;
     }
 
-    if (existingWordKeys.has(key)) {
-      toast({ title: "已在单词本", description: `“${cleanedTerm}” 已在单词本中。` });
-      return;
-    }
-
     setAddingKey(key);
     try {
       const res = await defineTermAutoAction({ term: cleanedTerm });
@@ -231,7 +226,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       }
 
       onAddWords(newWords);
-      toast({ title: "已加入单词本", description: `已添加：${cleanedTerm}` });
+      toast({ title: "已生成词条", description: `已为 “${cleanedTerm}” 生成释义，正在加入单词本...` });
     } finally {
       setAddingKey((prev) => (prev === key ? null : prev));
     }
@@ -435,8 +430,8 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           加入中...
                         </>
-                      ) : existingWordKeys.has(normalizeTermKey(k.term)) ? (
-                        "已在单词本"
+                       ) : existingWordKeys.has(normalizeTermKey(k.term)) ? (
+                        "可能重复"
                       ) : (
                         "加入单词本"
                       )}
@@ -483,8 +478,8 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             加入中...
                           </>
-                        ) : existingWordKeys.has(normalizeTermKey(p.phrase)) ? (
-                          "已在单词本"
+                         ) : existingWordKeys.has(normalizeTermKey(p.phrase)) ? (
+                          "可能重复"
                         ) : (
                           "加入单词本"
                         )}

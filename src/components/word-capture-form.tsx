@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, PlusCircle, Camera, Upload } from "lucide-react";
+import { Loader2, PlusCircle, Camera, Upload, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { defineTermAutoAction, extractWordAndDefineAction } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
@@ -25,7 +25,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateId } from "@/lib/utils";
 
 const formSchema = z.object({
-  word: z.string().min(1, "请输入单词或短语。").max(100, "长度不能超过 100 个字符。"),
+  word: z
+    .string()
+    .min(1, "请输入单词或短语（支持换行/逗号分隔批量添加）。")
+    .max(2000, "长度不能超过 2000 个字符。"),
 });
 
 interface WordCaptureFormProps {
@@ -35,13 +38,19 @@ interface WordCaptureFormProps {
 
 export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptureFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitProgress, setSubmitProgress] = React.useState<{ current: number; total: number } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const { toast } = useToast();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
+  const [cameraFacingMode, setCameraFacingMode] = React.useState<"user" | "environment">("environment");
+  const [canSwitchCamera, setCanSwitchCamera] = React.useState(false);
+  const cameraStreamRef = React.useRef<MediaStream | null>(null);
   const [activeTab, setActiveTab] = React.useState("text");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploadPreviewDataUri, setUploadPreviewDataUri] = React.useState<string | null>(null);
+  const imageAnalysisTokenRef = React.useRef(0);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -51,11 +60,12 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
   });
 
   const handleImageAnalysis = async (dataUri: string) => {
+    const token = ++imageAnalysisTokenRef.current;
     setIsAnalyzing(true);
-
     try {
       const result = await extractWordAndDefineAction(dataUri);
-      
+
+      if (token !== imageAnalysisTokenRef.current) return;
       if (result.success && result.data) {
         const wordsFound = result.data;
 
@@ -85,6 +95,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         });
       }
     } catch (error) {
+      if (token !== imageAnalysisTokenRef.current) return;
       console.error("Image analysis error:", error);
       toast({
         variant: "destructive",
@@ -92,43 +103,79 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         description: "图片识别过程中发生未知错误。",
       });
     } finally {
-      setIsAnalyzing(false);
+      if (token === imageAnalysisTokenRef.current) setIsAnalyzing(false);
     }
   };
 
 
   React.useEffect(() => {
-    if (activeTab === 'camera') {
-      const getCameraPermission = async () => {
+    if (activeTab !== "camera") return;
+    let cancelled = false;
+
+    const stop = () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    };
+
+    const start = async () => {
+      stop();
+      setCanSwitchCamera(false);
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: cameraFacingMode } },
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        cameraStreamRef.current = stream;
+        setHasCameraPermission(true);
+        if (videoRef.current) videoRef.current.srcObject = stream;
+
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          if (cancelled) return;
+          const videoInputs = devices.filter((d) => d.kind === "videoinput");
+          setCanSwitchCamera(videoInputs.length > 1);
+        } catch {
+          setCanSwitchCamera(false);
+        }
+      } catch (error) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          setHasCameraPermission(true);
-
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
+          if (cancelled) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
           }
-        } catch (error) {
-          console.error('Error accessing camera:', error);
+          cameraStreamRef.current = stream;
+          setHasCameraPermission(true);
+          if (videoRef.current) videoRef.current.srcObject = stream;
+        } catch (fallbackError) {
+          console.error("Error accessing camera:", fallbackError);
           setHasCameraPermission(false);
           toast({
-            variant: 'destructive',
-            title: '无法访问摄像头',
-            description: '请在浏览器设置中允许摄像头权限后再使用此功能。',
+            variant: "destructive",
+            title: "无法访问摄像头",
+            description: "请在浏览器设置中允许摄像头权限后再使用此功能。",
           });
         }
-      };
+      }
+    };
 
-      getCameraPermission();
-      
-      // Cleanup function to stop camera stream
-      return () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-          const stream = videoRef.current.srcObject as MediaStream;
-          stream.getTracks().forEach(track => track.stop());
-        }
-      };
-    }
-  }, [activeTab, toast]);
+    void start();
+    return () => {
+      cancelled = true;
+      stop();
+      setCanSwitchCamera(false);
+    };
+  }, [activeTab, cameraFacingMode, toast]);
+
+  const handleSwitchCamera = () => {
+    setCameraFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+  };
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -140,7 +187,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         const dataUri = canvas.toDataURL('image/jpeg');
-        handleImageAnalysis(dataUri);
+        void handleImageAnalysis(dataUri);
       }
     }
   };
@@ -151,7 +198,8 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUri = reader.result as string;
-        handleImageAnalysis(dataUri);
+        setUploadPreviewDataUri(dataUri);
+        void handleImageAnalysis(dataUri);
       };
       reader.readAsDataURL(file);
     }
@@ -161,69 +209,133 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     }
   };
 
+  const handleClearUpload = () => {
+    imageAnalysisTokenRef.current += 1;
+    setIsAnalyzing(false);
+    setUploadPreviewDataUri(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
+    setSubmitProgress(null);
     try {
-      const cleaned = String(values.word || '')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/^[\s"'“”‘’()[\]{}<>.,!?;:]+|[\s"'“”‘’()[\]{}<>.,!?;:]+$/g, '');
+      const cleanTerm = (raw: string) =>
+        String(raw || "")
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/^[\s"'“”‘’()[\]{}<>.,!?;:]+|[\s"'“”‘’()[\]{}<>.,!?;:]+$/g, "");
 
-      if (!cleaned) {
+      const rawInput = String(values.word || "");
+      const terms = rawInput
+        .split(/[\n,，]+/g)
+        .map(cleanTerm)
+        .filter(Boolean);
+
+      if (terms.length === 0) {
         toast({ variant: "destructive", title: "请输入单词", description: "单词或短语不能为空。" });
         return;
       }
 
-      const result = await defineTermAutoAction({ term: cleaned });
-      if (result.success && result.data) {
-        const capturedAt = new Date();
-        const seenPos = new Set<string>();
-        const newWords: CapturedWord[] = [];
+      if (terms.length > 1) setSubmitProgress({ current: 0, total: terms.length });
 
-        for (const it of result.data) {
-          const rawPos = String(it.partOfSpeech || '').trim();
-          const partOfSpeech = rawPos || (/\s/.test(cleaned) ? 'phrase' : 'noun');
-          const posKey = partOfSpeech.toLowerCase();
-          if (seenPos.has(posKey)) continue;
-          seenPos.add(posKey);
+      const failed: { term: string; reason: string }[] = [];
+      const allNewWords: CapturedWord[] = [];
 
-          const definition = String(it.definition || '').trim();
-          if (!definition) continue;
+      for (let i = 0; i < terms.length; i++) {
+        const term = terms[i];
+        if (terms.length > 1) setSubmitProgress({ current: i + 1, total: terms.length });
 
-          newWords.push({
-            id: generateId(),
-            word: cleaned,
-            partOfSpeech,
-            definition,
-            enrichment: it.enrichment,
-            capturedAt,
-          });
+        if (term.length > 100) {
+          failed.push({ term, reason: "长度超过 100 个字符" });
+          continue;
         }
 
-        if (newWords.length === 0) {
-          toast({ variant: "destructive", title: "添加失败", description: "模型未返回有效结果，请稍后重试。" });
-          return;
+        try {
+          const result = await defineTermAutoAction({ term });
+          if (!result.success || !result.data) {
+            failed.push({ term, reason: result.error || "生成失败" });
+            continue;
+          }
+
+          const capturedAt = new Date();
+          const seenPos = new Set<string>();
+          const newWords: CapturedWord[] = [];
+
+          for (const it of result.data) {
+            const rawPos = String(it.partOfSpeech || "").trim();
+            const partOfSpeech = rawPos || (/\s/.test(term) ? "phrase" : "noun");
+            const posKey = partOfSpeech.toLowerCase();
+            if (seenPos.has(posKey)) continue;
+            seenPos.add(posKey);
+
+            const definition = String(it.definition || "").trim();
+            if (!definition) continue;
+
+            newWords.push({
+              id: generateId(),
+              word: term,
+              partOfSpeech,
+              definition,
+              enrichment: it.enrichment,
+              capturedAt,
+            });
+          }
+
+          if (newWords.length === 0) {
+            failed.push({ term, reason: "模型未返回有效结果" });
+            continue;
+          }
+
+          allNewWords.push(...newWords);
+        } catch (error) {
+          console.error("Define term error:", error);
+          failed.push({ term, reason: "发生未知错误" });
         }
+      }
 
-        if (newWords.length === 1) onWordAdded(newWords[0]);
-        else onMultipleWordsAdded(newWords);
-
-        form.reset();
+      if (allNewWords.length === 0) {
+        const first = failed[0];
         toast({
-          title: "已添加到单词本",
-          description: newWords.length === 1 ? `已添加：${cleaned}` : `已添加：${cleaned}（${newWords.map((w) => w.partOfSpeech).join(' / ')}）`,
+          variant: "destructive",
+          title: "添加失败",
+          description: first ? `“${first.term}”：${first.reason}` : "发生未知错误，请稍后重试。",
         });
-        // setActiveTab('text');
         return;
       }
 
+      if (allNewWords.length === 1) onWordAdded(allNewWords[0]);
+      else onMultipleWordsAdded(allNewWords);
+
+      form.reset();
+
+      if (terms.length === 1) {
+        const term = terms[0];
+        const posLabel =
+          allNewWords.length > 1 ? `（${allNewWords.map((w) => w.partOfSpeech).join(" / ")}）` : "";
+        toast({
+          title: "已生成词条",
+          description: `已生成：${term}${posLabel}，正在加入单词本...`,
+        });
+        return;
+      }
+
+      const okCount = terms.length - failed.length;
+      const failCount = failed.length;
+      const failedPreview = failed
+        .slice(0, 3)
+        .map((f) => `“${f.term}”`)
+        .join("、");
       toast({
-        variant: "destructive",
-        title: "添加失败",
-        description: result.error || "发生未知错误，请稍后重试。",
+        title: "批量生成完成",
+        description:
+          failCount > 0
+            ? `成功 ${okCount}，失败 ${failCount}（如：${failedPreview}）。正在加入单词本...`
+            : `成功 ${okCount}，正在加入单词本...`,
       });
     } finally {
       setIsSubmitting(false);
+      setSubmitProgress(null);
     }
   }
 
@@ -258,8 +370,13 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                     <FormItem>
                       <FormLabel>单词/短语</FormLabel>
                       <FormControl>
-                        <Input placeholder="例如：ephemeral / take off" {...field} />
+                        <Textarea
+                          placeholder={"例如：\nephemeral, take off\nlook up"}
+                          className="min-h-[96px]"
+                          {...field}
+                        />
                       </FormControl>
+                      <div className="text-xs text-muted-foreground">支持换行或逗号分隔，可一次添加多条。</div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -268,7 +385,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      正在添加...
+                      {submitProgress ? `正在添加... (${submitProgress.current}/${submitProgress.total})` : "正在添加..."}
                     </>
                   ) : (
                     <>
@@ -290,6 +407,23 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                       </AlertDescription>
                     </Alert>
                   )}
+                  {hasCameraPermission === true && (
+                    <div className="text-center text-sm text-muted-foreground">默认优先后置摄像头。</div>
+                  )}
+                  {canSwitchCamera && hasCameraPermission === true && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSwitchCamera}
+                      disabled={isAnalyzing}
+                      className="w-full"
+                      aria-label="切换摄像头"
+                      title="切换前后摄像头"
+                    >
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      切换摄像头
+                    </Button>
+                  )}
                   <Button type="button" onClick={handleCapture} disabled={!hasCameraPermission || isAnalyzing} className="w-full">
                     {isAnalyzing ? (
                       <>
@@ -308,21 +442,41 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
               <TabsContent value="upload">
                 <div className="space-y-4 mt-4">
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                    <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={isAnalyzing} className="w-full">
-                       {isAnalyzing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          正在识别...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="mr-2 h-4 w-4" />
-                          选择图片并识别
-                        </>
+                    {uploadPreviewDataUri && (
+                      <div className="rounded-md border overflow-hidden">
+                        <img src={uploadPreviewDataUri} alt="图片预览" className="w-full h-auto" />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={isAnalyzing} className="flex-1">
+                         {isAnalyzing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            正在识别...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            {uploadPreviewDataUri ? "重新选择" : "选择图片并识别"}
+                          </>
+                        )}
+                      </Button>
+                      {uploadPreviewDataUri && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleClearUpload}
+                          className="flex-1"
+                          aria-label="清空已选图片"
+                          title="清空"
+                        >
+                          清空
+                        </Button>
                       )}
-                    </Button>
+                    </div>
                     <div className="text-center text-sm text-muted-foreground">
-                      <p>点击上方按钮，从设备中选择图片进行识别。</p>
+                      <p>{uploadPreviewDataUri ? "可重新选择或清空当前图片。" : "点击上方按钮，从设备中选择图片进行识别。"}</p>
                     </div>
                   </div>
               </TabsContent>

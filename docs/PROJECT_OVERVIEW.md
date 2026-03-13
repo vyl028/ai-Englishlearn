@@ -33,16 +33,19 @@
 三种采集方式：
 
 1) **Text（手动输入）**
-- 输入 `word`（可为单词或短语），系统自动识别常见词性并生成 1~N 个词条
+- 输入支持**单条或批量**：换行/逗号分隔；会逐条调用 AI 生成并汇总成功/失败
 - 点击“添加单词”后调用服务端 action：`defineTermAutoAction` → flow：`defineTermAuto`（`src/ai/flows/define-term-auto.ts`）→ AI 生成中文释义 + 单词拓展信息（搭配/同反义/例句/难度用法）→ 将多个词性条目加入单词列表
 
 2) **Camera（拍照识别）**
-- 申请摄像头权限，采集视频帧，转成 `data:image/jpeg;base64,...`
+- 申请摄像头权限，**默认优先后置摄像头**；若设备支持，提供“切换前后摄像头”
+- 采集视频帧，转成 `data:image/jpeg;base64,...`
 - 调用 `extractWordAndDefineAction` 自动识别图片中的多个单词，并生成中文释义 + 拓展信息后加入列表
 
 3) **Upload（上传图片识别）**
-- 选择本地图片，读取为 Data URI
+- 选择本地图片，读取为 Data URI；显示图片预览，支持“重新选择/清空”（清空会忽略本次识别结果）
 - 同 Camera 流程进行识别并加入列表
+
+补充：加入单词本前会检测重复（同 `word + partOfSpeech`），并提供：跳过 / 覆盖 / 仍然新增 选项。
 
 ### 2.2 单词复习（单词本）
 组件：`src/components/word-review-list.tsx`

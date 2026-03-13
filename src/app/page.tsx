@@ -70,6 +70,26 @@ type GlobalTask = {
   description?: string;
 };
 
+type DuplicateHandling = 'skip' | 'overwrite' | 'add' | 'cancel';
+
+type DuplicateWordItem = {
+  key: string;
+  word: string;
+  partOfSpeech: string;
+  existingCount: number;
+};
+
+function normalizePosKey(raw: string) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function normalizeWordPosKey(word: string, partOfSpeech: string) {
+  const termKey = normalizeTermKey(word);
+  const posKey = normalizePosKey(partOfSpeech);
+  if (!termKey || !posKey) return '';
+  return `${termKey}|${posKey}`;
+}
+
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
   const [groups, setGroups] = useState<WordGroup[]>([]);
@@ -90,6 +110,24 @@ export default function Home() {
   const { toast } = useToast();
   const levelInfo = getLevelInfo(gamification.xp);
   const isBusy = !!globalTask;
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{ items: DuplicateWordItem[]; total: number } | null>(
+    null
+  );
+  const duplicatePromptResolveRef = useRef<((choice: DuplicateHandling) => void) | null>(null);
+
+  const promptDuplicateHandling = (items: DuplicateWordItem[], total: number) => {
+    if (items.length === 0 || total <= 0) return Promise.resolve('add' as const);
+    return new Promise<DuplicateHandling>((resolve) => {
+      duplicatePromptResolveRef.current = resolve;
+      setDuplicatePrompt({ items, total });
+    });
+  };
+
+  const resolveDuplicateHandling = (choice: DuplicateHandling) => {
+    duplicatePromptResolveRef.current?.(choice);
+    duplicatePromptResolveRef.current = null;
+    setDuplicatePrompt(null);
+  };
 
   const startGlobalTask = (task: Omit<GlobalTask, 'id'>) => {
     const id = generateId();
@@ -246,26 +284,128 @@ export default function Home() {
     }
   }, [view]);
 
-  const addWordsToBook = (incoming: CapturedWord[], options?: { navigateToReview?: boolean }) => {
+  const addWordsToBook = async (incoming: CapturedWord[], options?: { navigateToReview?: boolean }) => {
+    if (incoming.length === 0) return;
+
     const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
-    const wordsToSave = incoming.map(({ photoDataUri, ...word }) => ({ ...word, groupId: autoGroupId }));
-    setWords((prevWords) => [...wordsToSave, ...prevWords]);
-    if (wordsToSave.length > 0) {
-      setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: wordsToSave.length }));
+
+    const existingCountByKey = new Map<string, number>();
+    for (const w of words) {
+      const key = normalizeWordPosKey(w.word, w.partOfSpeech);
+      if (!key) continue;
+      existingCountByKey.set(key, (existingCountByKey.get(key) || 0) + 1);
     }
+
+    const duplicateItemByKey = new Map<string, DuplicateWordItem>();
+    let totalDuplicates = 0;
+    for (const w of incoming) {
+      const key = normalizeWordPosKey(w.word, w.partOfSpeech);
+      if (!key) continue;
+      const existingCount = existingCountByKey.get(key) || 0;
+      if (existingCount <= 0) continue;
+
+      totalDuplicates++;
+      if (!duplicateItemByKey.has(key)) {
+        duplicateItemByKey.set(key, { key, word: w.word, partOfSpeech: w.partOfSpeech, existingCount });
+      }
+    }
+
+    let handling: DuplicateHandling = 'add';
+    if (totalDuplicates > 0) {
+      handling = await promptDuplicateHandling(Array.from(duplicateItemByKey.values()), totalDuplicates);
+      if (handling === 'cancel') {
+        toast({ title: "已取消加入", description: "未对单词本做任何修改。" });
+        return;
+      }
+    }
+
+    const mergeWords = (
+      prevWords: CapturedWord[],
+      strategy: Exclude<DuplicateHandling, 'cancel'>,
+    ) => {
+      const firstIndexByKey = new Map<string, number>();
+      for (let i = 0; i < prevWords.length; i++) {
+        const it = prevWords[i];
+        const key = normalizeWordPosKey(it.word, it.partOfSpeech);
+        if (!key) continue;
+        if (!firstIndexByKey.has(key)) firstIndexByKey.set(key, i);
+      }
+
+      const updates: CapturedWord[] = [...prevWords];
+      const prepend: CapturedWord[] = [];
+      let addedCount = 0;
+      let overwrittenCount = 0;
+      let skippedCount = 0;
+
+      for (const inc of incoming) {
+        const key = normalizeWordPosKey(inc.word, inc.partOfSpeech);
+        const existingIndex = key ? firstIndexByKey.get(key) : undefined;
+
+        if (existingIndex === undefined) {
+          const { photoDataUri, ...rest } = inc;
+          prepend.push({ ...rest, groupId: autoGroupId });
+          addedCount++;
+          continue;
+        }
+
+        if (strategy === 'skip') {
+          skippedCount++;
+          continue;
+        }
+
+        if (strategy === 'add') {
+          const { photoDataUri, ...rest } = inc;
+          prepend.push({ ...rest, groupId: autoGroupId });
+          addedCount++;
+          continue;
+        }
+
+        overwrittenCount++;
+        const existing = updates[existingIndex];
+        updates[existingIndex] = {
+          ...existing,
+          word: inc.word,
+          partOfSpeech: inc.partOfSpeech,
+          definition: inc.definition,
+          enrichment: inc.enrichment,
+        };
+      }
+
+      return {
+        nextWords: [...prepend, ...updates],
+        addedCount,
+        overwrittenCount,
+        skippedCount,
+      };
+    };
+
+    const expected = mergeWords(words, handling);
+    setWords((prev) => mergeWords(prev, handling).nextWords);
+
+    if (expected.addedCount > 0) {
+      setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: expected.addedCount }));
+    }
+
+    if (totalDuplicates > 0) {
+      toast({
+        title: "已处理重复词条",
+        description: `新增 ${expected.addedCount}，覆盖 ${expected.overwrittenCount}，跳过 ${expected.skippedCount}。`,
+      });
+    }
+
     if (options?.navigateToReview) setView('review');
   };
-  
+
   const handleWordAdded = (newWord: CapturedWord) => {
-    addWordsToBook([newWord], { navigateToReview: true });
+    void addWordsToBook([newWord], { navigateToReview: true });
   };
 
   const handleMultipleWordsAdded = (newWords: CapturedWord[]) => {
-    addWordsToBook(newWords, { navigateToReview: true });
+    void addWordsToBook(newWords, { navigateToReview: true });
   };
 
   const handleAddWordsFromArticle = (newWords: CapturedWord[]) => {
-    addWordsToBook(newWords, { navigateToReview: false });
+    void addWordsToBook(newWords, { navigateToReview: false });
   };
 
   const handleToggleMastered = (termKey: string, mastered: boolean) => {
@@ -679,6 +819,42 @@ export default function Home() {
               <Trash className="mr-2 h-4 w-4" />
               删除
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!duplicatePrompt}
+        onOpenChange={(open) => {
+          if (!open) resolveDuplicateHandling('cancel');
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>检测到重复词条</AlertDialogTitle>
+            <AlertDialogDescription>
+              你正在添加的内容中，有 {duplicatePrompt?.total || 0} 个词条在单词本里已存在（同 word + 词性）。请选择如何处理这些重复项。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <div className="text-sm font-medium">重复项（示例）</div>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              {(duplicatePrompt?.items || []).slice(0, 8).map((it) => (
+                <li key={it.key}>
+                  {it.word} · {it.partOfSpeech}
+                  {it.existingCount > 1 ? `（已存在 ${it.existingCount} 条）` : null}
+                </li>
+              ))}
+              {(duplicatePrompt?.items?.length || 0) > 8 ? (
+                <li>… 还有 {(duplicatePrompt!.items.length - 8)} 项未展示</li>
+              ) : null}
+            </ul>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => resolveDuplicateHandling('cancel')}>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => resolveDuplicateHandling('skip')}>跳过重复</AlertDialogAction>
+            <AlertDialogAction onClick={() => resolveDuplicateHandling('overwrite')}>覆盖已有</AlertDialogAction>
+            <AlertDialogAction onClick={() => resolveDuplicateHandling('add')}>仍然新增</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
