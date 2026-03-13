@@ -40,7 +40,7 @@ export function QuizView({ quizData, onBack }: QuizViewProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={onBack}>
+        <Button variant="outline" size="icon" onClick={onBack} aria-label="返回" title="返回">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h2 className="text-2xl font-bold font-headline">每周测验</h2>

@@ -8,7 +8,10 @@ import {
   GenerateStoryOutputSchema,
 } from '@/lib/types';
 
-export async function generateStory(input: GenerateStoryInput): Promise<GenerateStoryOutput> {
+export async function generateStory(
+  input: GenerateStoryInput,
+  options?: { signal?: AbortSignal }
+): Promise<GenerateStoryOutput> {
   GenerateStoryInputSchema.parse(input);
 
   const wordsToInclude = input.words.map(w => `- ${w.word} (${w.partOfSpeech}): ${w.definition}`).join('\n');
@@ -24,6 +27,7 @@ Your output MUST be a single, valid JSON object containing "title", "story", and
   const data = await generateJsonArray<GenerateStoryOutput>({
     systemPrompt,
     userPrompt,
+    signal: options?.signal,
     schemaHint: 'Return ONLY a valid JSON object with "title", "story", and "translation" fields, no markdown, no commentary.'
   });
 

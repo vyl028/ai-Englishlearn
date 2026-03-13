@@ -36,6 +36,7 @@ export async function generateText(
     image?: ImageInput; // data URI
     model?: string;
     options?: GenerateOptions;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
   const provider = getAiProvider();

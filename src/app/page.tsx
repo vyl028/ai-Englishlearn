@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Loader2, Trash, Trophy } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Loader2, Settings, Trash, Trophy } from 'lucide-react';
 import { AppSidebar } from "@/components/app-sidebar";
 import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
@@ -14,11 +14,12 @@ import { EssayReviewView } from '@/components/essay-review-view';
 import { ArticleReadingView } from '@/components/article-reading-view';
 import { SpeakingTrainingView } from '@/components/speaking-training-view';
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SettingsSheet } from "@/components/settings-sheet";
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
-import { getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
+import { getPrimaryNavView, getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
 import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
 import { Button } from '@/components/ui/button';
-import { exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
+import { exportStoryPdfAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -36,9 +37,38 @@ import {
 const WORDS_STORAGE_KEY = 'lexi-capture-words';
 const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
 const SELECTED_GROUP_STORAGE_KEY = 'lexi-capture-selected-group';
+const LAST_VIEW_STORAGE_KEY = 'lexi-capture-last-view';
+const THEME_STORAGE_KEY = 'lexi-theme';
 
 const ALL_GROUP_ID = '__all__';
 const UNGROUPED_GROUP_ID = '__ungrouped__';
+
+const APP_VIEW_SET = new Set<AppView>([
+  'capture',
+  'review',
+  'practice',
+  'story',
+  'essay',
+  'article',
+  'speaking',
+]);
+
+function normalizeStoredView(raw: unknown): AppView | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (!APP_VIEW_SET.has(trimmed as AppView)) return undefined;
+  return getPrimaryNavView(trimmed as AppView);
+}
+
+type GlobalTaskKind = 'practice' | 'story';
+
+type GlobalTask = {
+  id: string;
+  kind: GlobalTaskKind;
+  title: string;
+  description?: string;
+};
 
 export default function Home() {
   const [words, setWords] = useState<CapturedWord[]>([]);
@@ -51,11 +81,51 @@ export default function Home() {
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
   const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
   const [storyData, setStoryData] = useState<GenerateStoryOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [globalTask, setGlobalTask] = useState<GlobalTask | null>(null);
+  const globalTaskIdRef = useRef<string | null>(null);
+  const globalTaskAbortRef = useRef<AbortController | null>(null);
   const [gamification, setGamification] = useState<GamificationState>(() => createDefaultGamificationState());
   const [growthOpen, setGrowthOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { toast } = useToast();
   const levelInfo = getLevelInfo(gamification.xp);
+  const isBusy = !!globalTask;
+
+  const startGlobalTask = (task: Omit<GlobalTask, 'id'>) => {
+    const id = generateId();
+    globalTaskIdRef.current = id;
+    globalTaskAbortRef.current?.abort();
+    const controller = new AbortController();
+    globalTaskAbortRef.current = controller;
+    setGlobalTask({ id, ...task });
+    return { id, signal: controller.signal };
+  };
+
+  const endGlobalTask = (taskId: string) => {
+    if (globalTaskIdRef.current !== taskId) return;
+    globalTaskIdRef.current = null;
+    globalTaskAbortRef.current = null;
+    setGlobalTask(null);
+  };
+
+  const cancelGlobalTask = () => {
+    if (!globalTaskIdRef.current) return;
+    globalTaskAbortRef.current?.abort();
+    globalTaskIdRef.current = null;
+    globalTaskAbortRef.current = null;
+    setGlobalTask(null);
+    toast({ title: "已取消生成", description: "已恢复操作。" });
+  };
+
+  const postJson = async <T,>(url: string, body: unknown, signal: AbortSignal): Promise<T> => {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    return (await resp.json()) as T;
+  };
 
   useEffect(() => {
     const normalizeGroups = (raw: any): WordGroup[] => {
@@ -116,6 +186,9 @@ export default function Home() {
 
       const rawGamification = readJson(GAMIFICATION_STORAGE_KEY);
       setGamification(normalizeGamificationState(rawGamification));
+
+      const storedView = normalizeStoredView(localStorage.getItem(LAST_VIEW_STORAGE_KEY));
+      if (storedView) setView(storedView);
     } catch (error) {
       console.error("Failed to parse words from localStorage", error);
     }
@@ -163,6 +236,15 @@ export default function Home() {
       console.error("Failed to save selected group to localStorage", error);
     }
   }, [selectedGroupId]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(LAST_VIEW_STORAGE_KEY, getPrimaryNavView(view));
+    } catch (error) {
+      console.error("Failed to save last view to localStorage", error);
+    }
+  }, [view]);
 
   const addWordsToBook = (incoming: CapturedWord[], options?: { navigateToReview?: boolean }) => {
     const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
@@ -263,47 +345,99 @@ export default function Home() {
     practiceWords: CapturedWord[],
     options: { questionCount: number; allowedTypes: PracticeQuestionType[] }
   ) => {
-    setIsLoading(true);
-    toast({ title: "正在生成练习...", description: "AI 正在生成题目，请稍等片刻。" });
+    if (isBusy) return;
+
+    const { id: taskId, signal } = startGlobalTask({
+      kind: 'practice',
+      title: "正在生成练习...",
+      description: "AI 正在生成题目，请稍等片刻。",
+    });
     const input = {
       words: practiceWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
       questionCount: options.questionCount,
       allowedTypes: options.allowedTypes,
     };
-    const result = await generatePracticeAction(input);
-    if (result.success && result.data) {
-      setPracticeData(result.data);
-      setView('practice');
-    } else {
+
+    try {
+      const result = await postJson<{
+        success: boolean;
+        data?: { questions: GeneratePracticeOutput };
+        error?: string;
+      }>('/api/ai/generate-practice', input, signal);
+      if (globalTaskIdRef.current !== taskId) return;
+
+      if (result.success && result.data) {
+        setPracticeData(result.data);
+        setView('practice');
+        return;
+      }
+
+      if (result.error === 'aborted') return;
+
       toast({
         variant: "destructive",
         title: "练习生成失败",
         description: result.error || "发生未知错误，请稍后重试。",
       });
+    } catch (error: any) {
+      if (globalTaskIdRef.current !== taskId) return;
+      if (error?.name === 'AbortError') return;
+      toast({
+        variant: "destructive",
+        title: "练习生成失败",
+        description: error?.message || "发生未知错误，请稍后重试。",
+      });
+    } finally {
+      endGlobalTask(taskId);
     }
-    setIsLoading(false);
   };
 
   const handleGenerateStory = async (storyWords: CapturedWord[]) => {
-    setIsLoading(true);
-    toast({ title: "正在生成故事...", description: "AI 正在生成故事内容，请稍等片刻。" });
+    if (isBusy) return;
+
+    const { id: taskId, signal } = startGlobalTask({
+      kind: 'story',
+      title: "正在生成故事...",
+      description: "AI 正在生成故事内容，请稍等片刻。",
+    });
     const input = {
       words: storyWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
     };
-    const result = await generateStoryAction(input);
-    if (result.success && result.data) {
-      setStoryData(result.data);
-      setView('story');
-      setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
-      toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
-    } else {
+
+    try {
+      const result = await postJson<{ success: boolean; data?: GenerateStoryOutput; error?: string }>(
+        '/api/ai/generate-story',
+        input,
+        signal
+      );
+      if (globalTaskIdRef.current !== taskId) return;
+
+      if (result.success && result.data) {
+        setStoryData(result.data);
+        setView('story');
+        setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
+        toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
+        return;
+      }
+
+      if (result.error === 'aborted') return;
+
       toast({
         variant: "destructive",
         title: "故事生成失败",
         description: result.error || "发生未知错误，请稍后重试。",
       });
+    } catch (error: any) {
+      if (globalTaskIdRef.current !== taskId) return;
+      if (error?.name === 'AbortError') return;
+      toast({
+        variant: "destructive",
+        title: "故事生成失败",
+        description: error?.message || "发生未知错误，请稍后重试。",
+      });
+    } finally {
+      endGlobalTask(taskId);
     }
-    setIsLoading(false);
   };
 
   const handleExportStoryPdf = async (data: GenerateStoryOutput) => {
@@ -326,13 +460,53 @@ export default function Home() {
     }
   };
 
+  const handleResetLocalData = () => {
+    if (!hydrated) return;
+
+    try {
+      localStorage.removeItem(WORDS_STORAGE_KEY);
+      localStorage.removeItem(GROUPS_STORAGE_KEY);
+      localStorage.removeItem(SELECTED_GROUP_STORAGE_KEY);
+      localStorage.removeItem(GAMIFICATION_STORAGE_KEY);
+      localStorage.removeItem(LAST_VIEW_STORAGE_KEY);
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } catch (error) {
+      console.error("Failed to reset localStorage", error);
+    }
+
+    setWords([]);
+    setGroups([]);
+    setSelectedGroupId(ALL_GROUP_ID);
+    setView('capture');
+    setPracticeData(null);
+    setStoryData(null);
+    setEditingWord(null);
+    setIsEditDialogOpen(false);
+    setWordToDelete(null);
+    globalTaskAbortRef.current?.abort();
+    globalTaskIdRef.current = null;
+    globalTaskAbortRef.current = null;
+    setGlobalTask(null);
+    setGrowthOpen(false);
+    setGamification(createDefaultGamificationState());
+
+    try {
+      const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
+      document.documentElement.classList.toggle("dark", prefersDark);
+    } catch {
+      // ignore
+    }
+
+    toast({ title: "已清空本机数据", description: "单词本、分组、成长与设置已重置。" });
+  };
+
   const renderContent = () => {
-    if (isLoading) {
+    if (isBusy) {
       return (
         <div className="flex flex-col items-center justify-center text-center py-16">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <h3 className="text-lg font-medium">AI 正在处理中...</h3>
-          <p className="text-sm text-muted-foreground">请稍等片刻。</p>
+          <h3 className="text-lg font-medium">{globalTask?.title || "AI 正在处理中..."}</h3>
+          <p className="text-sm text-muted-foreground">{globalTask?.description || "请稍等片刻。"}</p>
         </div>
       );
     }
@@ -395,17 +569,27 @@ export default function Home() {
     }
   };
 
-  const contentMaxWidthClass =
-    view === "essay" || view === "article" || view === "speaking" ? "max-w-5xl" : "max-w-3xl";
+  const contentMaxWidthClass = view === "capture" ? "max-w-3xl" : "max-w-5xl";
   const viewDescription = getViewDescription(view);
 
   return (
     <SidebarProvider defaultOpen>
-      <AppSidebar view={view} onNavigate={setView} />
+      <AppSidebar
+        view={view}
+        busy={isBusy}
+        onNavigate={(nextView) => {
+          if (isBusy) return;
+          setView(nextView);
+        }}
+      />
       <SidebarInset>
         <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-14 items-center gap-2 px-4">
-            <SidebarTrigger />
+          <div className="flex h-14 items-center gap-2 px-4 md:px-6">
+            <SidebarTrigger
+              disabled={isBusy}
+              aria-label="切换侧边栏"
+              title="切换侧边栏"
+            />
             <div className="min-w-0 flex-1">
               <div className="font-semibold leading-tight truncate">{getViewLabel(view)}</div>
               {viewDescription && (
@@ -422,6 +606,7 @@ export default function Home() {
                 size="sm"
                 className="h-9 px-3 gap-2"
                 onClick={() => setGrowthOpen(true)}
+                disabled={isBusy}
                 title={`成长：Lv.${levelInfo.level}，还差 ${levelInfo.xpToNextLevel} XP 升级`}
               >
                 <Trophy className="h-4 w-4" />
@@ -433,9 +618,40 @@ export default function Home() {
                   />
                 </span>
               </Button>
-              <ThemeToggle />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => setSettingsOpen(true)}
+                disabled={isBusy}
+                aria-label="设置"
+                title="设置"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <ThemeToggle disabled={isBusy} />
             </div>
           </div>
+
+          {globalTask && (
+            <div className="border-t bg-muted/30">
+              <div className="flex items-center justify-between gap-3 px-4 py-2 md:px-6">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="text-sm min-w-0 truncate">
+                    <span className="font-medium">{globalTask.title}</span>
+                    {globalTask.description && (
+                      <span className="hidden sm:inline text-muted-foreground"> · {globalTask.description}</span>
+                    )}
+                  </div>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={cancelGlobalTask}>
+                  取消生成
+                </Button>
+              </div>
+            </div>
+          )}
         </header>
 
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8">
@@ -473,6 +689,13 @@ export default function Home() {
         gamification={gamification}
         words={words}
         defaultDays={7}
+      />
+
+      <SettingsSheet
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onResetLocalData={handleResetLocalData}
+        busy={isBusy}
       />
     </SidebarProvider>
   );

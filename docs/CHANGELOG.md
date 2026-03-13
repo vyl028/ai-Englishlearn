@@ -4,6 +4,45 @@
 >
 > 注意：**不要**在此文件写入任何密钥/Token/账号密码等敏感信息（如 `.env` 内容），只描述“已新增/已配置”即可。
 
+## 2026-03-13
+
+### 新增/修改内容
+- 进度文档同步：项目概览补充“回退到编号选择阶段”的说明，并明确后续迭代从 `docs/IMPROVEMENT_BACKLOG.md` 选编号开始。
+- 清单 2：记住上次打开的主要模块（view），刷新后自动恢复。
+- 清单 4：全局生成（Practice/Story）期间禁用导航与顶部操作；顶部显示生成提示，并支持“取消生成”（使用 AbortController 中断请求；取消后不会应用结果）。
+- 清单 6：新增“设置”入口（主题、备份/导入/AI 预留、隐私与数据清理）。
+- 清单 9：统一内容宽度与 header/content 横向 padding。
+- 清单 10：全站 icon-only 按钮补齐 `aria-label/title`，提升键盘可达性与焦点可见性。
+
+### 涉及文件
+- 修改：`src/app/page.tsx`
+- 修改：`src/ai/llm.ts`
+- 修改：`src/ai/gemini.ts`
+- 修改：`src/ai/openai.ts`
+- 修改：`src/ai/flows/generate-practice.ts`
+- 修改：`src/ai/flows/generate-story.ts`
+- 修改：`src/components/app-sidebar.tsx`
+- 修改：`src/components/theme-toggle.tsx`
+- 修改：`src/components/practice-view.tsx`
+- 修改：`src/components/story-view.tsx`
+- 修改：`src/components/quiz-view.tsx`
+- 修改：`src/components/word-review-list.tsx`
+- 修改：`src/components/ui/sidebar.tsx`
+- 修改：`src/components/ui/dialog.tsx`
+- 修改：`src/components/ui/sheet.tsx`
+- 修改：`src/components/ui/carousel.tsx`
+- 修改：`docs/PROJECT_OVERVIEW.md`
+
+### 背景/原因
+- 进入“按编号清单迭代”的协作节奏，先落地基础的使用习惯、可取消生成、设置入口与可访问性改进。
+
+### 如何验证
+- 运行：`npm run dev`
+- 切换到任一模块（如“文章阅读”）→ 刷新页面，确认会恢复到上次模块。
+- 在“单词本”生成 Practice/Story 时观察顶部提示；点击“取消生成”，确认导航恢复且不会跳转到结果页。
+- 点击右上角“设置”按钮，确认可打开设置抽屉；点击“清空本机数据”后刷新，确认数据与上次模块被清空。
+- Tab 聚焦返回/设置/侧边栏 trigger 等纯图标按钮，确认有可读的提示（title）且焦点可见。
+
 ## 2026-03-11
 
 ### 新增/修改内容

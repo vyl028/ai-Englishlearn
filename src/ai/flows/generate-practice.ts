@@ -100,7 +100,10 @@ function coercePracticeOutput(raw: unknown): unknown {
   });
 }
 
-export async function generatePractice(input: GeneratePracticeInput): Promise<GeneratePracticeOutput> {
+export async function generatePractice(
+  input: GeneratePracticeInput,
+  options?: { signal?: AbortSignal }
+): Promise<GeneratePracticeOutput> {
   const parsed = GeneratePracticeInputSchema.parse(input);
 
   const questionCount = Math.min(30, Math.max(1, parsed.questionCount ?? 10));
@@ -177,6 +180,7 @@ Rules:
   const data = await generateJsonArray<GeneratePracticeOutput>({
     systemPrompt,
     userPrompt,
+    signal: options?.signal,
     schemaHint: 'Return ONLY a valid JSON array of question objects, no markdown, no commentary.',
   });
 

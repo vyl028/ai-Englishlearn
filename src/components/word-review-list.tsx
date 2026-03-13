@@ -530,6 +530,8 @@ export function WordReviewList({
                                     variant="ghost"
                                     size="icon"
                                     className={`h-8 w-8 ${isMastered ? "text-primary" : "text-muted-foreground"}`}
+                                    aria-label={isMastered ? "取消掌握" : "标记为已掌握"}
+                                    title={isMastered ? "已掌握（点击取消）" : "标记为已掌握"}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       onToggleMastered(g.key, !isMastered);
@@ -551,6 +553,8 @@ export function WordReviewList({
                                     variant="ghost"
                                     size="icon"
                                     className={`h-8 w-8 ${isDefinitionOpen ? "text-foreground" : "text-muted-foreground"}`}
+                                    aria-label={isDefinitionOpen ? "隐藏释义" : "显示释义"}
+                                    title={isDefinitionOpen ? "隐藏释义" : "显示释义"}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setDefinitionOpen(groupKey, !isDefinitionOpen);
@@ -565,7 +569,7 @@ export function WordReviewList({
                                 </TooltipContent>
                               </Tooltip>
                             </div>
-                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
+                             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="编辑单词" title="编辑单词" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
                                <Pencil className="h-4 w-4" />
                                <span className="sr-only">编辑单词</span>
                              </Button>
@@ -573,12 +577,14 @@ export function WordReviewList({
                                variant="ghost"
                                size="icon"
                                className="h-8 w-8"
+                               aria-label="移动分组"
+                               title="移动分组"
                                onClick={(e) => { e.stopPropagation(); openMoveDialog(selected); }}
                              >
                                <FolderInput className="h-4 w-4" />
                                <span className="sr-only">移动分组</span>
                              </Button>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteWord(selected); }}>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" aria-label="删除单词" title="删除单词" onClick={(e) => { e.stopPropagation(); onDeleteWord(selected); }}>
                                <Trash className="h-4 w-4" />
                                <span className="sr-only">删除单词</span>
                              </Button>

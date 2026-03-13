@@ -49,14 +49,19 @@ export async function generateText(
     image,
     model = 'gemini-2.5-flash',
     options = {},
+    signal,
   }: {
     systemPrompt?: string;
     userPrompt: string;
     image?: ImageInput; // data URI
     model?: string;
     options?: GenerateOptions;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
+  if (signal?.aborted) {
+    throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+  }
   if (!API_KEY) throw new Error('No GOOGLE_API_KEY / GEMINI_API_KEY provided');
 
   // If no proxy base, use SDK.
@@ -115,6 +120,7 @@ export async function generateText(
         'x-goog-api-key': API_KEY,
       },
       body: JSON.stringify(reqBody),
+      signal,
     });
   } catch (netErr: any) {
     console.error('[Gemini] Network error calling proxy:', netErr?.message || netErr);

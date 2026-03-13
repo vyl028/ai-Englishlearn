@@ -213,6 +213,8 @@ const CarouselPrevious = React.forwardRef<
         className
       )}
       disabled={!canScrollPrev}
+      aria-label="上一张"
+      title="上一张"
       onClick={scrollPrev}
       {...props}
     >
@@ -242,6 +244,8 @@ const CarouselNext = React.forwardRef<
         className
       )}
       disabled={!canScrollNext}
+      aria-label="下一张"
+      title="下一张"
       onClick={scrollNext}
       {...props}
     >

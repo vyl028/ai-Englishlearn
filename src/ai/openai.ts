@@ -30,12 +30,14 @@ export async function generateText(
     image,
     model = process.env.OPENAI_MODEL || 'gpt-4o-mini',
     options = {},
+    signal,
   }: {
     systemPrompt?: string;
     userPrompt: string;
     image?: ImageInput; // data URI
     model?: string;
     options?: GenerateOptions;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -76,6 +78,7 @@ export async function generateText(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal,
     });
   } catch (netErr: any) {
     console.error('[OpenAI] Network error:', netErr?.message || netErr);

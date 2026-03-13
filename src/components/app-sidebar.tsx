@@ -34,7 +34,15 @@ const NAV_ITEMS: NavItem[] = [
   { id: "essay", label: "作文批改", icon: FileText },
 ];
 
-export function AppSidebar({ view, onNavigate }: { view: AppView; onNavigate: (view: AppView) => void }) {
+export function AppSidebar({
+  view,
+  onNavigate,
+  busy = false,
+}: {
+  view: AppView;
+  onNavigate: (view: AppView) => void;
+  busy?: boolean;
+}) {
   const active = getPrimaryNavView(view);
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -65,6 +73,7 @@ export function AppSidebar({ view, onNavigate }: { view: AppView; onNavigate: (v
                     <SidebarMenuButton
                       isActive={active === item.id}
                       tooltip={item.label}
+                      disabled={busy}
                       onClick={() => {
                         onNavigate(item.id);
                         if (isMobile) setOpenMobile(false);

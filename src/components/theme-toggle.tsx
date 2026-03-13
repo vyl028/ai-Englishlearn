@@ -20,7 +20,7 @@ function applyTheme(theme: Theme) {
   root.classList.toggle("dark", theme === "dark");
 }
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({ className, disabled = false }: { className?: string; disabled?: boolean }) {
   const [theme, setTheme] = React.useState<Theme>("light");
   const [mounted, setMounted] = React.useState(false);
 
@@ -63,6 +63,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       className={cn("h-9 w-9", className)}
       aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
       title={theme === "dark" ? "浅色模式" : "深色模式"}
+      disabled={disabled}
       onClick={() => {
         try {
           localStorage.setItem(THEME_STORAGE_KEY, nextTheme);

@@ -129,7 +129,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted }: PracticeView
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={onBack}>
+        <Button variant="outline" size="icon" onClick={onBack} aria-label="返回单词本" title="返回单词本">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex items-center justify-between w-full gap-3">
