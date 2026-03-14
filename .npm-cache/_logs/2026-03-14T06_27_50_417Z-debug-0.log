@@ -1,0 +1,67 @@
+0 verbose cli D:\Nodejs\node.exe D:\nodejs\node_global\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.9.0
+2 info using node@v25.2.1
+3 silly config load:file:D:\nodejs\node_global\node_modules\npm\npmrc
+4 silly config load:file:D:\University\毕设\studio\.npmrc
+5 silly config load:file:C:\Users\VYL\.npmrc
+6 silly config load:file:D:\nodejs\node_global\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install" "--no-offline" "--cache" ".\\.npm-cache" "--no-audit" "--no-fund"
+9 verbose logfile logs-max:10 dir:D:\University\毕设\studio\.npm-cache\_logs\2026-03-14T06_27_50_417Z-
+10 verbose logfile D:\University\毕设\studio\.npm-cache\_logs\2026-03-14T06_27_50_417Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET https://mirrors.cloud.tencent.com/npm/npm attempt 1 failed with ECONNREFUSED
+13 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+14 silly idealTree buildDeps
+15 silly fetch manifest eslint@^8.57.0
+16 silly packumentCache full:https://mirrors.cloud.tencent.com/npm/eslint cache-miss
+17 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint attempt 1 failed with ECONNREFUSED
+18 http fetch GET https://mirrors.cloud.tencent.com/npm/npm attempt 2 failed with ECONNREFUSED
+19 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint attempt 2 failed with ECONNREFUSED
+20 http fetch GET https://mirrors.cloud.tencent.com/npm/npm attempt 3 failed with ECONNREFUSED
+21 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint attempt 3 failed with ECONNREFUSED
+22 silly fetch manifest eslint-config-next@15.3.3
+23 silly packumentCache full:https://mirrors.cloud.tencent.com/npm/eslint-config-next cache-miss
+24 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint-config-next attempt 1 failed with ECONNREFUSED
+25 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint-config-next attempt 2 failed with ECONNREFUSED
+26 http fetch GET https://mirrors.cloud.tencent.com/npm/eslint-config-next attempt 3 failed with ECONNREFUSED
+27 silly placeDep ROOT eslint@ OK for: nextn@0.1.0 want: ^8.57.0
+28 silly placeDep ROOT eslint-config-next@ OK for: nextn@0.1.0 want: 15.3.3
+29 verbose type system
+30 verbose stack FetchError: request to https://mirrors.cloud.tencent.com/npm/eslint failed, reason: connect ECONNREFUSED 127.0.0.1:9
+30 verbose stack     at ClientRequest.<anonymous> (D:\nodejs\node_global\node_modules\npm\node_modules\minipass-fetch\lib\index.js:130:14)
+30 verbose stack     at ClientRequest.emit (node:events:508:28)
+30 verbose stack     at emitErrorEvent (node:_http_client:108:11)
+30 verbose stack     at _destroy (node:_http_client:962:9)
+30 verbose stack     at onSocketNT (node:_http_client:982:5)
+30 verbose stack     at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+31 error code ECONNREFUSED
+32 error syscall connect
+33 error errno ECONNREFUSED
+34 error FetchError: request to https://mirrors.cloud.tencent.com/npm/eslint failed, reason: connect ECONNREFUSED 127.0.0.1:9
+34 error     at ClientRequest.<anonymous> (D:\nodejs\node_global\node_modules\npm\node_modules\minipass-fetch\lib\index.js:130:14)
+34 error     at ClientRequest.emit (node:events:508:28)
+34 error     at emitErrorEvent (node:_http_client:108:11)
+34 error     at _destroy (node:_http_client:962:9)
+34 error     at onSocketNT (node:_http_client:982:5)
+34 error     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+34 error   code: 'ECONNREFUSED',
+34 error   errno: 'ECONNREFUSED',
+34 error   syscall: 'connect',
+34 error   address: '127.0.0.1',
+34 error   port: 9,
+34 error   type: 'system',
+34 error   requiredBy: '.'
+34 error }
+35 error
+35 error If you are behind a proxy, please make sure that the
+35 error 'proxy' config is set properly.  See: 'npm help config'
+36 silly unfinished npm timer reify 1773469671967
+37 silly unfinished npm timer reify:loadTrees 1773469671968
+38 verbose cwd D:\University\毕设\studio
+39 verbose os Windows_NT 10.0.26200
+40 verbose node v25.2.1
+41 verbose npm  v10.9.0
+42 verbose exit 1
+43 verbose code 1
+44 error A complete log of this run can be found in: D:\University\毕设\studio\.npm-cache\_logs\2026-03-14T06_27_50_417Z-debug-0.log

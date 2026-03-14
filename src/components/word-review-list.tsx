@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff, Search, Copy, Loader2, RefreshCcw, GripVertical } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import type { CapturedWord, PracticeQuestionType, WordGroup } from '@/lib/types';
 import { normalizeTermKey } from '@/lib/gamification';
@@ -28,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface WordReviewListProps {
   words: CapturedWord[];
@@ -37,16 +38,23 @@ interface WordReviewListProps {
   onAddGroup: (name: string) => void;
   onRenameGroup: (groupId: string, name: string) => void;
   onDeleteGroup: (groupId: string) => void;
+  onReorderGroups: (nextGroups: WordGroup[]) => void;
   onMoveWordToGroup: (wordId: string, groupId: string) => void;
+  onMoveWordsToGroup: (wordIds: string[], groupId: string) => void;
   onEditWord: (word: CapturedWord) => void;
   onDeleteWord: (word: CapturedWord) => void;
+  onDeleteWords: (wordIds: string[]) => void;
   onToggleMastered: (termKey: string, mastered: boolean) => void;
+  onSetTermsMastered: (termKeys: string[], mastered: boolean) => void;
+  onRegenerateWord: (word: CapturedWord) => Promise<{ success: boolean; error?: string }>;
   onGeneratePractice: (words: CapturedWord[], options: { questionCount: number; allowedTypes: PracticeQuestionType[] }) => void;
   onGenerateStory: (words: CapturedWord[]) => void;
 }
 
 type GeneratorMode = 'practice' | 'story';
 type WordPickScope = 'group' | 'week' | 'month' | 'manual';
+type MasteryFilter = 'all' | 'mastered' | 'unmastered';
+type ReviewSort = 'newest' | 'oldest' | 'az';
 
 const ALL_GROUP_ID = '__all__';
 const UNGROUPED_GROUP_ID = '__ungrouped__';
@@ -92,6 +100,52 @@ function posOrderIndex(pos: string) {
   const key = normalizePosKey(pos);
   const idx = POS_ORDER.indexOf(key as any);
   return idx === -1 ? POS_ORDER.length : idx;
+}
+
+function includesNormalized(haystack: unknown, needle: string) {
+  if (!needle) return true;
+  if (haystack === null || haystack === undefined) return false;
+  return String(haystack).toLowerCase().includes(needle);
+}
+
+function wordMatchesSearch(w: CapturedWord, normalizedSearch: string) {
+  if (!normalizedSearch) return true;
+
+  if (includesNormalized(w.word, normalizedSearch)) return true;
+  if (includesNormalized(w.partOfSpeech, normalizedSearch)) return true;
+  if (includesNormalized(w.definition, normalizedSearch)) return true;
+
+  const e = (w as any)?.enrichment;
+  if (!e) return false;
+
+  if (includesNormalized(e?.level?.cefr, normalizedSearch)) return true;
+  if (includesNormalized(e?.level?.usageZh, normalizedSearch)) return true;
+
+  const collocations = Array.isArray(e?.collocations) ? e.collocations : [];
+  for (const c of collocations) {
+    if (includesNormalized(c?.phrase, normalizedSearch)) return true;
+    if (includesNormalized(c?.meaningZh, normalizedSearch)) return true;
+    if (includesNormalized(c?.exampleEn, normalizedSearch)) return true;
+    if (includesNormalized(c?.exampleZh, normalizedSearch)) return true;
+  }
+
+  const synonyms = Array.isArray(e?.synonyms) ? e.synonyms : [];
+  for (const s of synonyms) {
+    if (includesNormalized(s, normalizedSearch)) return true;
+  }
+
+  const antonyms = Array.isArray(e?.antonyms) ? e.antonyms : [];
+  for (const a of antonyms) {
+    if (includesNormalized(a, normalizedSearch)) return true;
+  }
+
+  const examples = Array.isArray(e?.examples) ? e.examples : [];
+  for (const ex of examples) {
+    if (includesNormalized(ex?.en, normalizedSearch)) return true;
+    if (includesNormalized(ex?.zh, normalizedSearch)) return true;
+  }
+
+  return false;
 }
 
 type TermGroup = {
@@ -156,15 +210,34 @@ export function WordReviewList({
   onAddGroup,
   onRenameGroup,
   onDeleteGroup,
+  onReorderGroups,
   onMoveWordToGroup,
+  onMoveWordsToGroup,
   onEditWord,
   onDeleteWord,
+  onDeleteWords,
   onToggleMastered,
+  onSetTermsMastered,
+  onRegenerateWord,
   onGeneratePractice,
   onGenerateStory,
 }: WordReviewListProps) {
   const [definitionOpenKeys, setDefinitionOpenKeys] = useState<Set<string>>(new Set());
   const [variantSelection, setVariantSelection] = useState<Record<string, string>>({});
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [masteryFilter, setMasteryFilter] = useState<MasteryFilter>('all');
+  const [reviewSort, setReviewSort] = useState<ReviewSort>('newest');
+  const { toast } = useToast();
+  const [regeneratingWordIds, setRegeneratingWordIds] = useState<Set<string>>(new Set());
+
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedCardKeys, setBulkSelectedCardKeys] = useState<Set<string>>(new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveTargetGroupId, setBulkMoveTargetGroupId] = useState<string>(UNGROUPED_GROUP_ID);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
 
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -192,6 +265,19 @@ export function WordReviewList({
     reorder: true,
   });
 
+  useEffect(() => {
+    if (!bulkMode) setBulkSelectedCardKeys(new Set());
+  }, [bulkMode]);
+
+  useEffect(() => {
+    setBulkSelectedCardKeys(new Set());
+  }, [selectedGroupId]);
+
+  useEffect(() => {
+    if (!bulkMode) return;
+    setBulkSelectedCardKeys(new Set());
+  }, [reviewSearch, masteryFilter]);
+
   const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
   const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
 
@@ -202,6 +288,7 @@ export function WordReviewList({
   const viewWords = selectedGroupId === ALL_GROUP_ID
     ? allSortedWords
     : allSortedWords.filter((w) => getWordGroupId(w) === selectedGroupId);
+  const normalizedReviewSearch = reviewSearch.trim().toLowerCase();
 
   const selectedWords = allSortedWords.filter(w => selectedWordIds.has(w.id));
 
@@ -267,12 +354,128 @@ export function WordReviewList({
     return acc;
   }, {} as Record<string, CapturedWord[]>);
 
-  const weekKeys = Object.keys(groupedWords).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  const baseWeekKeys = Object.keys(groupedWords).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  const weekKeys = reviewSort === 'oldest' ? [...baseWeekKeys].reverse() : baseWeekKeys;
+
+  const weekSections = weekKeys
+    .map((weekKey) => {
+      const termGroups = groupWordsByTerm(groupedWords[weekKey]);
+      const afterSearch = normalizedReviewSearch.length === 0
+        ? termGroups
+        : termGroups.filter((tg) => tg.words.some((w) => wordMatchesSearch(w, normalizedReviewSearch)));
+      const afterMastery = masteryFilter === 'all'
+        ? afterSearch
+        : afterSearch.filter((tg) => {
+          const isMastered = tg.words.some((w) => w.mastered === true);
+          return masteryFilter === 'mastered' ? isMastered : !isMastered;
+        });
+      const sorted = [...afterMastery].sort((a, b) => {
+        if (reviewSort === 'az') return a.key.localeCompare(b.key);
+        const diff = a.latestCapturedAt.getTime() - b.latestCapturedAt.getTime();
+        return reviewSort === 'oldest' ? diff : -diff;
+      });
+      return { weekKey, groups: sorted };
+    })
+    .filter((s) => s.groups.length > 0);
+
+  const visibleCards = weekSections.flatMap(({ weekKey, groups: list }) =>
+    list.map((g) => ({
+      cardKey: `${weekKey}::${g.key}`,
+      weekKey,
+      termKey: g.key,
+      display: g.display,
+      words: g.words,
+    }))
+  );
+
+  const bulkSelectedCards = visibleCards.filter((c) => bulkSelectedCardKeys.has(c.cardKey));
+  const bulkSelectedCardCount = bulkSelectedCards.length;
+  const bulkSelectedWordIds = Array.from(new Set(bulkSelectedCards.flatMap((c) => c.words.map((w) => w.id))));
+  const bulkSelectedTermKeys = Array.from(new Set(bulkSelectedCards.map((c) => c.termKey)));
 
   const getWeekRange = (weekKey: string) => {
     const weekStart = new Date(weekKey);
     const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
     return `${format(weekStart, 'MMMM d')} - ${format(weekEnd, 'MMMM d, yyyy')}`;
+  };
+
+  const copyToClipboard = async (text: string, kind: "单词" | "释义") => {
+    try {
+      await navigator.clipboard.writeText(String(text || ""));
+      toast({ title: "已复制", description: `${kind}已复制到剪贴板。` });
+    } catch {
+      toast({ variant: "destructive", title: "复制失败", description: "浏览器可能不允许复制，请手动选择复制。" });
+    }
+  };
+
+  const handleRegenerate = async (w: CapturedWord) => {
+    if (!w?.id) return;
+    if (regeneratingWordIds.has(w.id)) return;
+
+    setRegeneratingWordIds((prev) => {
+      const next = new Set(prev);
+      next.add(w.id);
+      return next;
+    });
+
+    try {
+      const result = await onRegenerateWord(w);
+      if (result.success) {
+        toast({ title: "已重新生成", description: `已更新 “${w.word}” 的释义与拓展信息。` });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "重新生成失败",
+          description: result.error || "发生未知错误，请稍后重试。",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "重新生成失败",
+        description: error?.message || "发生未知错误，请稍后重试。",
+      });
+    } finally {
+      setRegeneratingWordIds((prev) => {
+        const next = new Set(prev);
+        next.delete(w.id);
+        return next;
+      });
+    }
+  };
+
+  const normalizeGroupName = (name: string) => String(name || '').trim().replace(/\s+/g, ' ');
+  const GROUP_NAME_MAX_LEN = 30;
+
+  const validateGroupName = (name: string, options?: { excludeId?: string }) => {
+    const cleaned = normalizeGroupName(name);
+    if (!cleaned) return "请输入分组名称。";
+    if (cleaned.length > GROUP_NAME_MAX_LEN) return `分组名称过长（最多 ${GROUP_NAME_MAX_LEN} 个字符）。`;
+
+    const target = cleaned.toLowerCase();
+    const dup = groups.some((g) => {
+      if (options?.excludeId && g.id === options.excludeId) return false;
+      return normalizeGroupName(g.name).toLowerCase() === target;
+    });
+    if (dup) return "分组名称已存在，请换一个。";
+    return null;
+  };
+
+  const newGroupNameClean = normalizeGroupName(newGroupName);
+  const newGroupError = newGroupName.length > 0 ? validateGroupName(newGroupNameClean) : null;
+  const editingGroupNameClean = normalizeGroupName(editingGroupName);
+  const editingGroupError = editingGroupId ? validateGroupName(editingGroupNameClean, { excludeId: editingGroupId }) : null;
+
+  const moveGroupOrder = (fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const fromIdx = groups.findIndex((g) => g.id === fromId);
+    const toIdx = groups.findIndex((g) => g.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    const next = [...groups];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onReorderGroups(next);
   };
  
    const handleWordClick = (word: string) => {
@@ -388,7 +591,9 @@ export function WordReviewList({
 
   const saveRename = () => {
       if (!editingGroupId) return;
-      onRenameGroup(editingGroupId, editingGroupName);
+      const err = validateGroupName(editingGroupNameClean, { excludeId: editingGroupId });
+      if (err) return;
+      onRenameGroup(editingGroupId, editingGroupNameClean);
       cancelRename();
     };
    
@@ -400,6 +605,18 @@ export function WordReviewList({
            <div className="flex items-center gap-3">
              <Sparkles className="h-6 w-6 text-primary" />
              <h2 className="text-2xl font-bold font-headline">我的单词本</h2>
+           </div>
+           <div className="flex items-center gap-2">
+             <Button
+               type="button"
+               variant={bulkMode ? "secondary" : "outline"}
+               size="sm"
+               onClick={() => setBulkMode((prev) => !prev)}
+               aria-label="批量选择"
+               title="批量选择"
+             >
+               批量选择{bulkMode ? `（已选 ${bulkSelectedCardKeys.size}）` : ""}
+             </Button>
            </div>
           </div>
 
@@ -429,6 +646,103 @@ export function WordReviewList({
            <div className="text-xs text-muted-foreground">
              分组用于管理单词集合；下方仍按日期分周展示。
            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={reviewSearch}
+                  onChange={(e) => setReviewSearch(e.target.value)}
+                  placeholder="搜索：单词 / 释义 / 例句 / 同反义词 / 搭配…"
+                  className="pl-8"
+                />
+              </div>
+
+              <Select value={masteryFilter} onValueChange={(v) => setMasteryFilter(v as MasteryFilter)}>
+                <SelectTrigger className="w-full sm:w-[140px]" aria-label="掌握筛选" title="掌握筛选">
+                  <SelectValue placeholder="掌握筛选" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="mastered">已掌握</SelectItem>
+                  <SelectItem value="unmastered">未掌握</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={reviewSort} onValueChange={(v) => setReviewSort(v as ReviewSort)}>
+                <SelectTrigger className="w-full sm:w-[140px]" aria-label="排序" title="排序">
+                  <SelectValue placeholder="排序" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">最新</SelectItem>
+                  <SelectItem value="oldest">最旧</SelectItem>
+                  <SelectItem value="az">A-Z</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {bulkMode && (
+              <div className="rounded-md border bg-card p-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  已选 {bulkSelectedCardCount} 个卡片（{bulkSelectedWordIds.length} 条词条）
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setBulkSelectedCardKeys(new Set(visibleCards.map((c) => c.cardKey)))}
+                    disabled={visibleCards.length === 0}
+                  >
+                    全选当前结果
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setBulkSelectedCardKeys(new Set())}
+                    disabled={bulkSelectedCardKeys.size === 0}
+                  >
+                    清空选择
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setBulkMoveTargetGroupId(groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : UNGROUPED_GROUP_ID);
+                      setBulkMoveOpen(true);
+                    }}
+                    disabled={bulkSelectedWordIds.length === 0}
+                  >
+                    批量移动分组
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (bulkSelectedTermKeys.length === 0) return;
+                      onSetTermsMastered(bulkSelectedTermKeys, true);
+                      toast({ title: "已标记已掌握", description: `已标记 ${bulkSelectedTermKeys.length} 个单词为已掌握。` });
+                      setBulkSelectedCardKeys(new Set());
+                    }}
+                    disabled={bulkSelectedTermKeys.length === 0}
+                  >
+                    批量标记已掌握
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={bulkSelectedWordIds.length === 0}
+                  >
+                    批量删除
+                  </Button>
+                </div>
+              </div>
+            )}
          </div>
 
        {viewWords.length === 0 ? (
@@ -441,9 +755,17 @@ export function WordReviewList({
              去「新增单词」添加你的第一个单词。
            </p>
          </div>
+       ) : weekSections.length === 0 ? (
+         <div className="text-center py-16 border-2 border-dashed rounded-lg bg-card">
+           <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
+           <h3 className="mt-4 text-lg font-medium">没有匹配结果</h3>
+           <p className="mt-1 text-sm text-muted-foreground">
+             试试清空搜索内容，或调整筛选/排序条件。
+           </p>
+         </div>
        ) : (
          <div className="space-y-8">
-           {weekKeys.map((weekKey) => (
+           {weekSections.map(({ weekKey, groups: weekTermGroups }) => (
              <div key={weekKey}>
                <div className="flex justify-between items-center mb-3">
                          <h3 className="text-lg font-semibold text-foreground mb-3">
@@ -461,13 +783,25 @@ export function WordReviewList({
                  </div>
                </div>
                <div className="space-y-2">
-                 {groupWordsByTerm(groupedWords[weekKey]).map((g) => {
+                 {weekTermGroups.map((g) => {
                    const groupKey = `${weekKey}::${g.key}`;
                    const variants = pickVariantsByPos(g.words);
                    const selectedId = variantSelection[groupKey];
                    const selected = variants.find((w) => w.id === selectedId) || variants[0];
                    const isDefinitionOpen = definitionOpenKeys.has(groupKey);
                    const isMastered = g.words.some((w) => w.mastered === true);
+                   const isRegenerating = regeneratingWordIds.has(selected.id);
+                   const isCardSelected = bulkSelectedCardKeys.has(groupKey);
+                   const enrichment = selected.enrichment;
+                   const hasEnrichmentContent = (() => {
+                     if (!enrichment) return false;
+                     const hasLevel = !!(enrichment.level?.cefr || enrichment.level?.usageZh);
+                     const hasCollocations = Array.isArray(enrichment.collocations) && enrichment.collocations.length > 0;
+                     const hasSynonyms = Array.isArray(enrichment.synonyms) && enrichment.synonyms.length > 0;
+                     const hasAntonyms = Array.isArray(enrichment.antonyms) && enrichment.antonyms.length > 0;
+                     const hasExamples = Array.isArray(enrichment.examples) && enrichment.examples.length > 0;
+                     return hasLevel || hasCollocations || hasSynonyms || hasAntonyms || hasExamples;
+                   })();
 
                    const selectVariant = (id: string) => {
                      setVariantSelection((prev) => ({ ...prev, [groupKey]: id }));
@@ -478,6 +812,24 @@ export function WordReviewList({
                        <CardContent className="p-3">
                          <div className="flex items-center justify-between">
                            <div className="flex-grow flex items-center gap-2 overflow-hidden">
+                             {bulkMode && (
+                               <div className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                                 <Checkbox
+                                   checked={isCardSelected}
+                                   onCheckedChange={(checked) => {
+                                     const on = checked === true;
+                                     setBulkSelectedCardKeys((prev) => {
+                                       const next = new Set(prev);
+                                       if (on) next.add(groupKey);
+                                       else next.delete(groupKey);
+                                       return next;
+                                     });
+                                   }}
+                                   aria-label="选择该卡片"
+                                   title="选择该卡片"
+                                 />
+                               </div>
+                             )}
                              <span
                                className="font-bold text-lg cursor-pointer hover:underline"
                                onClick={() => handleWordClick(selected.word)}
@@ -494,23 +846,40 @@ export function WordReviewList({
                              )}
 
                              {variants.length > 1 ? (
-                               <div className="flex flex-wrap items-center gap-1 shrink-0">
-                                 {variants.map((v) => (
-                                   <Button
-                                     key={v.id}
-                                     type="button"
-                                     size="sm"
-                                     variant={v.id === selected.id ? "secondary" : "outline"}
-                                     className="h-6 px-2 text-xs capitalize"
-                                     onClick={(e) => {
-                                       e.stopPropagation();
-                                       selectVariant(v.id);
-                                     }}
-                                   >
-                                     {v.partOfSpeech}
-                                   </Button>
-                                 ))}
-                               </div>
+                               <>
+                                 <div className="sm:hidden shrink-0">
+                                   <Select value={selected.id} onValueChange={(id) => selectVariant(id)}>
+                                     <SelectTrigger className="h-7 w-[120px]">
+                                       <SelectValue placeholder="词性" />
+                                     </SelectTrigger>
+                                     <SelectContent>
+                                       {variants.map((v) => (
+                                         <SelectItem key={v.id} value={v.id} className="capitalize">
+                                           {v.partOfSpeech}
+                                         </SelectItem>
+                                       ))}
+                                     </SelectContent>
+                                   </Select>
+                                 </div>
+
+                                 <div className="hidden sm:flex flex-wrap items-center gap-1 shrink-0">
+                                   {variants.map((v) => (
+                                     <Button
+                                       key={v.id}
+                                       type="button"
+                                       size="sm"
+                                       variant={v.id === selected.id ? "secondary" : "outline"}
+                                       className="h-6 px-2 text-xs capitalize"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         selectVariant(v.id);
+                                       }}
+                                     >
+                                       {v.partOfSpeech}
+                                     </Button>
+                                   ))}
+                                 </div>
+                               </>
                              ) : (
                                <Badge variant="secondary" className="capitalize shrink-0">{selected.partOfSpeech}</Badge>
                              )}
@@ -568,26 +937,138 @@ export function WordReviewList({
                                   {isDefinitionOpen ? "隐藏释义" : "显示释义"}
                                 </TooltipContent>
                               </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground"
+                                    aria-label="复制单词"
+                                    title="复制单词"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void copyToClipboard(g.display, "单词");
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                    <span className="sr-only">复制单词</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>复制单词</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground"
+                                    aria-label="复制释义"
+                                    title="复制释义"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void copyToClipboard(selected.definition, "释义");
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                    <span className="sr-only">复制释义</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>复制释义</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground"
+                                    aria-label="重新生成释义与拓展"
+                                    title="重新生成"
+                                    disabled={isRegenerating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void handleRegenerate(selected);
+                                    }}
+                                  >
+                                    {isRegenerating ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCcw className="h-4 w-4" />
+                                    )}
+                                    <span className="sr-only">重新生成释义与拓展</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>重新生成</TooltipContent>
+                              </Tooltip>
                             </div>
-                             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="编辑单词" title="编辑单词" onClick={(e) => { e.stopPropagation(); onEditWord(selected); }}>
-                               <Pencil className="h-4 w-4" />
-                               <span className="sr-only">编辑单词</span>
-                             </Button>
-                             <Button
-                               variant="ghost"
-                               size="icon"
-                               className="h-8 w-8"
-                               aria-label="移动分组"
-                               title="移动分组"
-                               onClick={(e) => { e.stopPropagation(); openMoveDialog(selected); }}
-                             >
-                               <FolderInput className="h-4 w-4" />
-                               <span className="sr-only">移动分组</span>
-                             </Button>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" aria-label="删除单词" title="删除单词" onClick={(e) => { e.stopPropagation(); onDeleteWord(selected); }}>
-                               <Trash className="h-4 w-4" />
-                               <span className="sr-only">删除单词</span>
-                             </Button>
+
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="icon"
+                                   className="h-8 w-8"
+                                   aria-label="编辑单词"
+                                   title="编辑单词"
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     onEditWord(selected);
+                                   }}
+                                 >
+                                   <Pencil className="h-4 w-4" />
+                                   <span className="sr-only">编辑单词</span>
+                                 </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>编辑</TooltipContent>
+                             </Tooltip>
+
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="icon"
+                                   className="h-8 w-8"
+                                   aria-label="移动分组"
+                                   title="移动分组"
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     openMoveDialog(selected);
+                                   }}
+                                 >
+                                   <FolderInput className="h-4 w-4" />
+                                   <span className="sr-only">移动分组</span>
+                                 </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>移动分组</TooltipContent>
+                             </Tooltip>
+
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="icon"
+                                   className="h-8 w-8 text-destructive/70 hover:text-destructive"
+                                   aria-label="删除单词"
+                                   title="删除单词"
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     onDeleteWord(selected);
+                                   }}
+                                 >
+                                   <Trash className="h-4 w-4" />
+                                   <span className="sr-only">删除单词</span>
+                                 </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>删除</TooltipContent>
+                             </Tooltip>
                            </div>
                          </div>
 
@@ -597,50 +1078,48 @@ export function WordReviewList({
                                了解更多
                              </AccordionTrigger>
                              <AccordionContent className="pb-1">
-                               {variants.length > 1 && (
-                                 <div className="flex flex-wrap items-center gap-2 pb-2">
-                                   <div className="text-xs font-semibold text-muted-foreground">词性</div>
-                                   <div className="flex flex-wrap items-center gap-1">
-                                     {variants.map((v) => (
-                                       <Button
-                                         key={v.id}
-                                         type="button"
-                                         size="sm"
-                                         variant={v.id === selected.id ? "secondary" : "outline"}
-                                         className="h-6 px-2 text-xs capitalize"
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           selectVariant(v.id);
-                                         }}
-                                       >
-                                         {v.partOfSpeech}
-                                       </Button>
-                                     ))}
+                               {!enrichment || !hasEnrichmentContent ? (
+                                 <div className="space-y-2">
+                                   <p className="text-muted-foreground">
+                                     暂无 AI 拓展内容（可能是模型返回为空或解析失败）。你可以稍后点击“重新生成”。
+                                   </p>
+                                   <div>
+                                     <Button
+                                       type="button"
+                                       size="sm"
+                                       variant="outline"
+                                       disabled={isRegenerating}
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         void handleRegenerate(selected);
+                                       }}
+                                     >
+                                       {isRegenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                       重新生成释义与拓展
+                                     </Button>
                                    </div>
                                  </div>
-                               )}
-
-                               {!selected.enrichment ? (
-                                 <p className="text-muted-foreground">暂无 AI 拓展内容。</p>
                                ) : (
                                  <div className="space-y-3">
-                                   <div>
-                                     <div className="text-xs font-semibold text-muted-foreground">难度与用法</div>
-                                     <div className="text-sm">
-                                       {selected.enrichment.level?.cefr && (
-                                         <span className="mr-2">CEFR: {selected.enrichment.level.cefr}</span>
-                                       )}
-                                       {selected.enrichment.level?.usageZh && (
-                                         <p className="mt-1 text-muted-foreground">{selected.enrichment.level.usageZh}</p>
-                                       )}
+                                   {(enrichment.level?.cefr || enrichment.level?.usageZh) && (
+                                     <div>
+                                       <div className="text-xs font-semibold text-muted-foreground">难度与用法</div>
+                                       <div className="text-sm">
+                                         {enrichment.level?.cefr && (
+                                           <span className="mr-2">CEFR: {enrichment.level.cefr}</span>
+                                         )}
+                                         {enrichment.level?.usageZh && (
+                                           <p className="mt-1 text-muted-foreground">{enrichment.level.usageZh}</p>
+                                         )}
+                                       </div>
                                      </div>
-                                   </div>
+                                   )}
 
-                                   {Array.isArray(selected.enrichment.collocations) && selected.enrichment.collocations.length > 0 && (
+                                   {Array.isArray(enrichment.collocations) && enrichment.collocations.length > 0 && (
                                      <div>
                                        <div className="text-xs font-semibold text-muted-foreground">常见搭配</div>
                                        <ul className="mt-1 space-y-1 text-sm">
-                                         {selected.enrichment.collocations.slice(0, 6).map((c, idx) => (
+                                         {enrichment.collocations.slice(0, 6).map((c, idx) => (
                                            <li key={idx} className="text-muted-foreground">
                                              <span className="text-foreground">{c.phrase}</span>
                                              {c.meaningZh ? ` — ${c.meaningZh}` : ''}
@@ -650,29 +1129,29 @@ export function WordReviewList({
                                      </div>
                                    )}
 
-                                   {(Array.isArray(selected.enrichment.synonyms) && selected.enrichment.synonyms.length > 0) && (
+                                   {(Array.isArray(enrichment.synonyms) && enrichment.synonyms.length > 0) && (
                                      <div>
                                        <div className="text-xs font-semibold text-muted-foreground">同义词</div>
                                        <div className="mt-1 text-sm text-muted-foreground">
-                                         {selected.enrichment.synonyms.slice(0, 10).join(', ')}
+                                         {enrichment.synonyms.slice(0, 10).join(', ')}
                                        </div>
                                      </div>
                                    )}
 
-                                   {(Array.isArray(selected.enrichment.antonyms) && selected.enrichment.antonyms.length > 0) && (
+                                   {(Array.isArray(enrichment.antonyms) && enrichment.antonyms.length > 0) && (
                                      <div>
                                        <div className="text-xs font-semibold text-muted-foreground">反义词</div>
                                        <div className="mt-1 text-sm text-muted-foreground">
-                                         {selected.enrichment.antonyms.slice(0, 10).join(', ')}
+                                         {enrichment.antonyms.slice(0, 10).join(', ')}
                                        </div>
                                      </div>
                                    )}
 
-                                   {Array.isArray(selected.enrichment.examples) && selected.enrichment.examples.length > 0 && (
+                                   {Array.isArray(enrichment.examples) && enrichment.examples.length > 0 && (
                                      <div>
                                        <div className="text-xs font-semibold text-muted-foreground">例句</div>
                                        <ul className="mt-1 space-y-2 text-sm">
-                                         {selected.enrichment.examples.slice(0, 5).map((ex, idx) => (
+                                         {enrichment.examples.slice(0, 5).map((ex, idx) => (
                                            <li key={idx}>
                                              <div className="text-foreground">{ex.en}</div>
                                              <div className="text-muted-foreground">{ex.zh}</div>
@@ -691,10 +1170,10 @@ export function WordReviewList({
                    );
                  })}
                </div>
-            </div>
-          ))}
-        </div>
-      )}
+             </div>
+           ))}
+         </div>
+       )}
     </div>
 
     <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>
@@ -894,6 +1373,79 @@ export function WordReviewList({
       </AlertDialogContent>
     </AlertDialog>
 
+    <Dialog open={bulkMoveOpen} onOpenChange={setBulkMoveOpen}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>批量移动分组</DialogTitle>
+          <DialogDescription>
+            将已选 {bulkSelectedCardCount} 个卡片内的 {bulkSelectedWordIds.length} 条词条移动到目标分组。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Label>目标分组</Label>
+          <Select value={bulkMoveTargetGroupId} onValueChange={setBulkMoveTargetGroupId}>
+            <SelectTrigger>
+              <SelectValue placeholder="请选择分组..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNGROUPED_GROUP_ID}>未分组（仅在“全部”中显示）</SelectItem>
+              {groups.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setBulkMoveOpen(false)}>
+            取消
+          </Button>
+          <Button
+            type="button"
+            disabled={bulkSelectedWordIds.length === 0}
+            onClick={() => {
+              if (bulkSelectedWordIds.length === 0) return;
+              onMoveWordsToGroup(bulkSelectedWordIds, bulkMoveTargetGroupId);
+              setBulkMoveOpen(false);
+              setBulkSelectedCardKeys(new Set());
+              toast({ title: "已移动分组", description: `已移动 ${bulkSelectedWordIds.length} 条词条。` });
+            }}
+          >
+            移动
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认批量删除？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将删除已选 {bulkSelectedCardCount} 个卡片内的 {bulkSelectedWordIds.length} 条词条。此操作无法撤销。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => {
+              if (bulkSelectedWordIds.length === 0) return;
+              onDeleteWords(bulkSelectedWordIds);
+              setBulkDeleteOpen(false);
+              setBulkSelectedCardKeys(new Set());
+              toast({ title: "已删除", description: `已删除 ${bulkSelectedWordIds.length} 条词条。` });
+            }}
+          >
+            删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <Dialog
       open={groupManagerOpen}
       onOpenChange={(open) => {
@@ -915,40 +1467,82 @@ export function WordReviewList({
         <div className="flex-1 overflow-y-auto space-y-6 pr-1">
           <div className="space-y-2">
             <div className="text-sm font-medium">新建分组</div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <Input
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="例如：九年级·Unit 3"
-              />
-              <Button
-                type="button"
-                onClick={() => {
-                  const trimmed = newGroupName.trim();
-                  if (!trimmed) return;
-                  onAddGroup(trimmed);
-                  setNewGroupName('');
-                }}
-              >
-                创建
-              </Button>
+            <div className="space-y-1">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <Input
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="例如：九年级·Unit 3"
+                />
+                <Button
+                  type="button"
+                  disabled={!newGroupNameClean || !!validateGroupName(newGroupNameClean)}
+                  onClick={() => {
+                    const err = validateGroupName(newGroupNameClean);
+                    if (err) return;
+                    onAddGroup(newGroupNameClean);
+                    setNewGroupName('');
+                  }}
+                >
+                  创建
+                </Button>
+              </div>
+              {newGroupError && <div className="text-xs text-destructive">{newGroupError}</div>}
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">已有分组</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium">已有分组</div>
+              <div className="text-xs text-muted-foreground">可拖拽排序（仅影响显示顺序）</div>
+            </div>
             <div className="space-y-2">
               {groups.map((g) => {
                 const isEditing = editingGroupId === g.id;
                 return (
-                  <div key={g.id} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border p-3">
+                  <div
+                    key={g.id}
+                    draggable={!isEditing}
+                    onDragStart={(e) => {
+                      if (isEditing) return;
+                      setDraggingGroupId(g.id);
+                      setDragOverGroupId(null);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      if (!draggingGroupId || draggingGroupId === g.id) return;
+                      e.preventDefault();
+                      setDragOverGroupId(g.id);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverGroupId === g.id) setDragOverGroupId(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!draggingGroupId || draggingGroupId === g.id) return;
+                      moveGroupOrder(draggingGroupId, g.id);
+                      setDraggingGroupId(null);
+                      setDragOverGroupId(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingGroupId(null);
+                      setDragOverGroupId(null);
+                    }}
+                    className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border p-3 ${dragOverGroupId === g.id ? "border-primary bg-primary/5" : ""}`}
+                  >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className={`shrink-0 text-muted-foreground ${isEditing ? "opacity-50" : "cursor-grab"}`} aria-hidden="true">
+                        <GripVertical className="h-4 w-4" />
+                      </div>
                       {isEditing ? (
-                        <Input
-                          value={editingGroupName}
-                          onChange={(e) => setEditingGroupName(e.target.value)}
-                          placeholder="请输入分组名称"
-                        />
+                        <div className="flex-1 space-y-1">
+                          <Input
+                            value={editingGroupName}
+                            onChange={(e) => setEditingGroupName(e.target.value)}
+                            placeholder="请输入分组名称"
+                          />
+                          {editingGroupError && <div className="text-xs text-destructive">{editingGroupError}</div>}
+                        </div>
                       ) : (
                         <>
                           <div className="font-medium truncate">{g.name}</div>
@@ -962,7 +1556,7 @@ export function WordReviewList({
                     <div className="flex items-center gap-2 justify-end">
                       {isEditing ? (
                         <>
-                          <Button type="button" size="sm" onClick={saveRename}>
+                          <Button type="button" size="sm" onClick={saveRename} disabled={!!editingGroupError}>
                             保存
                           </Button>
                           <Button type="button" size="sm" variant="outline" onClick={cancelRename}>

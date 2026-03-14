@@ -19,7 +19,7 @@ import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGr
 import { getPrimaryNavView, getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
 import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
 import { Button } from '@/components/ui/button';
-import { exportStoryPdfAction } from '@/app/actions';
+import { exportStoryPdfAction, regenerateCapturedWordAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -471,6 +471,10 @@ export default function Home() {
     setSelectedGroupId((prev) => (prev === groupId ? ALL_GROUP_ID : prev));
   };
 
+  const handleReorderGroups = (nextGroups: WordGroup[]) => {
+    setGroups(nextGroups);
+  };
+
   const handleMoveWordToGroup = (wordId: string, groupId: string) => {
     if (!groupId) return;
     setWords((prev) => prev.map((w) => {
@@ -479,6 +483,76 @@ export default function Home() {
       if (!groups.some((g) => g.id === groupId)) return w;
       return { ...w, groupId };
     }));
+  };
+
+  const handleMoveWordsToGroup = (wordIds: string[], groupId: string) => {
+    if (!groupId) return;
+    if (!Array.isArray(wordIds) || wordIds.length === 0) return;
+
+    const idSet = new Set(wordIds);
+    setWords((prev) =>
+      prev.map((w) => {
+        if (!idSet.has(w.id)) return w;
+        if (groupId === UNGROUPED_GROUP_ID) return { ...w, groupId: undefined };
+        if (!groups.some((g) => g.id === groupId)) return w;
+        return { ...w, groupId };
+      })
+    );
+  };
+
+  const handleDeleteWords = (wordIds: string[]) => {
+    if (!Array.isArray(wordIds) || wordIds.length === 0) return;
+    const idSet = new Set(wordIds);
+    setWords((prev) => prev.filter((w) => !idSet.has(w.id)));
+  };
+
+  const handleSetTermsMastered = (termKeys: string[], mastered: boolean) => {
+    const keys = Array.from(new Set((termKeys || []).map((k) => normalizeTermKey(k)).filter(Boolean)));
+    if (keys.length === 0) return;
+
+    const prevMastered = new Set<string>();
+    for (const w of words) {
+      const key = normalizeTermKey(w.word);
+      if (!key) continue;
+      if (w.mastered === true) prevMastered.add(key);
+    }
+
+    setWords((prev) => prev.map((w) => (keys.includes(normalizeTermKey(w.word)) ? { ...w, mastered } : w)));
+
+    if (mastered === true) {
+      const newly = keys.filter((k) => !prevMastered.has(k) && words.some((w) => normalizeTermKey(w.word) === k));
+      if (newly.length > 0) {
+        setGamification((prev) => {
+          let next = prev;
+          for (const k of newly) {
+            next = applyLearningEvent(next, { type: "mastery_marked", termKey: k });
+          }
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleRegenerateWord = async (word: CapturedWord): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const result = await regenerateCapturedWordAction({
+        word: word.word,
+        partOfSpeech: word.partOfSpeech,
+        photoDataUri: word.photoDataUri,
+      });
+
+      if (!result.success || !result.data) {
+        return { success: false, error: result.error || "模型未返回有效结果，请稍后重试。" };
+      }
+
+      const { definition, enrichment } = result.data;
+      setWords((prev) =>
+        prev.map((w) => (w.id === word.id ? { ...w, definition, enrichment } : w))
+      );
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error?.message || "重新生成时发生未知错误。" };
+    }
   };
 
   const handleGeneratePractice = async (
@@ -664,10 +738,15 @@ export default function Home() {
             onAddGroup={handleAddGroup}
             onRenameGroup={handleRenameGroup}
             onDeleteGroup={handleDeleteGroup}
+            onReorderGroups={handleReorderGroups}
             onMoveWordToGroup={handleMoveWordToGroup}
+            onMoveWordsToGroup={handleMoveWordsToGroup}
             onEditWord={handleEditWord}
             onDeleteWord={handleDeleteWord}
             onToggleMastered={handleToggleMastered}
+            onSetTermsMastered={handleSetTermsMastered}
+            onDeleteWords={handleDeleteWords}
+            onRegenerateWord={handleRegenerateWord}
             onGeneratePractice={handleGeneratePractice}
             onGenerateStory={handleGenerateStory}
           />

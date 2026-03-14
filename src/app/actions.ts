@@ -3,6 +3,7 @@
 import {
   CapturedWord,
   DefineCapturedWordInput,
+  DefineCapturedWordOutput,
   DefineTermAutoInput,
   DefineTermAutoOutput,
   ExtractWordAndDefineOutput,
@@ -62,6 +63,21 @@ export async function getDefinitionAction(
   } catch (error: any) {
     console.error(error);
     return { success: false, error: error.message || "获取释义时发生错误。" };
+  }
+}
+
+export async function regenerateCapturedWordAction(
+  data: DefineCapturedWordInput
+): Promise<{ success: boolean; data?: DefineCapturedWordOutput; error?: string }> {
+  try {
+    const result = await defineCapturedWord(data);
+    if (!result || !result.definition) {
+      return { success: false, error: "无法重新生成该词条的内容，请稍后重试。" };
+    }
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error('regenerateCapturedWordAction error:', error);
+    return { success: false, error: error.message || "重新生成时发生错误。" };
   }
 }
 
