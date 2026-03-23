@@ -256,6 +256,7 @@ export function WordReviewList({
   const [wordSearch, setWordSearch] = useState('');
   const [selectedWordIds, setSelectedWordIds] = useState<Set<string>>(new Set());
   const [storyConfirmOpen, setStoryConfirmOpen] = useState(false);
+  const [practiceConfirmOpen, setPracticeConfirmOpen] = useState(false);
   const [generatorGroupId, setGeneratorGroupId] = useState<string>(selectedGroupId || ALL_GROUP_ID);
 
   const [questionCountText, setQuestionCountText] = useState('10');
@@ -314,6 +315,30 @@ export function WordReviewList({
   const canGenerate = generatorMode === 'practice'
     ? selectedWords.length > 0 && selectedTypes.length > 0
     : selectedWords.length > 0;
+
+  const practiceTooManyWordThreshold = 30;
+  const practiceTooManyQuestionThreshold = 25;
+  const isPracticeTooMany = generatorMode === 'practice'
+    && (selectedWords.length > practiceTooManyWordThreshold || questionCount >= practiceTooManyQuestionThreshold);
+
+  const estimatePracticeSeconds = (wordCount: number, qCount: number) => {
+    const base = 8;
+    const perQuestion = 1.6;
+    const perWord = 0.08;
+    const seconds = base + qCount * perQuestion + wordCount * perWord;
+    const min = Math.max(5, Math.round(seconds * 0.6));
+    const max = Math.max(min + 3, Math.round(seconds * 1.4));
+    return { min, max };
+  };
+
+  const formatSecondsRange = ({ min, max }: { min: number; max: number }) => {
+    if (max < 90) return `约 ${min}–${max} 秒`;
+    const minMin = Math.max(1, Math.floor(min / 60));
+    const maxMin = Math.max(minMin, Math.ceil(max / 60));
+    return minMin === maxMin ? `约 ${minMin} 分钟` : `约 ${minMin}–${maxMin} 分钟`;
+  };
+
+  const practiceEtaText = formatSecondsRange(estimatePracticeSeconds(selectedWords.length, questionCount));
 
   const formatWeekRange = (startDate: Date, endDate: Date) => {
     const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
@@ -509,6 +534,7 @@ export function WordReviewList({
       setSelectionFromWords(weekWords);
       setWordSearch('');
       setStoryConfirmOpen(false);
+      setPracticeConfirmOpen(false);
       setGeneratorGroupId(selectedGroupId || ALL_GROUP_ID);
       setGeneratorOpen(true);
     };
@@ -540,6 +566,10 @@ export function WordReviewList({
     const handleGenerate = () => {
       if (!canGenerate) return;
       if (generatorMode === 'practice') {
+        if (isPracticeTooMany) {
+          setPracticeConfirmOpen(true);
+          return;
+        }
         onGeneratePractice(selectedWords, { questionCount, allowedTypes: selectedTypes });
         setGeneratorOpen(false);
         return;
@@ -1248,7 +1278,7 @@ export function WordReviewList({
               全选
             </Button>
             <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={clearSelection}>
-              清空
+              全不选
             </Button>
           </div>
           <div className="text-xs text-muted-foreground">已选 {selectedWordIds.size} 个单词</div>
@@ -1338,10 +1368,18 @@ export function WordReviewList({
               onChange={(e) => setQuestionCountText(e.target.value)}
             />
             <div className="text-xs text-muted-foreground">默认 10 题，最多 30 题。</div>
+            <div className="text-xs text-muted-foreground">
+              预计耗时：<span className="font-medium text-foreground">{practiceEtaText}</span>（仅供参考）
+            </div>
+            {isPracticeTooMany && (
+              <div className="text-xs text-amber-600 dark:text-amber-400">
+                当前选择较大，点击“生成练习”后会再次确认。
+              </div>
+            )}
           </div>
            </>
            )}
-         </div>
+          </div>
 
         <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => setGeneratorOpen(false)}>取消</Button>
@@ -1351,6 +1389,27 @@ export function WordReviewList({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={practiceConfirmOpen} onOpenChange={setPracticeConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>练习规模较大</AlertDialogTitle>
+          <AlertDialogDescription>
+            你选择了 {selectedWords.length} 个单词，题目数量为 {questionCount}。预计耗时 {practiceEtaText}，可能更慢，甚至失败。是否继续生成？
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>返回调整</AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            onGeneratePractice(selectedWords, { questionCount, allowedTypes: selectedTypes });
+            setPracticeConfirmOpen(false);
+            setGeneratorOpen(false);
+          }}>
+            继续生成
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <AlertDialog open={storyConfirmOpen} onOpenChange={setStoryConfirmOpen}>
       <AlertDialogContent>

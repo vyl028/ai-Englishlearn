@@ -28,6 +28,7 @@ interface ReadingQuestionsViewProps {
 export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
   const [answers, setAnswers] = React.useState<Record<number, number>>({});
   const [submitted, setSubmitted] = React.useState(false);
+  const [wrongOnly, setWrongOnly] = React.useState(false);
 
   const isCorrect = (q: ReadingQuestion, idx: number) => answers[idx] === q.answerIndex;
 
@@ -39,7 +40,13 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
   const reset = () => {
     setAnswers({});
     setSubmitted(false);
+    setWrongOnly(false);
   };
+
+  const questionItems = questions.map((q, index) => ({ q, index }));
+  const visibleItems = submitted && wrongOnly
+    ? questionItems.filter(({ q, index }) => !isCorrect(q, index))
+    : questionItems;
 
   return (
     <div className="space-y-4">
@@ -47,19 +54,41 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
         <div className="text-sm text-muted-foreground">
           共 <span className="font-medium text-foreground">{questions.length}</span> 题
         </div>
-        {submitted ? (
-          <div className="text-sm text-muted-foreground">
-            得分：<span className="font-semibold text-foreground">{correctCount}</span> / {questions.length}
-          </div>
-        ) : (
-          <Button type="button" variant="outline" size="sm" onClick={reset}>
-            重置作答
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {submitted ? (
+            <>
+              <div className="text-sm text-muted-foreground mr-1">
+                得分：<span className="font-semibold text-foreground">{correctCount}</span> / {questions.length}
+              </div>
+              <Button
+                type="button"
+                variant={wrongOnly ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setWrongOnly((v) => !v)}
+              >
+                只看错题
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={reset}>
+                重做
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" size="sm" onClick={reset}>
+              重置作答
+            </Button>
+          )}
+        </div>
       </div>
 
-      {questions.map((q, index) => {
+      {submitted && wrongOnly && visibleItems.length === 0 && (
+        <div className="text-sm text-muted-foreground text-center py-8">全部答对了。</div>
+      )}
+
+      {visibleItems.map(({ q, index }) => {
         const correct = submitted ? isCorrect(q, index) : undefined;
+        const hasParagraphIndex = typeof q.locate?.paragraphIndex === "number";
+        const hasQuote = typeof q.locate?.quoteEn === "string" && q.locate.quoteEn.trim().length > 0;
+        const hasLocate = hasParagraphIndex || hasQuote;
         return (
           <Card key={index}>
             <CardHeader>
@@ -132,10 +161,16 @@ export function ReadingQuestionsView({ questions }: ReadingQuestionsViewProps) {
                       <AccordionTrigger className="py-2 text-sm">答案与解析</AccordionTrigger>
                       <AccordionContent>
                         <div className="space-y-3">
-                          {(q.locate?.paragraphIndex || q.locate?.quoteEn) && (
-                            <div className="text-xs text-muted-foreground space-y-1">
-                              {q.locate?.paragraphIndex && <div>定位：第 {q.locate.paragraphIndex} 段</div>}
-                              {q.locate?.quoteEn && <div className="whitespace-pre-wrap">原文：{q.locate.quoteEn}</div>}
+                          {hasLocate && (
+                            <div className="rounded-md border bg-background/60 p-3 text-xs text-muted-foreground space-y-2">
+                              <div className="font-semibold text-foreground">定位依据</div>
+                              {hasParagraphIndex && <div>段落：第 {q.locate!.paragraphIndex} 段</div>}
+                              {hasQuote && (
+                                <div className="whitespace-pre-wrap leading-relaxed">
+                                  <span className="font-medium text-foreground">原文：</span>
+                                  {q.locate!.quoteEn}
+                                </div>
+                              )}
                             </div>
                           )}
                           <div className="text-sm text-muted-foreground whitespace-pre-wrap">{q.analysisZh}</div>

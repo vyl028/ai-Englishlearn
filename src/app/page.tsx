@@ -104,6 +104,10 @@ export default function Home() {
   const [globalTask, setGlobalTask] = useState<GlobalTask | null>(null);
   const globalTaskIdRef = useRef<string | null>(null);
   const globalTaskAbortRef = useRef<AbortController | null>(null);
+  const lastPracticeRequestRef = useRef<{
+    wordIds: string[];
+    options: { questionCount: number; allowedTypes: PracticeQuestionType[] };
+  } | null>(null);
   const [gamification, setGamification] = useState<GamificationState>(() => createDefaultGamificationState());
   const [growthOpen, setGrowthOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -561,6 +565,11 @@ export default function Home() {
   ) => {
     if (isBusy) return;
 
+    lastPracticeRequestRef.current = {
+      wordIds: practiceWords.map((w) => w.id),
+      options: { questionCount: options.questionCount, allowedTypes: [...options.allowedTypes] },
+    };
+
     const { id: taskId, signal } = startGlobalTask({
       kind: 'practice',
       title: "正在生成练习...",
@@ -604,6 +613,41 @@ export default function Home() {
     } finally {
       endGlobalTask(taskId);
     }
+  };
+
+  const handleRegeneratePractice = () => {
+    if (isBusy) return;
+    const last = lastPracticeRequestRef.current;
+    if (!last) {
+      toast({
+        variant: "destructive",
+        title: "无法再生成",
+        description: "未找到上一套练习的配置，请回到单词本重新生成。",
+      });
+      return;
+    }
+
+    const picked = last.wordIds
+      .map((id) => words.find((w) => w.id === id))
+      .filter(Boolean) as CapturedWord[];
+
+    if (picked.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "无法再生成",
+        description: "用于生成的单词已不存在，请回到单词本重新选择。",
+      });
+      return;
+    }
+
+    if (picked.length !== last.wordIds.length) {
+      toast({
+        title: "已跳过部分单词",
+        description: `有 ${last.wordIds.length - picked.length} 个单词已不在单词本中，将使用剩余 ${picked.length} 个继续生成。`,
+      });
+    }
+
+    void handleGeneratePractice(picked, last.options);
   };
 
   const handleGenerateStory = async (storyWords: CapturedWord[]) => {
@@ -757,6 +801,8 @@ export default function Home() {
             <PracticeView
               practiceData={practiceData}
               onBack={() => setView('review')}
+              onRegenerate={lastPracticeRequestRef.current ? handleRegeneratePractice : undefined}
+              busy={isBusy}
               onSubmitted={({ correctCount, totalCount }) => {
                 setGamification((prev) =>
                   applyLearningEvent(prev, { type: "practice_completed", correctCount, totalCount })
@@ -802,7 +848,10 @@ export default function Home() {
         }}
       />
       <SidebarInset>
-        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header
+          id="app-header"
+          className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+        >
           <div className="flex h-14 items-center gap-2 px-4 md:px-6">
             <SidebarTrigger
               disabled={isBusy}
