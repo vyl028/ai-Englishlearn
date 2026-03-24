@@ -141,11 +141,13 @@
 - 页面内分为两个页签：**跟读训练** / **AI 对话**
 - 跟读训练：
   - ASR（语音识别）：支持语音输入目标文本；跟读后识别转写为英文文本
-  - TTS（语音合成）：对目标文本进行示范朗读（可选语音与语速）
-  - 跟读评估：基于 ASR 转写的词级对齐（WER）给出近似分数，并支持在多个 ASR 候选间切换（默认选择匹配度最高的候选）
+  - TTS（语音合成）：对目标文本进行示范朗读（可选语音/语速/音量）
+  - 跟读评估：基于 ASR 转写的词级对齐（WER）给出近似分数，并支持在多个 ASR 候选间点击切换（候选中会高亮差异词并展示差异概览）
 - AI 对话：
   - 用户口语发言（ASR 转写）→ AI 英文回复（自动 TTS 朗读；朗读按钮再次点击可停止）→ 中文反馈与纠错建议（基于转写文本，不包含音频层面的发音评估）
   - 反馈与纠错默认折叠隐藏，需手动展开（按钮位于用户消息气泡内）
+  - 场景选择支持“搜索 + chips”，并支持导出对话记录（TXT/JSON）
+- 语音设置（本地持久化）：按住说话（push-to-talk）、自动朗读 AI 回复、语音/语速/音量、场景与目标水平（刷新后自动恢复）
 - 注意：ASR 支持度与效果依赖浏览器与环境（Edge/Chrome 推荐）；麦克风权限通常需要 HTTPS 或 localhost
 
 ### 2.8 成长系统（等级 / 勋章 / 学习曲线）
@@ -153,7 +155,7 @@
 
 - 学习行为获得 XP，自动提升等级（新增单词 / 完成练习 / 生成故事 / 标记掌握 + 每日首次学习自动打卡）
 - 勋章：连续打卡（3/7/14 天）、掌握单词（10/100）自动解锁并永久保留
-- 学习记录可视化：展示近 7 天学习曲线（XP 与新增单词），并可切换 14/30 天
+- 学习记录可视化：展示近 7 天学习曲线（XP 与新增单词），并可切换 14/30 天；并包含“听说训练”近 7 天跟读练习次数与平均分趋势
 - 数据持久化：localStorage `lexi-capture-gamification`
 
 ## 3. 与 Blueprint 的对齐情况
@@ -461,6 +463,7 @@ type CapturedWord = {
 - 作文批改 UI：`src/components/essay-review-view.tsx`
 - 文章阅读 UI：`src/components/article-reading-view.tsx`
 - 听说训练 UI（ASR/TTS）：`src/components/speaking-training-view.tsx`
+- 听说训练统计（本地）：`src/lib/speaking-training-stats.ts`
 - 阅读理解题 UI：`src/components/reading-questions-view.tsx`
 - AI 封装：`src/ai/gemini.ts`
 - AI flows：`src/ai/flows/*`

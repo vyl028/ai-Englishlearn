@@ -16,6 +16,7 @@ import {
 import type { CapturedWord } from "@/lib/types";
 import type { BadgeId, GamificationState } from "@/lib/gamification";
 import { computeWordStats, formatDateKey, getLevelInfo, getRecentDateKeys } from "@/lib/gamification";
+import { readSpeakingTrainingStatsStore } from "@/lib/speaking-training-stats";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,12 +67,18 @@ function getBadgeProgressText(id: BadgeId, state: GamificationState, stats: { ma
 
 export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDays = 7 }: GrowthSheetProps) {
   const [days, setDays] = React.useState(() => defaultDays);
+  const [speakingStatsStore, setSpeakingStatsStore] = React.useState(() => readSpeakingTrainingStatsStore());
 
   const level = React.useMemo(() => getLevelInfo(gamification.xp), [gamification.xp]);
   const wordStats = React.useMemo(() => computeWordStats(words), [words]);
 
   const todayKey = formatDateKey(new Date());
   const checkedInToday = gamification.streak.lastActiveDate === todayKey;
+
+  React.useEffect(() => {
+    if (!open) return;
+    setSpeakingStatsStore(readSpeakingTrainingStatsStore());
+  }, [open]);
 
   const masteryRatio = wordStats.uniqueCount > 0 ? wordStats.masteredCount / wordStats.uniqueCount : 0;
   const masteryPercent = Math.round(masteryRatio * 100);
@@ -108,6 +115,29 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
 
     return { xpEarned, wordsAdded, practiceCompleted, storiesGenerated, activeDays };
   }, [weekKeys, gamification.daily]);
+
+  const speakingKeys = React.useMemo(() => getRecentDateKeys(7, new Date()), [todayKey]);
+  const speakingSummary = React.useMemo(() => {
+    let attempts = 0;
+    let scoreSum = 0;
+    for (const k of speakingKeys) {
+      const d = speakingStatsStore.days[k];
+      if (!d) continue;
+      attempts += d.attempts || 0;
+      scoreSum += d.scoreSum || 0;
+    }
+    const avgScore = attempts > 0 ? Math.round(scoreSum / attempts) : null;
+    return { attempts, avgScore };
+  }, [speakingKeys, speakingStatsStore.days]);
+
+  const speakingChartData = React.useMemo(() => {
+    return speakingKeys.map((k) => {
+      const d = speakingStatsStore.days[k];
+      const attempts = d?.attempts || 0;
+      const avgScore = attempts > 0 ? Math.round((d?.scoreSum || 0) / attempts) : null;
+      return { date: k.slice(5), attempts, avgScore };
+    });
+  }, [speakingKeys, speakingStatsStore.days]);
 
   const rangeXp = React.useMemo(() => chartData.reduce((sum, d) => sum + d.xpEarned, 0), [chartData]);
   const rangeWords = React.useMemo(() => chartData.reduce((sum, d) => sum + d.wordsAdded, 0), [chartData]);
@@ -315,6 +345,93 @@ export function GrowthSheet({ open, onOpenChange, gamification, words, defaultDa
                   <span className="inline-block h-0.5 w-4 bg-[hsl(var(--chart-2))]" />
                   获得 XP
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">听说训练</CardTitle>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    近 7 天：练习{" "}
+                    <span className="text-foreground font-medium">{speakingSummary.attempts}</span> 次，平均分{" "}
+                    <span className="text-foreground font-medium">{speakingSummary.avgScore === null ? "-" : `${speakingSummary.avgScore}%`}</span>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {speakingSummary.attempts > 0 ? (
+                <div className="h-[220px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={speakingChartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                      <YAxis yAxisId="count" width={36} tickLine={false} axisLine={false} allowDecimals={false} />
+                      <YAxis
+                        yAxisId="score"
+                        orientation="right"
+                        width={36}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[0, 100]}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const attempts = payload.find((p) => p.dataKey === "attempts")?.value ?? 0;
+                          const avg = payload.find((p) => p.dataKey === "avgScore")?.value ?? null;
+                          return (
+                            <div className="rounded-lg border bg-background px-3 py-2 text-xs shadow-md">
+                              <div className="font-medium">{label}</div>
+                              <div className="text-muted-foreground mt-1 space-y-0.5">
+                                <div>练习次数：{attempts}</div>
+                                <div>平均分：{avg === null ? "-" : `${avg}%`}</div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar
+                        yAxisId="count"
+                        dataKey="attempts"
+                        name="练习次数"
+                        fill="hsl(var(--chart-3))"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Line
+                        yAxisId="score"
+                        type="monotone"
+                        dataKey="avgScore"
+                        name="平均分"
+                        stroke="hsl(var(--chart-4))"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[220px] w-full flex items-center justify-center rounded-lg border bg-muted/20 text-sm text-muted-foreground">
+                  还没有跟读练习记录，去“听说训练”完成一次跟读评测吧。
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-sm bg-[hsl(var(--chart-3))]" />
+                  练习次数
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-0.5 w-4 bg-[hsl(var(--chart-4))]" />
+                  平均分
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                注：仅记录“跟读评测”的次数与分数（本地），不保存音频与转写内容。
               </div>
             </CardContent>
           </Card>
