@@ -18,6 +18,9 @@ import { SettingsSheet } from "@/components/settings-sheet";
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
 import { getPrimaryNavView, getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
 import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
+import { GROWTH_GOALS_STORAGE_KEY } from "@/lib/growth-goals";
+import { LEARNING_EVENTS_STORAGE_KEY, recordLearningEvent } from "@/lib/learning-events";
+import { SPEAKING_TRAINING_STATS_STORAGE_KEY } from "@/lib/speaking-training-stats";
 import { Button } from '@/components/ui/button';
 import { exportStoryPdfAction, regenerateCapturedWordAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +42,11 @@ const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
 const SELECTED_GROUP_STORAGE_KEY = 'lexi-capture-selected-group';
 const LAST_VIEW_STORAGE_KEY = 'lexi-capture-last-view';
 const THEME_STORAGE_KEY = 'lexi-theme';
+const ESSAY_REVIEW_DRAFT_STORAGE_KEY = "lexi-capture-essay-review-draft-v1";
+const ESSAY_REVIEW_LAST_STORAGE_KEY = "lexi-capture-essay-review-last-v1";
+const ESSAY_REVIEW_HISTORY_STORAGE_KEY = "lexi-capture-essay-review-history-v1";
+const READING_QUESTION_STATS_STORAGE_KEY = "lexi-capture-reading-question-stats-v1";
+const SPEAKING_SETTINGS_STORAGE_KEY = "lexi-capture-speaking-settings-v1";
 
 const ALL_GROUP_ID = '__all__';
 const UNGROUPED_GROUP_ID = '__ungrouped__';
@@ -254,6 +262,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
+    setGamification((prev) => syncBadgesWithWords(prev, words));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     try {
       localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
     } catch (error) {
@@ -388,6 +401,7 @@ export default function Home() {
 
     if (expected.addedCount > 0) {
       setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: expected.addedCount }));
+      recordLearningEvent({ type: "words_added", count: expected.addedCount });
     }
 
     if (totalDuplicates > 0) {
@@ -670,13 +684,14 @@ export default function Home() {
       );
       if (globalTaskIdRef.current !== taskId) return;
 
-      if (result.success && result.data) {
-        setStoryData(result.data);
-        setView('story');
-        setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
-        toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
-        return;
-      }
+        if (result.success && result.data) {
+          setStoryData(result.data);
+          setView('story');
+          setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
+          recordLearningEvent({ type: "story_generated", wordCount: storyWords.length });
+          toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
+          return;
+        }
 
       if (result.error === 'aborted') return;
 
@@ -718,6 +733,21 @@ export default function Home() {
     }
   };
 
+  const handleResetGrowthData = () => {
+    if (!hydrated) return;
+
+    try {
+      localStorage.removeItem(GAMIFICATION_STORAGE_KEY);
+      localStorage.removeItem(GROWTH_GOALS_STORAGE_KEY);
+      localStorage.removeItem(LEARNING_EVENTS_STORAGE_KEY);
+      localStorage.removeItem(SPEAKING_TRAINING_STATS_STORAGE_KEY);
+    } catch (error) {
+      console.error("Failed to reset growth localStorage", error);
+    }
+
+    setGamification(syncBadgesWithWords(createDefaultGamificationState(), words));
+  };
+
   const handleResetLocalData = () => {
     if (!hydrated) return;
 
@@ -726,6 +756,14 @@ export default function Home() {
       localStorage.removeItem(GROUPS_STORAGE_KEY);
       localStorage.removeItem(SELECTED_GROUP_STORAGE_KEY);
       localStorage.removeItem(GAMIFICATION_STORAGE_KEY);
+      localStorage.removeItem(GROWTH_GOALS_STORAGE_KEY);
+      localStorage.removeItem(LEARNING_EVENTS_STORAGE_KEY);
+      localStorage.removeItem(SPEAKING_TRAINING_STATS_STORAGE_KEY);
+      localStorage.removeItem(SPEAKING_SETTINGS_STORAGE_KEY);
+      localStorage.removeItem(ESSAY_REVIEW_DRAFT_STORAGE_KEY);
+      localStorage.removeItem(ESSAY_REVIEW_LAST_STORAGE_KEY);
+      localStorage.removeItem(ESSAY_REVIEW_HISTORY_STORAGE_KEY);
+      localStorage.removeItem(READING_QUESTION_STATS_STORAGE_KEY);
       localStorage.removeItem(LAST_VIEW_STORAGE_KEY);
       localStorage.removeItem(THEME_STORAGE_KEY);
     } catch (error) {
@@ -807,6 +845,7 @@ export default function Home() {
                 setGamification((prev) =>
                   applyLearningEvent(prev, { type: "practice_completed", correctCount, totalCount })
                 );
+                recordLearningEvent({ type: "practice_completed", correctCount, totalCount });
               }}
             />
           );
@@ -990,6 +1029,7 @@ export default function Home() {
       <GrowthSheet
         open={growthOpen}
         onOpenChange={setGrowthOpen}
+        onResetGrowthData={handleResetGrowthData}
         gamification={gamification}
         words={words}
         defaultDays={7}
