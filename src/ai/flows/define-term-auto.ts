@@ -5,7 +5,7 @@
  * The model should return one or more entries split by part of speech.
  */
 
-import { generateJsonArray, generateText } from '@/ai/llm';
+import { generateJson, generateText } from '@/ai/llm';
 import {
   DefineTermAutoInput,
   DefineTermAutoInputSchema,
@@ -48,27 +48,23 @@ Rules:
 `;
 
   try {
-    const data = await generateJsonArray<DefineTermAutoOutput>({
+    const data = await generateJson<DefineTermAutoOutput>({
       systemPrompt,
       userPrompt,
       image: input.photoDataUri ? { dataUri: input.photoDataUri } : undefined,
       schemaHint:
         'Return ONLY valid JSON array. No markdown. No extra keys outside the specified object shape.',
+      schema: DefineTermAutoOutputSchema,
     });
 
-    const parsed = DefineTermAutoOutputSchema.safeParse(data);
-    if (parsed.success) {
-      return DefineTermAutoOutputSchema.parse(
-        parsed.data.map((it) => ({
-          ...it,
-          word: String(it.word || '').trim(),
-          partOfSpeech: String(it.partOfSpeech || '').trim(),
-          definition: String(it.definition || '').trim(),
-        }))
-      );
-    }
-
-    console.warn('[defineTermAuto] Invalid JSON payload from model:', parsed.error?.message);
+    return DefineTermAutoOutputSchema.parse(
+      data.map((it) => ({
+        ...it,
+        word: String(it.word || '').trim(),
+        partOfSpeech: String(it.partOfSpeech || '').trim(),
+        definition: String(it.definition || '').trim(),
+      }))
+    );
   } catch (e: any) {
     console.error('[defineTermAuto] Generation failed:', e?.message || e);
   }

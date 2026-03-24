@@ -1,5 +1,8 @@
 import 'dotenv/config';
 
+import { aiDebug } from './debug';
+import { AiHttpError, fetchWithTimeoutRetry, readResponseTextSafe } from './http';
+
 /**
  * OpenAI / OpenAI-compatible Chat Completions wrapper.
  *
@@ -41,10 +44,10 @@ export async function generateText(
   }
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('No OPENAI_API_KEY provided');
+  if (!apiKey) throw new Error('未配置 OPENAI_API_KEY（或环境变量未生效）。');
 
   const baseUrl = getBaseUrl();
-  console.log('[OpenAI] model=%s image=%s base=%s', model, image ? 'yes' : 'no', baseUrl);
+  aiDebug('[OpenAI] model=%s image=%s base=%s', model, image ? 'yes' : 'no', baseUrl);
 
   const messages: any[] = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
@@ -69,26 +72,33 @@ export async function generateText(
     max_tokens: options.maxOutputTokens,
   };
 
-  let resp: Response;
-  try {
-    resp = await fetch(`${baseUrl}/chat/completions`, {
+  const resp = await fetchWithTimeoutRetry(
+    `${baseUrl}/chat/completions`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-      signal,
-    });
-  } catch (netErr: any) {
-    console.error('[OpenAI] Network error:', netErr?.message || netErr);
-    throw new Error('Network failure reaching OPENAI_BASE_URL');
-  }
+    },
+    { signal, debugLabel: '[OpenAI] /chat/completions' }
+  );
 
   if (!resp.ok) {
-    const txt = await resp.text();
-    console.error('[OpenAI] HTTP error %s: %s', resp.status, txt);
-    throw new Error(`OpenAI error ${resp.status}: ${txt}`);
+    const txt = await readResponseTextSafe(resp);
+    aiDebug('[OpenAI] HTTP error %s: %s', resp.status, txt);
+
+    const message =
+      resp.status === 401 || resp.status === 403
+        ? 'AI 配置错误：OPENAI_API_KEY 无效或缺失。'
+        : resp.status === 429
+          ? 'AI 当前繁忙（429），已自动重试仍失败，请稍后再试。'
+          : resp.status >= 500
+            ? `AI 服务暂时不可用（${resp.status}），已自动重试仍失败，请稍后再试。`
+            : `OpenAI 请求失败（${resp.status}），请稍后重试。`;
+
+    throw new AiHttpError(resp.status, message, txt);
   }
 
   const json: any = await resp.json();

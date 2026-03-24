@@ -1,6 +1,6 @@
 'use server';
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   GeneratePracticeInput,
   GeneratePracticeInputSchema,
@@ -177,12 +177,14 @@ Rules:
 - Avoid ambiguous reorder questions (must be uniquely solvable).
 - Do NOT omit any required key. If unsure, still include the key with a best-effort value.`;
 
-  const data = await generateJsonArray<GeneratePracticeOutput>({
+  const data = await generateJson<GeneratePracticeOutput>({
     systemPrompt,
     userPrompt,
     signal: options?.signal,
     schemaHint: 'Return ONLY a valid JSON array of question objects, no markdown, no commentary.',
+    coerce: coercePracticeOutput,
+    schema: GeneratePracticeOutputSchema,
   });
 
-  return GeneratePracticeOutputSchema.parse(coercePracticeOutput(data));
+  return data;
 }

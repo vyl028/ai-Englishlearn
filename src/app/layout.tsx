@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import Script from "next/script";
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
+import { PwaClient } from "@/components/pwa-client";
 
 export const metadata: Metadata = {
   title: 'LexiCapture',
@@ -48,6 +49,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-svh">
         {children}
+        <PwaClient />
         <Toaster />
       </body>
     </html>

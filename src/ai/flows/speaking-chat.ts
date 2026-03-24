@@ -9,7 +9,7 @@
  * NOTE: We do NOT have access to audio. Feedback must be based on transcript only.
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   SpeakingChatInput,
   SpeakingChatInputSchema,
@@ -113,12 +113,13 @@ Rules:
 - scoreOverall (optional) is 0-100 and should reflect clarity and correctness (text only).
 - Keep feedbackZh concise but specific; avoid long essays.`;
 
-  const data = await generateJsonArray<SpeakingChatOutput>({
+  const data = await generateJson<SpeakingChatOutput>({
     systemPrompt,
     userPrompt,
     schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys.',
+    coerce: coerceSpeakingChatOutput,
+    schema: SpeakingChatOutputSchema,
   });
 
-  return SpeakingChatOutputSchema.parse(coerceSpeakingChatOutput(data));
+  return data;
 }
-

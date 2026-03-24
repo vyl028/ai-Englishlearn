@@ -4,7 +4,7 @@
  * @fileOverview Analyze an English sentence/paragraph and extract candidate vocabulary for learning.
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   AnalyzeSentenceInput,
   AnalyzeSentenceInputSchema,
@@ -60,13 +60,12 @@ ${withExplanation ? `- translationZh: concise natural Chinese translation.
 - grammarNotesZh: concise Chinese grammar + usage notes for the whole sentence/paragraph (bullet points allowed, no markdown).` : `- Do NOT include translationZh or grammarNotesZh keys.`}
 `;
 
-  const data = await generateJsonArray<AnalyzeSentenceOutput>({
+  const out = await generateJson<AnalyzeSentenceOutput>({
     systemPrompt,
     userPrompt,
     schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys outside the specified object.',
+    schema: AnalyzeSentenceOutputSchema,
   });
-
-  const out = AnalyzeSentenceOutputSchema.parse(data);
 
   // Post-process candidates: normalize, dedupe, exclude, and enforce limits.
   const seen = new Set<string>();
@@ -101,4 +100,3 @@ ${withExplanation ? `- translationZh: concise natural Chinese translation.
     grammarNotesZh: withExplanation ? (out.grammarNotesZh ? String(out.grammarNotesZh).trim() : undefined) : undefined,
   });
 }
-

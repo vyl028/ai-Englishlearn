@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { exportStoryPdfAction, regenerateCapturedWordAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
+import { getAiCache, hashAiCachePayload, setAiCache } from '@/lib/ai-cache';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import {
   AlertDialog,
@@ -116,6 +117,7 @@ export default function Home() {
     wordIds: string[];
     options: { questionCount: number; allowedTypes: PracticeQuestionType[] };
   } | null>(null);
+  const lastStoryRequestRef = useRef<{ wordIds: string[] } | null>(null);
   const [gamification, setGamification] = useState<GamificationState>(() => createDefaultGamificationState());
   const [growthOpen, setGrowthOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -575,7 +577,8 @@ export default function Home() {
 
   const handleGeneratePractice = async (
     practiceWords: CapturedWord[],
-    options: { questionCount: number; allowedTypes: PracticeQuestionType[] }
+    options: { questionCount: number; allowedTypes: PracticeQuestionType[] },
+    meta?: { useCache?: boolean }
   ) => {
     if (isBusy) return;
 
@@ -583,6 +586,29 @@ export default function Home() {
       wordIds: practiceWords.map((w) => w.id),
       options: { questionCount: options.questionCount, allowedTypes: [...options.allowedTypes] },
     };
+
+    const useCache = meta?.useCache !== false;
+    const practiceCacheHash = hashAiCachePayload({
+      words: practiceWords
+        .map(({ word, partOfSpeech, definition }) => ({
+          word: String(word || '').trim(),
+          partOfSpeech: String(partOfSpeech || '').trim(),
+          definition: String(definition || '').trim(),
+        }))
+        .sort((a, b) => (a.word + '|' + a.partOfSpeech).localeCompare(b.word + '|' + b.partOfSpeech)),
+      questionCount: options.questionCount,
+      allowedTypes: [...options.allowedTypes].map((t) => String(t)).sort(),
+    });
+
+    if (useCache) {
+      const cached = getAiCache<{ questions: GeneratePracticeOutput }>('practice', practiceCacheHash);
+      if (cached) {
+        setPracticeData(cached);
+        setView('practice');
+        toast({ title: "已使用缓存", description: "已复用相同输入的练习结果（如需重新生成可点“再生成”）。" });
+        return;
+      }
+    }
 
     const { id: taskId, signal } = startGlobalTask({
       kind: 'practice',
@@ -604,6 +630,7 @@ export default function Home() {
       if (globalTaskIdRef.current !== taskId) return;
 
       if (result.success && result.data) {
+        setAiCache('practice', practiceCacheHash, result.data);
         setPracticeData(result.data);
         setView('practice');
         return;
@@ -661,11 +688,34 @@ export default function Home() {
       });
     }
 
-    void handleGeneratePractice(picked, last.options);
+    void handleGeneratePractice(picked, last.options, { useCache: false });
   };
 
-  const handleGenerateStory = async (storyWords: CapturedWord[]) => {
+  const handleGenerateStory = async (storyWords: CapturedWord[], meta?: { useCache?: boolean }) => {
     if (isBusy) return;
+
+    lastStoryRequestRef.current = { wordIds: storyWords.map((w) => w.id) };
+
+    const useCache = meta?.useCache !== false;
+    const storyCacheHash = hashAiCachePayload({
+      words: storyWords
+        .map(({ word, partOfSpeech, definition }) => ({
+          word: String(word || '').trim(),
+          partOfSpeech: String(partOfSpeech || '').trim(),
+          definition: String(definition || '').trim(),
+        }))
+        .sort((a, b) => (a.word + '|' + a.partOfSpeech).localeCompare(b.word + '|' + b.partOfSpeech)),
+    });
+
+    if (useCache) {
+      const cached = getAiCache<GenerateStoryOutput>('story', storyCacheHash);
+      if (cached) {
+        setStoryData(cached);
+        setView('story');
+        toast({ title: "已使用缓存", description: "已复用相同输入的故事结果（如需重新生成可点“重新生成”）。" });
+        return;
+      }
+    }
 
     const { id: taskId, signal } = startGlobalTask({
       kind: 'story',
@@ -685,6 +735,7 @@ export default function Home() {
       if (globalTaskIdRef.current !== taskId) return;
 
         if (result.success && result.data) {
+          setAiCache('story', storyCacheHash, result.data);
           setStoryData(result.data);
           setView('story');
           setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
@@ -711,6 +762,41 @@ export default function Home() {
     } finally {
       endGlobalTask(taskId);
     }
+  };
+
+  const handleRegenerateStory = () => {
+    if (isBusy) return;
+    const last = lastStoryRequestRef.current;
+    if (!last) {
+      toast({
+        variant: "destructive",
+        title: "无法重新生成",
+        description: "未找到上一则故事的选词，请回到单词本重新生成。",
+      });
+      return;
+    }
+
+    const picked = last.wordIds
+      .map((id) => words.find((w) => w.id === id))
+      .filter(Boolean) as CapturedWord[];
+
+    if (picked.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "无法重新生成",
+        description: "用于生成故事的单词已不存在，请回到单词本重新选择。",
+      });
+      return;
+    }
+
+    if (picked.length !== last.wordIds.length) {
+      toast({
+        title: "已跳过部分单词",
+        description: `有 ${last.wordIds.length - picked.length} 个单词已不在单词本中，将使用剩余 ${picked.length} 个继续生成。`,
+      });
+    }
+
+    void handleGenerateStory(picked, { useCache: false });
   };
 
   const handleExportStoryPdf = async (data: GenerateStoryOutput) => {
@@ -857,6 +943,7 @@ export default function Home() {
             <StoryView
               storyData={storyData}
               onBack={() => setView('review')}
+              onRegenerate={lastStoryRequestRef.current ? handleRegenerateStory : undefined}
               onExportPdf={() => handleExportStoryPdf(storyData)}
             />
           );

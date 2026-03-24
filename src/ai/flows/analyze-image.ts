@@ -6,7 +6,7 @@
  * - If sentence/paragraph: return transcribed English text + candidate vocabulary (<= maxCandidates).
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   AnalyzeImageInput,
   AnalyzeImageInputSchema,
@@ -76,14 +76,13 @@ Rules:
   - Do NOT include words in this exclude list (case-insensitive): ${JSON.stringify(Array.from(excludeSet).slice(0, 200))}
 `;
 
-  const data = await generateJsonArray<AnalyzeImageOutput>({
+  const out = await generateJson<AnalyzeImageOutput>({
     systemPrompt,
     userPrompt,
     image: { dataUri: parsed.photoDataUri },
     schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys.',
+    schema: AnalyzeImageOutputSchema,
   });
-
-  const out = AnalyzeImageOutputSchema.parse(data);
 
   if (out.kind === 'word') {
     const seen = new Set<string>();
@@ -142,4 +141,3 @@ Rules:
     candidateWords: cleanedCandidates,
   });
 }
-

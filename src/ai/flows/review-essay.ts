@@ -9,7 +9,7 @@
  * - Before/after key rewrites
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   ReviewEssayInput,
   ReviewEssayInputSchema,
@@ -85,13 +85,12 @@ Rules:
 - revisedTextEn: rewrite the whole essay to improve task response, coherence, and accuracy, while preserving the original meaning; keep clear paragraphing.
 - Return JSON only.`;
 
-  const data = await generateJsonArray<ReviewEssayOutput>({
+  const out = await generateJson<ReviewEssayOutput>({
     systemPrompt,
     userPrompt,
     schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys.',
+    schema: ReviewEssayOutputSchema,
   });
-
-  const out = ReviewEssayOutputSchema.parse(data);
   const scores = out.scores;
 
   const tr = normalizeBand(scores.taskResponse);
@@ -112,4 +111,3 @@ Rules:
     },
   });
 }
-

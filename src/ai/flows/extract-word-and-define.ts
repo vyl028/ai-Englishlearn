@@ -4,7 +4,7 @@
  * @fileOverview Extract English words (with part of speech) from an image and provide Chinese definitions.
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   ExtractWordAndDefineInput,
   ExtractWordAndDefineInputSchema,
@@ -37,12 +37,13 @@ Rules:
 - enrichment should be compact: collocations 2-4, synonyms/antonyms 2-4, examples 1-2, usageZh <= 80 Chinese characters.
 - If no valid English words, return [].`;
 
-  const data = await generateJsonArray<{ word: string; partOfSpeech: string; definition: string; }[]>({
+  const data = await generateJson<ExtractWordAndDefineOutput>({
     systemPrompt,
     userPrompt,
     image: { dataUri: input.photoDataUri },
-    schemaHint: 'Return ONLY valid compact JSON array, no markdown, no commentary.'
+    schemaHint: 'Return ONLY valid compact JSON array, no markdown, no commentary.',
+    schema: ExtractWordAndDefineOutputSchema,
   });
 
-  return ExtractWordAndDefineOutputSchema.parse(data);
+  return data;
 }

@@ -4,7 +4,7 @@
  * @fileOverview Define multiple English words in one request and return Chinese definitions + optional compact enrichment.
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   DefineWordsBatchInput,
   DefineWordsBatchInputSchema,
@@ -49,13 +49,12 @@ Rules:
 - Do NOT change the order.
 - Do NOT add extra items.`;
 
-  const data = await generateJsonArray<DefineWordsBatchOutput>({
+  const out = await generateJson<DefineWordsBatchOutput>({
     systemPrompt,
     userPrompt,
     schemaHint: 'Return ONLY valid JSON array. No markdown. No extra keys.',
+    schema: DefineWordsBatchOutputSchema,
   });
-
-  const out = DefineWordsBatchOutputSchema.parse(data);
   if (out.length !== parsed.words.length) {
     throw new Error(`Model returned ${out.length} items, expected ${parsed.words.length}.`);
   }
@@ -66,4 +65,3 @@ Rules:
     definition: String(w.definition || '').trim(),
   }));
 }
-

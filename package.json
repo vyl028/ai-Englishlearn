@@ -10,7 +10,9 @@
     "build": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs build",
     "start": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs start",
     "lint": "node --require ./scripts/node-preload.cjs scripts/next-safe.cjs lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preflight": "npm run typecheck && npm run lint",
+    "smoke": "node --experimental-strip-types scripts/smoke.mjs"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",

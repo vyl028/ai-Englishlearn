@@ -31,6 +31,7 @@ import { reviewEssay } from '@/ai/flows/review-essay';
 import { speakingChat } from '@/ai/flows/speaking-chat';
 import { studyArticle } from '@/ai/flows/study-article';
 import { analyzeImage } from '@/ai/flows/analyze-image';
+import { aiDebug } from '@/ai/debug';
 import { generateId } from "@/lib/utils";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
 import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
@@ -87,14 +88,14 @@ export async function extractWordAndDefineAction(
   try {
     const result = await extractWordAndDefine({ photoDataUri });
     if (!result || result.length === 0) {
-      console.log('No words found in result');
+      aiDebug('[extractWordAndDefineAction] No words found in result');
       return { success: false, error: "无法从图片中识别到单词，请重试。" };
     }
-    console.log('Returning success with data:', result);
+    aiDebug('[extractWordAndDefineAction] Returning %s items', Array.isArray(result) ? result.length : 0);
     return { success: true, data: result };
   } catch (error: any) {
     console.error('extractWordAndDefineAction error:', error);
-    console.error('Error stack:', error.stack);
+    aiDebug('[extractWordAndDefineAction] stack=%s', error?.stack || '');
     return { success: false, error: error.message || "分析图片时发生错误。" };
   }
 }

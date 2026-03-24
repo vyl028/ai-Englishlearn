@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
 import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff, Search, Copy, Loader2, RefreshCcw, GripVertical } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,6 +79,20 @@ const groupWordsByWeek = (words: CapturedWord[]) => {
 
   return grouped;
 };
+
+function getWeekStart(date: Date) {
+  const start = new Date(date);
+  const day = start.getDay();
+  const diff = start.getDate() - day;
+  return new Date(start.setDate(diff));
+}
+
+function getWeekEnd(date: Date) {
+  const end = new Date(date);
+  const day = end.getDay();
+  const diff = end.getDate() - day + 6;
+  return new Date(end.setDate(diff));
+}
 
 const POS_ORDER = [
   'noun',
@@ -227,6 +241,7 @@ export function WordReviewList({
   const [reviewSearch, setReviewSearch] = useState('');
   const [masteryFilter, setMasteryFilter] = useState<MasteryFilter>('all');
   const [reviewSort, setReviewSort] = useState<ReviewSort>('newest');
+  const [renderLimit, setRenderLimit] = useState(80);
   const { toast } = useToast();
   const [regeneratingWordIds, setRegeneratingWordIds] = useState<Set<string>>(new Set());
 
@@ -279,19 +294,34 @@ export function WordReviewList({
     setBulkSelectedCardKeys(new Set());
   }, [reviewSearch, masteryFilter]);
 
+  useEffect(() => {
+    setRenderLimit(80);
+  }, [selectedGroupId, reviewSearch, masteryFilter, reviewSort]);
+
   const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
   const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
 
-  const groupIds = new Set(groups.map((g) => g.id));
-  const getWordGroupId = (w: CapturedWord) => (typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : undefined);
+  const groupIds = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
+  const getWordGroupId = useMemo(
+    () => (w: CapturedWord) => (typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : undefined),
+    [groupIds]
+  );
 
-  const allSortedWords = [...words].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
-  const viewWords = selectedGroupId === ALL_GROUP_ID
-    ? allSortedWords
-    : allSortedWords.filter((w) => getWordGroupId(w) === selectedGroupId);
-  const normalizedReviewSearch = reviewSearch.trim().toLowerCase();
+  const allSortedWords = useMemo(
+    () => [...words].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()),
+    [words]
+  );
+  const viewWords = useMemo(() => {
+    return selectedGroupId === ALL_GROUP_ID
+      ? allSortedWords
+      : allSortedWords.filter((w) => getWordGroupId(w) === selectedGroupId);
+  }, [allSortedWords, getWordGroupId, selectedGroupId]);
+  const normalizedReviewSearch = useMemo(() => reviewSearch.trim().toLowerCase(), [reviewSearch]);
 
-  const selectedWords = allSortedWords.filter(w => selectedWordIds.has(w.id));
+  const selectedWords = useMemo(
+    () => allSortedWords.filter((w) => selectedWordIds.has(w.id)),
+    [allSortedWords, selectedWordIds]
+  );
 
   const now = new Date();
   const cutoffWeek = subWeeks(now, 1);
@@ -300,15 +330,16 @@ export function WordReviewList({
   const recentWeekWords = allSortedWords.filter(w => new Date(w.capturedAt) >= cutoffWeek);
   const recentMonthWords = allSortedWords.filter(w => new Date(w.capturedAt) >= cutoffMonth);
 
-  const normalizedSearch = wordSearch.trim().toLowerCase();
-  const filteredWords = normalizedSearch.length === 0
-    ? allSortedWords
-    : allSortedWords.filter(w => {
+  const normalizedSearch = useMemo(() => wordSearch.trim().toLowerCase(), [wordSearch]);
+  const filteredWords = useMemo(() => {
+    if (normalizedSearch.length === 0) return allSortedWords;
+    return allSortedWords.filter((w) => {
       const word = w.word.toLowerCase();
       const pos = (w.partOfSpeech || '').toLowerCase();
       const def = (w.definition || '').toLowerCase();
       return word.includes(normalizedSearch) || pos.includes(normalizedSearch) || def.includes(normalizedSearch);
     });
+  }, [allSortedWords, normalizedSearch]);
 
   const storyTooManyThreshold = 12;
   const isStoryTooMany = generatorMode === 'story' && selectedWords.length > storyTooManyThreshold;
@@ -354,64 +385,77 @@ export function WordReviewList({
     return `${startMonth} ${startDate.getDate()} - ${endMonth} ${endDate.getDate()}, '${year}`;
   };
 
-  const getWeekStart = (date: Date) => {
-    const start = new Date(date);
-    const day = start.getDay();
-    const diff = start.getDate() - day;
-    return new Date(start.setDate(diff));
-  };
+  const groupedWords = useMemo(() => {
+    return viewWords.reduce((acc, word) => {
+      const weekStart = getWeekStart(word.capturedAt as any);
+      const weekKey = weekStart.toISOString().split('T')[0];
+      if (!acc[weekKey]) acc[weekKey] = [];
+      acc[weekKey].push(word);
+      return acc;
+    }, {} as Record<string, CapturedWord[]>);
+  }, [viewWords]);
 
-  const getWeekEnd = (date: Date) => {
-    const end = new Date(date);
-    const day = end.getDay();
-    const diff = end.getDate() - day + 6;
-    return new Date(end.setDate(diff));
-  };
-
-  // Group words by week
-  const groupedWords = viewWords.reduce((acc, word) => {
-    const weekStart = getWeekStart(word.capturedAt);
-    const weekKey = weekStart.toISOString().split('T')[0];
-    if (!acc[weekKey]) {
-      acc[weekKey] = [];
-    }
-    acc[weekKey].push(word);
-    return acc;
-  }, {} as Record<string, CapturedWord[]>);
-
-  const baseWeekKeys = Object.keys(groupedWords).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-  const weekKeys = reviewSort === 'oldest' ? [...baseWeekKeys].reverse() : baseWeekKeys;
-
-  const weekSections = weekKeys
-    .map((weekKey) => {
-      const termGroups = groupWordsByTerm(groupedWords[weekKey]);
-      const afterSearch = normalizedReviewSearch.length === 0
-        ? termGroups
-        : termGroups.filter((tg) => tg.words.some((w) => wordMatchesSearch(w, normalizedReviewSearch)));
-      const afterMastery = masteryFilter === 'all'
-        ? afterSearch
-        : afterSearch.filter((tg) => {
-          const isMastered = tg.words.some((w) => w.mastered === true);
-          return masteryFilter === 'mastered' ? isMastered : !isMastered;
-        });
-      const sorted = [...afterMastery].sort((a, b) => {
-        if (reviewSort === 'az') return a.key.localeCompare(b.key);
-        const diff = a.latestCapturedAt.getTime() - b.latestCapturedAt.getTime();
-        return reviewSort === 'oldest' ? diff : -diff;
-      });
-      return { weekKey, groups: sorted };
-    })
-    .filter((s) => s.groups.length > 0);
-
-  const visibleCards = weekSections.flatMap(({ weekKey, groups: list }) =>
-    list.map((g) => ({
-      cardKey: `${weekKey}::${g.key}`,
-      weekKey,
-      termKey: g.key,
-      display: g.display,
-      words: g.words,
-    }))
+  const baseWeekKeys = useMemo(
+    () => Object.keys(groupedWords).sort((a, b) => new Date(b).getTime() - new Date(a).getTime()),
+    [groupedWords]
   );
+
+  const weekKeys = useMemo(
+    () => (reviewSort === 'oldest' ? [...baseWeekKeys].reverse() : baseWeekKeys),
+    [baseWeekKeys, reviewSort]
+  );
+
+  const weekSections = useMemo(() => {
+    return weekKeys
+      .map((weekKey) => {
+        const termGroups = groupWordsByTerm(groupedWords[weekKey]);
+        const afterSearch = normalizedReviewSearch.length === 0
+          ? termGroups
+          : termGroups.filter((tg) => tg.words.some((w) => wordMatchesSearch(w, normalizedReviewSearch)));
+        const afterMastery = masteryFilter === 'all'
+          ? afterSearch
+          : afterSearch.filter((tg) => {
+            const isMastered = tg.words.some((w) => w.mastered === true);
+            return masteryFilter === 'mastered' ? isMastered : !isMastered;
+          });
+        const sorted = [...afterMastery].sort((a, b) => {
+          if (reviewSort === 'az') return a.key.localeCompare(b.key);
+          const diff = a.latestCapturedAt.getTime() - b.latestCapturedAt.getTime();
+          return reviewSort === 'oldest' ? diff : -diff;
+        });
+        return { weekKey, groups: sorted };
+      })
+      .filter((s) => s.groups.length > 0);
+  }, [groupedWords, masteryFilter, normalizedReviewSearch, reviewSort, weekKeys]);
+
+  const totalCardCount = useMemo(
+    () => weekSections.reduce((sum, s) => sum + s.groups.length, 0),
+    [weekSections]
+  );
+
+  const weekSectionsToRender = useMemo(() => {
+    let remaining = Math.max(1, renderLimit);
+    const out: { weekKey: string; groups: ReturnType<typeof groupWordsByTerm> }[] = [];
+    for (const section of weekSections) {
+      if (remaining <= 0) break;
+      const groups = section.groups.slice(0, remaining);
+      remaining -= groups.length;
+      if (groups.length > 0) out.push({ weekKey: section.weekKey, groups });
+    }
+    return out;
+  }, [renderLimit, weekSections]);
+
+  const visibleCards = useMemo(() => {
+    return weekSectionsToRender.flatMap(({ weekKey, groups: list }) =>
+      list.map((g) => ({
+        cardKey: `${weekKey}::${g.key}`,
+        weekKey,
+        termKey: g.key,
+        display: g.display,
+        words: g.words,
+      }))
+    );
+  }, [weekSectionsToRender]);
 
   const bulkSelectedCards = visibleCards.filter((c) => bulkSelectedCardKeys.has(c.cardKey));
   const bulkSelectedCardCount = bulkSelectedCards.length;
@@ -600,11 +644,13 @@ export function WordReviewList({
       });
     };
 
-    const groupCounts = allSortedWords.reduce((acc, w) => {
-      const gid = getWordGroupId(w);
-      if (gid) acc[gid] = (acc[gid] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const groupCounts = useMemo(() => {
+      return allSortedWords.reduce((acc, w) => {
+        const gid = getWordGroupId(w);
+        if (gid) acc[gid] = (acc[gid] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+    }, [allSortedWords, getWordGroupId]);
 
     const groupToDelete = deleteGroupId ? groups.find((g) => g.id === deleteGroupId) : undefined;
     const deleteWordCount = groupToDelete ? (groupCounts[groupToDelete.id] || 0) : 0;
@@ -795,8 +841,8 @@ export function WordReviewList({
          </div>
        ) : (
          <div className="space-y-8">
-           {weekSections.map(({ weekKey, groups: weekTermGroups }) => (
-             <div key={weekKey}>
+            {weekSectionsToRender.map(({ weekKey, groups: weekTermGroups }) => (
+              <div key={weekKey}>
                <div className="flex justify-between items-center mb-3">
                          <h3 className="text-lg font-semibold text-foreground mb-3">
            {formatWeekRange(getWeekStart(new Date(weekKey)), getWeekEnd(new Date(weekKey)))}
@@ -1201,9 +1247,24 @@ export function WordReviewList({
                  })}
                </div>
              </div>
-           ))}
-         </div>
-       )}
+            ))}
+
+            {visibleCards.length < totalCardCount && (
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRenderLimit((prev) => prev + 80)}
+                >
+                  加载更多
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  已显示 {visibleCards.length} / {totalCardCount}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
     </div>
 
     <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>

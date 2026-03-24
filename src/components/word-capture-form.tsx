@@ -23,6 +23,7 @@ import type { CapturedWord } from "@/lib/types";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateId } from "@/lib/utils";
+import { getAiCache, hashAiCachePayload, setAiCache } from "@/lib/ai-cache";
 
 const formSchema = z.object({
   word: z
@@ -252,10 +253,19 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         }
 
         try {
-          const result = await defineTermAutoAction({ term });
+          const defineCacheHash = hashAiCachePayload({ term: term.trim().toLowerCase() });
+          const cached = getAiCache<NonNullable<Awaited<ReturnType<typeof defineTermAutoAction>>["data"]>>(
+            'define',
+            defineCacheHash
+          );
+          const result = cached ? { success: true, data: cached } : await defineTermAutoAction({ term });
           if (!result.success || !result.data) {
             failed.push({ term, reason: result.error || "生成失败" });
             continue;
+          }
+
+          if (!cached) {
+            setAiCache('define', defineCacheHash, result.data);
           }
 
           const capturedAt = new Date();

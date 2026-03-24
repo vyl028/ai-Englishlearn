@@ -1,6 +1,6 @@
 'use server';
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   GenerateQuizInput,
   GenerateQuizInputSchema,
@@ -20,12 +20,12 @@ For each question, you MUST provide all of the following fields: "question", "op
   
   const userPrompt = `Words to test:\n${wordsToTest}\n\nGenerate the quiz questions now.`;
 
-  const data = await generateJsonArray<GenerateQuizOutput>({
+  const parsedData = await generateJson<GenerateQuizOutput>({
     systemPrompt,
     userPrompt,
-    schemaHint: 'Return ONLY a valid JSON array of question objects, no markdown, no commentary.'
+    schemaHint: 'Return ONLY a valid JSON array of question objects, no markdown, no commentary.',
+    schema: GenerateQuizOutputSchema,
   });
 
-  const parsedData = GenerateQuizOutputSchema.parse(data);
   return { questions: parsedData };
 }

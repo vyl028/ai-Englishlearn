@@ -9,7 +9,7 @@
  * - Optional reading comprehension questions (Chinese-exam style MCQ)
  */
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   StudyArticleInput,
   StudyArticleInputSchema,
@@ -103,12 +103,12 @@ Rules:
   - Cover a mix of: main idea, detail, inference, vocabulary-in-context, author attitude/purpose.
 - Output JSON only. Do NOT include markdown.`;
 
-  const data = await generateJsonArray<StudyArticleOutput>({
+  const data = await generateJson<StudyArticleOutput>({
     systemPrompt,
     userPrompt,
     schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys.',
+    schema: StudyArticleOutputSchema,
   });
 
-  return StudyArticleOutputSchema.parse(data);
+  return data;
 }
-

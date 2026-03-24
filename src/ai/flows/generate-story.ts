@@ -1,6 +1,6 @@
 'use server';
 
-import { generateJsonArray } from '@/ai/llm';
+import { generateJson } from '@/ai/llm';
 import {
   GenerateStoryInput,
   GenerateStoryInputSchema,
@@ -24,12 +24,13 @@ Your output MUST be a single, valid JSON object containing "title", "story", and
 
   const userPrompt = `Words to include:\n${wordsToInclude}\n\nGenerate the story now.`;
 
-  const data = await generateJsonArray<GenerateStoryOutput>({
+  const data = await generateJson<GenerateStoryOutput>({
     systemPrompt,
     userPrompt,
     signal: options?.signal,
-    schemaHint: 'Return ONLY a valid JSON object with "title", "story", and "translation" fields, no markdown, no commentary.'
+    schemaHint: 'Return ONLY a valid JSON object with "title", "story", and "translation" fields, no markdown, no commentary.',
+    schema: GenerateStoryOutputSchema,
   });
 
-  return GenerateStoryOutputSchema.parse(data);
+  return data;
 }

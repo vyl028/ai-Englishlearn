@@ -28,6 +28,19 @@
 - 清单 85：导出支持子集：全量 / 仅单词 / 仅成长。
 - 清单 86：导入支持策略选择：覆盖导入 / 合并导入（合并默认尽量不覆盖现有主题与偏好设置）。
 - 清单 87：新增“数据修复”向导：扫描已知 key 的 JSON 损坏，支持尝试修复 / 导出原始文本 / 引导重置。
+- 清单 88：AI 请求统一加入超时与 AbortSignal（取消生成可稳定中断，Gemini/OpenAI 行为一致）。
+- 清单 89：429/5xx 自动重试（指数退避 + 抖动，支持 `Retry-After`），并统一错误提示。
+- 清单 90：统一 JSON 提取（纯 JSON / ```json``` code fence / 文本截取 `{}` 或 `[]`），减少非 JSON 输出导致失败。
+- 清单 91：所有 AI flows 输出接入 Zod 校验（可选 coerce），并在解析/校验失败时自动进行 1 次“修复重试”。
+- 清单 92：define/practice/story 结果按输入 hash 做本地缓存（TTL 14 天，条数/容量上限），提高重复操作响应速度。
+- 清单 93：新增 `AI_DEBUG` 日志开关（默认静默），便于排查模型输出与代理/网络问题。
+- 清单 94：收敛服务端与 server action 内多余日志输出，统一走可控 debug。
+- 清单 95：移除未使用的 `QuizView` 组件（避免死代码与潜在编码问题扩散）。
+- 清单 96：补齐 PWA manifest 引用的 icon 文件（192/512）。
+- 清单 97：新增 service worker：静态资源离线缓存 + 离线提示条。
+- 清单 98：`WordReviewList` 大列表渲染优化（memo 派生数据 + 分批“加载更多”）。
+- 清单 99：新增 `npm run preflight`（typecheck + lint）用于合并前自检。
+- 清单 100：新增最小 smoke tests（PWA 关键文件、PNG 尺寸、JSON 提取器、cache hash）。
 
 ### 涉及文件
 - 修改：`src/components/speaking-training-view.tsx`
@@ -39,6 +52,28 @@
 - 新增：`src/lib/backup.ts`
 - 修改：`src/components/settings-sheet.tsx`
 - 修改：`docs/PROJECT_OVERVIEW.md`
+- 新增：`src/ai/http.ts`
+- 新增：`src/ai/json.ts`
+- 新增：`src/ai/debug.ts`
+- 修改：`src/ai/gemini.ts`
+- 修改：`src/ai/openai.ts`
+- 修改：`src/ai/llm.ts`
+- 修改：`src/ai/flows/*`
+- 修改：`src/ai/server.ts`
+- 修改：`src/app/actions.ts`
+- 新增：`src/lib/ai-cache.ts`
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/components/story-view.tsx`
+- 修改：`src/components/word-review-list.tsx`
+- 新增：`src/components/pwa-client.tsx`
+- 修改：`src/app/layout.tsx`
+- 新增：`public/icon-192x192.png`
+- 新增：`public/icon-512x512.png`
+- 新增：`public/sw.js`
+- 修改：`package.json`
+- 新增：`scripts/smoke.mjs`
+- 删除：`src/components/quiz-view.tsx`
+- 修改：`.env.example`
 
 ### 背景/原因
 - 提升移动端口语输入效率与可控性（按住说话），并让用户的语音/对话偏好可跨刷新保留。

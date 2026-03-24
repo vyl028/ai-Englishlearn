@@ -4,7 +4,7 @@
  * @fileOverview Define a captured English word by providing its Chinese definition.
  */
 
-import { generateJsonArray, generateText } from '@/ai/llm';
+import { generateJson, generateText } from '@/ai/llm';
 import {
   DefineCapturedWordInput,
   DefineCapturedWordInputSchema,
@@ -43,23 +43,19 @@ Rules:
 `;
 
   try {
-    const data = await generateJsonArray<DefineCapturedWordOutput>({
+    const data = await generateJson<DefineCapturedWordOutput>({
       systemPrompt,
       userPrompt,
       image: input.photoDataUri ? { dataUri: input.photoDataUri } : undefined,
       schemaHint: 'Return ONLY valid JSON. No markdown. No extra keys outside the specified object.',
+      schema: DefineCapturedWordOutputSchema,
     });
 
-    const parsed = DefineCapturedWordOutputSchema.safeParse(data);
-    if (parsed.success) {
-      const definition = parsed.data.definition.trim();
-      return DefineCapturedWordOutputSchema.parse({
-        ...parsed.data,
-        definition,
-      });
-    }
-
-    console.warn('[defineCapturedWord] Invalid JSON payload from model:', parsed.error?.message);
+    const definition = data.definition.trim();
+    return DefineCapturedWordOutputSchema.parse({
+      ...data,
+      definition,
+    });
   } catch (e: any) {
     console.error('[defineCapturedWord] Enrichment generation failed:', e?.message || e);
   }

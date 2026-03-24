@@ -1,5 +1,10 @@
 import 'dotenv/config';
 
+import type { ZodType } from 'zod';
+
+import { aiDebug } from './debug';
+import { parseJsonFromText } from './json';
+
 export type AiProvider = 'gemini' | 'openai';
 
 export interface GenerateOptions {
@@ -51,56 +56,89 @@ export async function generateText(
   return geminiGenerateText({ ...params, model });
 }
 
-export async function generateJsonArray<T = any>(
-  params: Omit<Parameters<typeof generateText>[0], 'options'> & { schemaHint?: string; model?: string; parse?: (raw: string) => T; }
-): Promise<T> {
-  const schemaHint = params.schemaHint || 'Return JSON only.';
-  const raw = await generateText({
-    ...params,
-    userPrompt: params.userPrompt + `\n\n${schemaHint}`,
-    options: { responseMimeType: 'application/json' },
-  });
+function truncateForRepair(raw: string, maxChars: number) {
+  const text = String(raw || '');
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + `\n…(truncated, ${text.length} chars total)`;
+}
 
-  try {
-    return (params.parse ? params.parse(raw) : JSON.parse(raw)) as T;
-  } catch (e) {
-    const match = raw.match(/```(json)?\s*([\s\S]*?)\s*```/);
-    if (match && match[2]) {
-      try {
-        return JSON.parse(match[2]) as T;
-      } catch (parseError) {
-        console.log('Invalid JSON substring:', match[2]);
-        throw new Error(`Failed to parse extracted JSON substring from model response. Error: ${parseError}`);
+export type GenerateJsonParams<T> = Omit<Parameters<typeof generateText>[0], 'options'> & {
+  schemaHint?: string;
+  model?: string;
+  parse?: (raw: string) => unknown;
+  coerce?: (value: unknown) => unknown;
+  schema?: ZodType<T, any, unknown>;
+  repairAttempts?: number;
+};
+
+export async function generateJson<T = any>(params: GenerateJsonParams<T>): Promise<T> {
+  const schemaHint = params.schemaHint || 'Return JSON only (no markdown, no extra commentary).';
+  const repairAttempts = typeof params.repairAttempts === 'number' ? Math.max(0, params.repairAttempts) : 1;
+
+  let prevRaw = '';
+  let prevError = '';
+
+  for (let attempt = 0; attempt <= repairAttempts; attempt++) {
+    const isRepairAttempt = attempt > 0;
+    const raw = await generateText({
+      systemPrompt: isRepairAttempt
+        ? `You are a strict JSON repair tool.
+You MUST output valid JSON only (no markdown, no extra commentary, no code fences).
+Fix the previous output to match the schema requirements.`
+        : params.systemPrompt,
+      userPrompt: isRepairAttempt
+        ? `Schema requirements:
+${schemaHint}
+
+Previous output:
+${truncateForRepair(prevRaw, 8_000)}
+
+Error:
+${prevError || '(unknown)'}
+
+Return ONLY the corrected JSON.`
+        : params.userPrompt + `\n\n${schemaHint}`,
+      image: isRepairAttempt ? undefined : params.image,
+      model: params.model,
+      signal: params.signal,
+      options: {
+        responseMimeType: 'application/json',
+        temperature: isRepairAttempt ? 0.2 : undefined,
+      },
+    });
+
+    let value: unknown;
+    try {
+      value = params.parse ? params.parse(raw) : parseJsonFromText(raw);
+    } catch (e: any) {
+      prevRaw = raw;
+      prevError = String(e?.message || e || 'Failed to parse JSON');
+      aiDebug('[AI JSON] parse failed attempt=%s/%s err=%s', attempt, repairAttempts, prevError);
+      if (attempt >= repairAttempts) {
+        throw new Error('AI 返回的 JSON 无法解析，请稍后重试。');
       }
+      continue;
     }
 
-    const firstBracket = raw.indexOf('[');
-    const lastBracket = raw.lastIndexOf(']');
-    const firstBrace = raw.indexOf('{');
-    const lastBrace = raw.lastIndexOf('}');
+    const coerced = params.coerce ? params.coerce(value) : value;
+    if (!params.schema) return coerced as T;
 
-    let startIndex = -1;
-    let endIndex = -1;
+    const parsed = params.schema.safeParse(coerced);
+    if (parsed.success) return parsed.data;
 
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      startIndex = firstBracket;
-      endIndex = lastBracket;
-    } else if (firstBrace !== -1 && lastBrace !== -1) {
-      startIndex = firstBrace;
-      endIndex = lastBrace;
+    prevRaw = raw;
+    prevError = parsed.error?.message || 'Schema validation failed';
+    aiDebug('[AI JSON] schema failed attempt=%s/%s err=%s', attempt, repairAttempts, prevError);
+
+    if (attempt >= repairAttempts) {
+      throw new Error('AI 返回的数据结构不符合要求，请稍后重试。');
     }
-
-    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-      const jsonSubstring = raw.substring(startIndex, endIndex + 1);
-      try {
-        return JSON.parse(jsonSubstring) as T;
-      } catch (parseError) {
-        console.log('Invalid JSON substring:', jsonSubstring);
-        throw new Error(`Failed to parse extracted JSON substring from model response. Error: ${parseError}`);
-      }
-    }
-
-    throw new Error('Failed to parse or find valid JSON in model response');
   }
+
+  throw new Error('Unexpected generateJson fallthrough');
+}
+
+export async function generateJsonArray<T = any>(params: GenerateJsonParams<T>): Promise<T> {
+  return generateJson<T>(params);
 }
 

@@ -220,7 +220,12 @@
 │  └─ blueprint.md
 ├─ public/
 │  ├─ manifest.json
+│  ├─ icon-192x192.png
+│  ├─ icon-512x512.png
+│  ├─ sw.js
 │  └─ fonts/ (NotoSansSC-*.ttf)
+├─ scripts/
+│  └─ smoke.mjs
 ├─ src/
 │  ├─ app/
 │  │  ├─ actions.ts
@@ -228,7 +233,10 @@
 │  │  ├─ layout.tsx
 │  │  └─ page.tsx
 │  ├─ ai/
+│  │  ├─ debug.ts
 │  │  ├─ dev.ts
+│  │  ├─ http.ts
+│  │  ├─ json.ts
 │  │  ├─ gemini.ts
 │  │  ├─ llm.ts
 │  │  ├─ openai.ts
@@ -244,13 +252,16 @@
 │  │  ├─ word-capture-form.tsx
 │  │  ├─ word-review-list.tsx
 │  │  ├─ edit-word-dialog.tsx
-│  │  ├─ quiz-view.tsx
 │  │  ├─ practice-view.tsx
+│  │  ├─ story-view.tsx
+│  │  ├─ pwa-client.tsx
 │  │  └─ ui/ (shadcn/radix 组件集合)
 │  ├─ hooks/
 │  │  ├─ use-mobile.tsx
 │  │  └─ use-toast.ts
 │  └─ lib/
+│     ├─ ai-cache.ts
+│     ├─ backup.ts
 │     ├─ types.ts
 │     ├─ utils.ts
 │     ├─ pdf-utils.ts
@@ -281,6 +292,8 @@ npm run start
 # 代码质量
 npm run lint
 npm run typecheck
+npm run preflight
+npm run smoke
 
 # 可选：启动本地 AI 服务（Express，端口 3400）
 npm run ai:dev
@@ -331,21 +344,23 @@ type CapturedWord = {
   - 旧数据若缺少 `groupId` 会视为未分组（仅在“全部”中可见）
 - 分组列表 key：`lexi-capture-groups`
 - 当前选中分组 key：`lexi-capture-selected-group`
+- AI 结果缓存（define/practice/story）：`lexi-capture-ai-cache-v1:index` + `lexi-capture-ai-cache-v1:entry:*`
 
 ## 8. 关键业务流程（从代码映射）
 
 ### 8.1 手动输入 → 生成释义 → 加入列表
 `WordCaptureForm.onSubmit`  
-→ `src/app/actions.ts#getDefinitionAction`  
-→ `src/ai/flows/define-captured-word.ts#defineCapturedWord`  
-→ `src/ai/gemini.ts#generateText`  
-→ 返回 `definition`，在前端追加到 `words`（进入当前选中分组；若当前为“全部”则为未分组）并写入 localStorage
+→ `src/app/actions.ts#defineTermAutoAction`  
+→ `src/ai/flows/define-term-auto.ts#defineTermAuto`  
+→ `src/ai/llm.ts#generateJson`（结构化 JSON + Zod 校验 + 修复重试）  
+→ `src/ai/gemini.ts#generateText` / `src/ai/openai.ts#generateText`  
+→ 返回 1-4 条（按词性拆分）的释义与 enrichment，前端生成多个 `CapturedWord` 追加到 `words` 并写入 localStorage（可命中本地 AI 缓存）
 
 ### 8.2 拍照/上传 → OCR+释义（多词）→ 加入列表
 `WordCaptureForm.handleImageAnalysis`  
 → `src/app/actions.ts#extractWordAndDefineAction`  
 → `src/ai/flows/extract-word-and-define.ts#extractWordAndDefine`  
-→ `src/ai/gemini.ts#generateJsonArray`（要求返回 JSON array）  
+→ `src/ai/llm.ts#generateJson`（结构化 JSON + Zod 校验 + 修复重试，期望 JSON array）  
 → 生成多个 `CapturedWord` 并追加到列表（进入当前选中分组；若当前为“全部”则为未分组）
 
 ### 8.3 每周 Practice（练习）
@@ -365,22 +380,37 @@ type CapturedWord = {
 
 ## 9. AI 模块说明（当前实现）
 
-### 9.1 Gemini 封装
-文件：`src/ai/gemini.ts`
+### 9.1 LLM Provider 封装（Gemini/OpenAI）
+文件：
+- `src/ai/gemini.ts`
+- `src/ai/openai.ts`
 
+- 统一通过 `src/ai/http.ts#fetchWithTimeoutRetry` 发起请求：支持 AbortSignal、超时（`AI_TIMEOUT_MS`）与 429/5xx 自动重试（`AI_MAX_RETRIES`）。
+- `AI_DEBUG=1/true/on` 时输出调试日志（见 `src/ai/debug.ts`）。
+
+Gemini：
 - API Key：`GOOGLE_API_KEY` 或 `GEMINI_API_KEY`
 - 模型：默认 `gemini-2.5-flash`（可用 `GEMINI_MODEL` 覆盖）
-- 支持 **代理模式**：设置 `GEMINI_BASE_URL` 后改为手写 `fetch` 调用 `${BASE_URL}/v1beta/models/${model}:generateContent`
-- `generateJsonArray()`：
-  - 首选 `JSON.parse`
-  - 失败时尝试从 ```json code block``` 或首个 `[`/`{` 到末尾 `]`/`}` 截取再 parse
+- 支持 **代理模式**：设置 `GEMINI_BASE_URL` 后改为手写 `fetch` 调用 `${BASE_URL}/v1beta/models/${model}:generateContent`（header `x-goog-api-key`）
 
-### 9.2 “Genkit”现状说明（重要）
+OpenAI / OpenAI-compatible：
+- API Key：`OPENAI_API_KEY`
+- 模型：默认 `gpt-4o-mini`（可用 `OPENAI_MODEL` 覆盖）
+- Base URL：可选 `OPENAI_BASE_URL`（默认 `https://api.openai.com/v1`）
+
+### 9.2 结构化 JSON（统一解析 + 校验 + 修复重试）
+入口：`src/ai/llm.ts#generateJson`
+
+- `generateText()` 获取原始文本输出（调用 9.1 provider）
+- `src/ai/json.ts#parseJsonFromText` 提取 JSON（纯 JSON / ```json``` code fence / 文本截取）
+- 可选 `coerce` + Zod `schema` 校验；失败会自动进行 1 次“修复重试”（要求只输出合法 JSON）
+
+### 9.3 “Genkit”现状说明（重要）
 - `src/ai/genkit.ts` 明确标注：**Deprecated**，保留为兼容/未来可能用途
 - `src/ai/flows/*` 并未使用 `genkit` 的 `defineFlow` 等能力，当前更像“普通 server-side helper”
 - `npm run genkit:*` 是否仍可用，取决于 Genkit CLI 对当前代码形态的支持；如果后续要持续使用 Genkit UI，建议统一为真正的 Genkit flow 定义
 
-### 9.3 独立 AI 服务（可选）
+### 9.4 独立 AI 服务（可选）
 文件：`src/ai/server.ts`
 
 - Express 服务，提供：
@@ -402,10 +432,17 @@ type CapturedWord = {
 
 项目中出现的环境变量（见 `src/ai/*`、`src/app/actions.ts`）：
 
+- `AI_PROVIDER`：`gemini`（默认）或 `openai`
 - `GOOGLE_API_KEY`：Gemini API key（必需，服务端使用）
 - `GEMINI_API_KEY`：备用 key（与 `GOOGLE_API_KEY` 二选一）
 - `GEMINI_MODEL`：覆盖默认模型名（如 `gemini-2.5-flash`）
 - `GEMINI_BASE_URL`：启用代理模式（自建转发/网关时用）
+- `OPENAI_API_KEY`：OpenAI API key（OpenAI / OpenAI-compatible 必需）
+- `OPENAI_MODEL`：覆盖默认模型名（默认 `gpt-4o-mini`）
+- `OPENAI_BASE_URL`：OpenAI-compatible base URL（可选，默认 `https://api.openai.com/v1`）
+- `AI_TIMEOUT_MS`：AI 请求超时（毫秒，默认 60000）
+- `AI_MAX_RETRIES`：429/5xx/网络错误最大重试次数（默认 2）
+- `AI_DEBUG`：开启 AI 调试日志（`1/true/on`）
 - `GENKIT_API_URL` / `NEXT_PUBLIC_GENKIT_API_URL`：目前在代码里定义但未实际使用
 - `AI_USE_LOCAL`：目前未实际使用
 
@@ -421,9 +458,9 @@ type CapturedWord = {
 
 ### 12.2 PWA 相关
 - `public/manifest.json`
-- `src/app/layout.tsx` 中写入了 PWA 相关 meta
-
-> `manifest.json` 引用的 `icon-192x192.png` / `icon-512x512.png` 在 `public/` 下目前未看到对应文件，可能影响“添加到主屏幕”的图标显示。
+- 图标：`public/icon-192x192.png`、`public/icon-512x512.png`
+- Service Worker：`public/sw.js`（静态资源 cache-first，其余 network-first，含离线 fallback）
+- 注册与离线提示：`src/components/pwa-client.tsx`（已在 `src/app/layout.tsx` 注入）
 
 ### 12.3 Firebase App Hosting
 - `apphosting.yaml`：当前仅设置 `maxInstances: 1`
@@ -431,7 +468,6 @@ type CapturedWord = {
 ## 13. 已知问题 / 风险点（建议优先关注）
 
 1) **中文字符串疑似编码乱码**
-- `src/components/quiz-view.tsx`：`答案解析` 显示为乱码
 - `src/lib/pdf-server-utils.ts`：`中文译文` 显示为乱码
 
 2) **Genkit 相关文档/脚本可能与现状不一致**
@@ -459,9 +495,9 @@ type CapturedWord = {
 - 做持久化：Firebase（Firestore/Realtime DB）或其他数据库；支持多端同步
 - 引入账号体系/设备迁移（Auth + 用户隔离数据）
 - 修复中文乱码（统一文件编码为 UTF-8；检查字体/渲染链路）
-- 完善 PWA（补齐图标、离线缓存、可选 service worker）
+- 进一步完善 PWA（更新提示、缓存版本管理、路由缓存策略等）
 - 增加导出/导入（JSON/CSV/PDF）
-- 对 AI 输出做更强校验与容错（尤其是 `answer`/`analysis` 缺失时的 UI 兜底）
+- 继续强化 AI 输出校验与容错（schema/repair/timeout/retry/cache；以及 `answer`/`analysis` 缺失时的 UI 兜底）
 
 ## 15. 关键文件速查表
 
@@ -480,7 +516,13 @@ type CapturedWord = {
 - 听说训练 UI（ASR/TTS）：`src/components/speaking-training-view.tsx`
 - 听说训练统计（本地）：`src/lib/speaking-training-stats.ts`
 - 阅读理解题 UI：`src/components/reading-questions-view.tsx`
-- AI 封装：`src/ai/gemini.ts`
+- AI 统一入口（文本/结构化 JSON）：`src/ai/llm.ts`
+- AI Provider：`src/ai/gemini.ts`、`src/ai/openai.ts`
+- AI 请求（timeout/retry）：`src/ai/http.ts`
+- AI JSON 提取：`src/ai/json.ts`
+- AI 缓存（本地）：`src/lib/ai-cache.ts`
+- PWA 客户端注册：`src/components/pwa-client.tsx`
+- Service Worker：`public/sw.js`
 - AI flows：`src/ai/flows/*`
 - 文章阅读 flow：`src/ai/flows/study-article.ts`
 - PDF 生成：`src/lib/pdf-server-utils.ts`
