@@ -877,7 +877,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
               </div>
 
               {(s.coreStructureEn || s.tenseVoiceZh) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {s.coreStructureEn && (
                     <div className="text-sm">
                       <div className="font-medium">主干</div>
@@ -912,7 +912,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
               )}
 
               {(s.simplifiedEn || s.rebuiltEn) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {s.simplifiedEn && (
                     <div className="text-sm">
                       <div className="font-medium">简化表达</div>

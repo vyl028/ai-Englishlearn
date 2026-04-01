@@ -24,6 +24,10 @@
   - `globals.css`：添加中文正文行高优化（1.75）、标题行高优化（1.4）
   - `Card` 组件：标题字号响应式（`text-xl sm:text-2xl`），内边距响应式（`p-4 sm:p-6`）
   - `PracticeView`/`StoryView`：页面标题响应式（`text-xl sm:text-2xl`）
+- **跨设备适配 - 阶段一：任务1 全局断点审核与统一**
+  - 审核所有组件响应式断点使用（共117处），确认符合移动优先原则
+  - 统一 `article-reading-view.tsx` 中的 Grid 断点（`md:grid-cols-2` → `sm:grid-cols-2`）
+  - 新增响应式断点规范文档：`docs/RESPONSIVE_BREAKPOINTS.md`
 
 ### 涉及文件
 - 修改：`src/components/ui/button.tsx`
@@ -39,6 +43,8 @@
 - 修改：`src/app/globals.css`
 - 修改：`src/components/ui/card.tsx`
 - 修改：`src/components/story-view.tsx`
+- 修改：`src/components/article-reading-view.tsx`
+- 新增：`docs/RESPONSIVE_BREAKPOINTS.md`
 
 ### 背景/原因
 - 跨设备适配阶段一：所有触摸目标达到 WCAG 2.1 标准（44×44px），修复核心视图在小屏（375px-768px）下的布局问题
@@ -53,6 +59,7 @@
   - 对话框/抽屉在小屏下可滚动
   - 中文文本行高舒适（1.75），标题响应式缩小
   - 卡片内边距在移动端更紧凑（p-4）
+- 断点一致性：阅读 `docs/RESPONSIVE_BREAKPOINTS.md` 确认规范
 
 ## 2026-03-24
 
