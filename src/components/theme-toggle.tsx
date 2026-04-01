@@ -44,7 +44,7 @@ export function ThemeToggle({ className, disabled = false }: { className?: strin
         type="button"
         variant="outline"
         size="icon"
-        className={cn("h-9 w-9", className)}
+        className={cn("h-11 w-11", className)}
         aria-label="切换深色模式"
         disabled
       >
@@ -60,7 +60,7 @@ export function ThemeToggle({ className, disabled = false }: { className?: strin
       type="button"
       variant="outline"
       size="icon"
-      className={cn("h-9 w-9", className)}
+      className={cn("h-11 w-11", className)}
       aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
       title={theme === "dark" ? "浅色模式" : "深色模式"}
       disabled={disabled}

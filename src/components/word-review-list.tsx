@@ -974,7 +974,7 @@ export function WordReviewList({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className={`h-8 w-8 ${isMastered ? "text-primary" : "text-muted-foreground"}`}
+                                    className={`h-11 w-11 ${isMastered ? "text-primary" : "text-muted-foreground"}`}
                                     aria-label={isMastered ? "取消掌握" : "标记为已掌握"}
                                     title={isMastered ? "已掌握（点击取消）" : "标记为已掌握"}
                                     onClick={(e) => {
@@ -997,7 +997,7 @@ export function WordReviewList({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className={`h-8 w-8 ${isDefinitionOpen ? "text-foreground" : "text-muted-foreground"}`}
+                                    className={`h-11 w-11 ${isDefinitionOpen ? "text-foreground" : "text-muted-foreground"}`}
                                     aria-label={isDefinitionOpen ? "隐藏释义" : "显示释义"}
                                     title={isDefinitionOpen ? "隐藏释义" : "显示释义"}
                                     onClick={(e) => {
@@ -1020,7 +1020,7 @@ export function WordReviewList({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-muted-foreground"
+                                    className="h-11 w-11 text-muted-foreground"
                                     aria-label="复制单词"
                                     title="复制单词"
                                     onClick={(e) => {
@@ -1041,7 +1041,7 @@ export function WordReviewList({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-muted-foreground"
+                                    className="h-11 w-11 text-muted-foreground"
                                     aria-label="复制释义"
                                     title="复制释义"
                                     onClick={(e) => {
@@ -1062,7 +1062,7 @@ export function WordReviewList({
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-muted-foreground"
+                                    className="h-11 w-11 text-muted-foreground"
                                     aria-label="重新生成释义与拓展"
                                     title="重新生成"
                                     disabled={isRegenerating}
@@ -1089,7 +1089,7 @@ export function WordReviewList({
                                    type="button"
                                    variant="ghost"
                                    size="icon"
-                                   className="h-8 w-8"
+                                   className="h-11 w-11"
                                    aria-label="编辑单词"
                                    title="编辑单词"
                                    onClick={(e) => {
@@ -1110,7 +1110,7 @@ export function WordReviewList({
                                    type="button"
                                    variant="ghost"
                                    size="icon"
-                                   className="h-8 w-8"
+                                   className="h-11 w-11"
                                    aria-label="移动分组"
                                    title="移动分组"
                                    onClick={(e) => {
@@ -1131,7 +1131,7 @@ export function WordReviewList({
                                    type="button"
                                    variant="ghost"
                                    size="icon"
-                                   className="h-8 w-8 text-destructive/70 hover:text-destructive"
+                                   className="h-11 w-11 text-destructive/70 hover:text-destructive"
                                    aria-label="删除单词"
                                    title="删除单词"
                                    onClick={(e) => {
