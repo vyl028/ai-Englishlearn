@@ -1,11 +1,20 @@
 # LexiCapture（studio）项目概览
 
-更新时间：2026-03-24  
+更新时间：2026-04-01  
 代码仓库根目录：`D:\University\毕设\studio`
 
 > 目标：梳理项目现状（功能、架构、关键文件、运行方式、风险点），为后续迭代开发提供“地图”。
 
 > 当前阶段：项目已回退到“准备开始从编号清单选择下一步”的状态；后续迭代以 `docs/IMPROVEMENT_BACKLOG.md` 为主入口（你只需要回复编号，例如：`1, 14, 19`）。
+
+**文档说明**：项目文档位于 `docs/` 目录下，包括：
+- `RULE.md`：协作规则与开发规范
+- `IMPROVEMENT_BACKLOG.md`：改进清单（主迭代入口）
+- `CHANGELOG.md`：变更记录
+- `PROJECT_OVERVIEW.md`：项目概览（本文档）
+- `MULTI_DEVICE_PLAN.md`：跨设备适配实施计划
+- `CROSS_DEVICE_SETUP.md`：跨设备访问实施方案（新增）
+- `blueprint.md`：原始蓝图
 
 ## 1. 项目定位
 

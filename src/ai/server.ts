@@ -69,6 +69,6 @@ app.post('/flows/defineTermAutoFlow', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`[AI Service] Custom server listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`[AI Service] Custom server listening on http://0.0.0.0:${port}`);
 });
