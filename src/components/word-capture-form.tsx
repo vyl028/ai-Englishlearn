@@ -24,6 +24,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateId } from "@/lib/utils";
 import { getAiCache, hashAiCachePayload, setAiCache } from "@/lib/ai-cache";
+import { LazyImage } from "@/components/lazy-image";
 
 const formSchema = z.object({
   word: z
@@ -472,7 +473,13 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
                     {uploadPreviewDataUri && (
                       <div className="rounded-md border overflow-hidden">
-                        <img src={uploadPreviewDataUri} alt="图片预览" className="w-full h-auto" />
+                        <LazyImage
+                          src={uploadPreviewDataUri}
+                          alt="图片预览"
+                          className="w-full h-auto"
+                          containerClassName="w-full"
+                          priority
+                        />
                       </div>
                     )}
 

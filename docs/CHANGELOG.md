@@ -1003,3 +1003,95 @@
 - 运行：`npm run typecheck`（无类型错误）
 - 在移动端设备上测试各组件的触摸交互和布局
 
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段三：任务1 移动端性能优化 - 图片懒加载与资源优化**
+  1. **图片懒加载**：
+     - 新增 `useLazyImage` Hook：使用 IntersectionObserver 实现图片懒加载
+     - 新增 `LazyImage` 组件：支持骨架屏占位、加载动画、响应式图片
+     - 新增 `LazyBackground` 组件：背景图片懒加载
+     - `WordCaptureForm` 图片预览使用 LazyImage 组件
+  2. **骨架屏组件**：
+     - 新增 `SkeletonCard` 组件：通用卡片骨架屏
+     - 新增 `WordCardSkeleton` 组件：单词卡片专用骨架屏
+     - 新增 `ListSkeleton` 组件：列表加载骨架屏
+     - 新增 `PageSkeleton` 组件：页面加载骨架屏
+     - 新增 `FormSkeleton` 组件：表单加载骨架屏
+  3. **性能监控 Hooks**：
+     - 新增 `usePerformance` Hook：监控 FCP/LCP/FID/CLS/TTFB 等性能指标
+     - 新增 `useImagePerformance` Hook：图片加载进度监控
+     - 新增 `useResourceLoading` Hook：资源加载状态监控
+     - 新增 `useSlowNetwork` Hook：检测慢网环境
+     - 新增 `useMemoryUsage` Hook：内存使用监控（实验性）
+  4. **动态导入支持**：
+     - 新增 `dynamicImport` 工具函数：支持组件按需加载和代码分割
+     - 支持多种加载状态占位（骨架屏/加载动画）
+
+### 涉及文件
+- 新增：`src/hooks/use-lazy-image.ts`
+- 新增：`src/components/lazy-image.tsx`
+- 新增：`src/components/skeleton-card.tsx`
+- 新增：`src/components/dynamic-import.tsx`
+- 新增：`src/hooks/use-performance.ts`
+- 修改：`src/components/word-capture-form.tsx`
+
+### 背景/原因
+- 跨设备适配阶段三：优化移动端性能，减少首屏加载时间
+- 图片懒加载减少初始网络请求，骨架屏提升感知性能
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 在移动端浏览器测试：
+  - 图片懒加载正常工作（滚动到可视区域才加载）
+  - 骨架屏在加载时正确显示
+  - 网络面板显示图片按需加载
+
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段三：任务2 长列表性能优化**
+  1. **虚拟列表 Hooks**：
+     - 新增 `useVirtualList` Hook：固定高度虚拟滚动
+     - 新增 `useDynamicVirtualList` Hook：动态高度虚拟滚动
+     - 新增 `useInfiniteScroll` Hook：无限滚动加载
+     - 新增 `useListItemCache` Hook：列表项缓存
+  2. **虚拟列表组件**：
+     - 新增 `VirtualList` 组件：完整虚拟列表实现
+     - 新增 `OptimizedListItem` 组件：优化的列表项（memo包装）
+     - 新增 `PaginatedList` 组件：分页加载列表
+     - 新增 `VirtualScrollContainer` 组件：虚拟滚动容器
+  3. **优化的单词卡片**：
+     - 新增 `WordCard` 组件：使用 React.memo 避免不必要的重渲染
+     - 拆分 `VariantSelector` 和 `ActionButtons` 子组件，各自独立 memo
+     - 优化渲染性能，减少长列表卡顿
+  4. **WordReviewList 优化**：
+     - 集成无限滚动加载（IntersectionObserver）
+     - 移动端自动加载更多，桌面端保留"加载更多"按钮
+     - 添加加载状态指示器
+     - 单次加载数量从 80 减少到 40，更平滑的加载体验
+
+### 涉及文件
+- 新增：`src/hooks/use-virtual-list.ts`
+- 新增：`src/components/virtual-list.tsx`
+- 新增：`src/components/word-card.tsx`
+- 修改：`src/components/word-review-list.tsx`
+
+### 背景/原因
+- 跨设备适配阶段三：优化长列表渲染性能
+- 解决单词本单词数量过多时的卡顿问题
+- 提供更流畅的滚动体验
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 在单词本中测试：
+  - 滚动到列表底部自动加载更多
+  - 大量单词时滚动仍然流畅
+  - 加载状态指示器正常显示
+

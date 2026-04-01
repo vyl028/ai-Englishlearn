@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
 import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff, Search, Copy, Loader2, RefreshCcw, GripVertical } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,9 +30,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useInfiniteScroll } from "@/hooks/use-virtual-list";
 import { SwipeableCard } from "@/components/swipeable-card";
 import { MobileContextMenu } from "@/components/mobile-context-menu";
 import { MobileBulkActions } from "@/components/mobile-bulk-actions";
+import { PaginatedList } from "@/components/virtual-list";
+import { WordCardSkeleton } from "@/components/skeleton-card";
 
 interface WordReviewListProps {
   words: CapturedWord[];
@@ -268,7 +271,12 @@ export function WordReviewList({
   const [movingWord, setMovingWord] = useState<CapturedWord | null>(null);
   const [moveTargetGroupId, setMoveTargetGroupId] = useState<string>(UNGROUPED_GROUP_ID);
 
+  const isMobile = useIsMobile();
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  
+  // 无限滚动加载
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('practice');
   const [contextGroupWords, setContextGroupWords] = useState<CapturedWord[]>([]);
   const [wordPickScope, setWordPickScope] = useState<WordPickScope>('group');
@@ -465,6 +473,28 @@ export function WordReviewList({
   const bulkSelectedCardCount = bulkSelectedCards.length;
   const bulkSelectedWordIds = Array.from(new Set(bulkSelectedCards.flatMap((c) => c.words.map((w) => w.id))));
   const bulkSelectedTermKeys = Array.from(new Set(bulkSelectedCards.map((c) => c.termKey)));
+  
+  // 无限滚动加载
+  useEffect(() => {
+    if (!isMobile || !loadMoreRef.current) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCards.length < totalCardCount && !isLoadingMore) {
+          setIsLoadingMore(true);
+          // 延迟加载，避免频繁触发
+          setTimeout(() => {
+            setRenderLimit((prev) => prev + 40);
+            setIsLoadingMore(false);
+          }, 200);
+        }
+      },
+      { rootMargin: '100px' }
+    );
+    
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, visibleCards.length, totalCardCount, isLoadingMore]);
 
   const getWeekRange = (weekKey: string) => {
     const weekStart = new Date(weekKey);
@@ -1253,15 +1283,25 @@ export function WordReviewList({
              </div>
             ))}
 
+            {/* 无限滚动触发器 */}
+            <div ref={loadMoreRef} className="h-4" />
+            
             {visibleCards.length < totalCardCount && (
               <div className="flex flex-col items-center gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setRenderLimit((prev) => prev + 80)}
-                >
-                  加载更多
-                </Button>
+                {isLoadingMore ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    加载中...
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setRenderLimit((prev) => prev + 40)}
+                  >
+                    加载更多
+                  </Button>
+                )}
                 <div className="text-xs text-muted-foreground">
                   已显示 {visibleCards.length} / {totalCardCount}
                 </div>
