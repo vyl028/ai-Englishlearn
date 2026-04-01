@@ -18,6 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { defineTermAutoAction, extractWordAndDefineAction } from "@/app/actions";
+import { withRetry, isRetryableError } from "@/lib/ai-retry";
 import { useToast } from "@/hooks/use-toast";
 import type { CapturedWord } from "@/lib/types";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -65,7 +66,15 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     const token = ++imageAnalysisTokenRef.current;
     setIsAnalyzing(true);
     try {
-      const result = await extractWordAndDefineAction(dataUri);
+      // 使用重试机制
+      const result = await withRetry(
+        () => extractWordAndDefineAction(dataUri),
+        {
+          maxRetries: 2,
+          initialDelay: 1000,
+          backoffMultiplier: 2,
+        }
+      );
 
       if (token !== imageAnalysisTokenRef.current) return;
       if (result.success && result.data) {
@@ -99,11 +108,23 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     } catch (error) {
       if (token !== imageAnalysisTokenRef.current) return;
       console.error("Image analysis error:", error);
-      toast({
-        variant: "destructive",
-        title: "识别出错",
-        description: "图片识别过程中发生未知错误。",
-      });
+      
+      const errorMessage = error instanceof Error ? error.message : "图片识别过程中发生未知错误。";
+      
+      // 判断是否为可重试的错误
+      if (isRetryableError(error as Error)) {
+        toast({
+          variant: "destructive",
+          title: "识别出错",
+          description: `${errorMessage} 请检查网络连接后重试。`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "识别出错",
+          description: errorMessage,
+        });
+      }
     } finally {
       if (token === imageAnalysisTokenRef.current) setIsAnalyzing(false);
     }

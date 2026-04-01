@@ -1095,3 +1095,108 @@
   - 大量单词时滚动仍然流畅
   - 加载状态指示器正常显示
 
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段三：任务3 网络环境适配**
+  1. **网络状态检测**：
+     - 新增 `useNetwork` Hook：检测在线/离线状态、网络类型（WiFi/4G/3G/2G）、网络质量
+     - 新增 `useSlowNetwork` Hook：检测是否为慢网环境
+     - 支持 Network Information API 获取网络速度（downlink/rtt）
+  2. **请求重试机制**：
+     - 新增 `useRetry` Hook：通用的请求重试 Hook，支持指数退避
+     - 新增 `useTimeout` Hook：请求超时控制
+     - 新增 `useRequestQueue` Hook：并发请求队列管理
+     - 新增 `ai-retry.ts`：AI 请求专用重试工具
+  3. **图片质量自适应**：
+     - 新增 `useAdaptiveImageQuality` Hook：根据网络状况选择图片质量
+  4. **网络状态组件**：
+     - 新增 `NetworkIndicator` 组件：网络状态指示器（图标+文字）
+     - 新增 `OfflineBanner` 组件：离线提示横幅（顶部固定）
+     - 新增 `SlowNetworkAlert` 组件：弱网环境提示
+     - 新增 `RetryAlert` 组件：请求失败重试提示
+     - 新增 `GlobalNetworkStatus` 组件：全局网络状态管理
+  5. **AI 请求重试集成**：
+     - `WordCaptureForm` 图片识别请求添加重试逻辑（最多重试2次）
+     - 错误提示区分网络错误和其他错误
+
+### 涉及文件
+- 新增：`src/hooks/use-network.ts`
+- 新增：`src/components/network-status.tsx`
+- 新增：`src/lib/ai-retry.ts`
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/app/layout.tsx`
+
+### 背景/原因
+- 跨设备适配阶段三：适配不同网络环境，提供更好的弱网体验
+- AI 请求可能因网络波动失败，添加重试机制提高成功率
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 测试：
+  - 断开网络后应显示离线横幅
+  - 弱网环境下显示弱网提示
+  - AI 请求失败时自动重试
+  - 网络恢复后离线横幅消失
+
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段三：任务4/5 跨浏览器兼容性修复与设备特性检测**
+  1. **设备能力检测**：
+     - 新增 `useDeviceCapabilities` Hook：检测摄像头、麦克风、语音识别、触摸、存储空间、内存、CPU核心数等
+     - 新增 `useCameraPermission` Hook：摄像头权限检测和请求
+     - 新增 `useMicrophonePermission` Hook：麦克风权限检测和请求
+     - 新增 `useNotificationPermission` Hook：通知权限检测
+     - 新增 `useLowEndDevice` Hook：检测低端设备
+     - 新增 `useFeatureSupport` Hook：检测浏览器功能支持情况
+  2. **iOS Safari 兼容性修复**：
+     - 新增 `useIOSViewportHeight` Hook：修复 100vh 问题
+     - 新增 `usePreventBodyScroll` Hook：修复滚动穿透问题
+     - 新增 `useIOSKeyboard` Hook：处理键盘弹出时的视口变化
+     - 新增 `useIOSFixedPosition` Hook：修复固定定位元素问题
+     - 添加 iOS 特定 CSS 修复（globals.css）
+  3. **API 兼容性处理**：
+     - 新增 `useSpeechSupport` Hook：Web Speech API 检测和封装
+     - 新增 `useTextToSpeech` Hook：语音合成封装
+     - 新增 `useBrowserCompatibility` Hook：浏览器兼容性检测
+     - 新增 `useTouchDevice` Hook：触摸设备检测
+     - 新增 `usePrefersReducedMotion` Hook：减少动画偏好检测
+  4. **设备兼容性组件**：
+     - 新增 `DeviceCompatibilityCheck` 组件：检查设备能力并提示
+     - 新增 `CameraPermissionPrompt` 组件：摄像头权限引导
+     - 新增 `LowEndDeviceWarning` 组件：低端设备提示
+     - 新增 `BrowserCompatibilityWarning` 组件：浏览器兼容性提示
+     - 新增 `FeatureFallback` 组件：功能降级包装器
+  5. **全局兼容性修复**：
+     - 新增 `GlobalCompatibilityFixes` 组件：自动应用各种兼容性修复
+     - 添加浏览器检测 CSS 类（ios/android/safari/low-end/touch等）
+     - 添加 100vh 修复工具类
+     - 添加低端设备动画降级
+
+### 涉及文件
+- 新增：`src/hooks/use-device-detection.ts`
+- 新增：`src/hooks/use-ios-fixes.ts`
+- 新增：`src/hooks/use-speech.ts`
+- 新增：`src/components/device-compatibility.tsx`
+- 新增：`src/components/global-compatibility.tsx`
+- 修改：`src/app/globals.css`
+- 修改：`src/app/layout.tsx`
+
+### 背景/原因
+- 跨设备适配阶段三：确保应用在 iOS Safari、Android Chrome 等主流浏览器正常工作
+- 为不同设备能力提供降级方案，确保核心功能可用
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 在不同浏览器中测试：
+  - iOS Safari：检查 100vh 修复、点击延迟、滚动穿透
+  - 低端设备：检查动画是否被禁用
+  - 无摄像头设备：检查是否显示降级提示
+

@@ -3,6 +3,8 @@ import Script from "next/script";
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { PwaClient } from "@/components/pwa-client";
+import { GlobalNetworkStatus } from "@/components/network-status";
+import { GlobalCompatibilityFixes } from "@/components/global-compatibility";
 
 export const metadata: Metadata = {
   title: 'LexiCapture',
@@ -48,6 +50,8 @@ export default function RootLayout({
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B1220" />
       </head>
       <body className="font-body antialiased min-h-svh">
+        <GlobalCompatibilityFixes />
+        <GlobalNetworkStatus />
         {children}
         <PwaClient />
         <Toaster />

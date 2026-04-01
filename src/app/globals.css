@@ -131,3 +131,107 @@
     touch-action: manipulation;
   }
 }
+
+/* iOS Safari 兼容性修复 */
+@layer utilities {
+  /* 100vh 修复 - 使用自定义属性 */
+  .h-screen-ios {
+    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
+  }
+
+  .min-h-screen-ios {
+    min-height: 100vh;
+    min-height: calc(var(--vh, 1vh) * 100);
+  }
+
+  /* iOS 固定定位修复 */
+  .ios-fixed {
+    position: fixed;
+    transform: translateZ(0);
+  }
+
+  /* 禁用弹性滚动 */
+  .no-overscroll {
+    overscroll-behavior: none;
+  }
+
+  /* iOS 输入框字体大小修复 */
+  .ios-text-base {
+    font-size: 16px;
+  }
+}
+
+/* iOS 设备特定样式 */
+html.ios {
+  /* 防止点击高亮 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.ios body {
+  /* 禁用弹性滚动 */
+  overscroll-behavior-y: none;
+}
+
+html.ios input,
+html.ios textarea,
+html.ios select {
+  /* 修复 iOS 缩放问题 */
+  font-size: 16px;
+}
+
+html.ios button {
+  /* 修复 iOS 按钮样式 */
+  -webkit-appearance: none;
+}
+
+/* 低端设备优化 */
+html.low-end * {
+  /* 减少动画 */
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Safari 修复 */
+html.safari input[type="date"] {
+  /* Safari 日期输入修复 */
+  -webkit-appearance: none;
+}
+
+/* 滚动条样式优化 */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted));
+    border-radius: 3px;
+  }
+}
+
+/* 屏幕阅读器辅助 */
+@layer utilities {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
