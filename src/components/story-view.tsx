@@ -25,7 +25,7 @@ export function StoryView({ storyData, onBack, onRegenerate, onExportPdf }: Stor
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold font-headline">故事</h2>
+            <h2 className="text-xl sm:text-2xl font-bold font-headline">故事</h2>
             <div className="text-sm text-muted-foreground truncate">{storyData.title}</div>
           </div>
         </div>

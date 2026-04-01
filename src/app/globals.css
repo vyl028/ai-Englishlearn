@@ -81,7 +81,19 @@
     @apply border-border;
   }
   body {
-    @apply min-h-svh bg-background text-foreground;
+    @apply min-h-svh bg-background text-foreground antialiased;
+    /* 中文优化行高 */
+    line-height: 1.75;
+  }
+
+  /* 中文正文优化 */
+  p, li, .prose {
+    line-height: 1.75;
+  }
+
+  /* 标题行高优化 */
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.4;
   }
 
   ::selection {

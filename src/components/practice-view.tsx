@@ -257,7 +257,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-2xl font-bold font-headline leading-tight truncate">练习</h2>
+                <h2 className="text-xl sm:text-2xl font-bold font-headline leading-tight truncate">练习</h2>
                 <div className="text-xs text-muted-foreground">
                   已答 <span className="font-medium text-foreground">{answeredCount}</span> / {totalCount}
                   {submitted && (

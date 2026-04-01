@@ -20,6 +20,10 @@
   - `Dialog`：添加`max-h-[90vh]`和`overflow-y-auto`防止小屏溢出，关闭按钮尺寸提升至44×44px
   - `Sheet`：关闭按钮尺寸提升至44×44px
   - 顶部栏：等级进度条在更小屏幕下隐藏（`md`→`lg`断点）
+- **跨设备适配 - 阶段一：任务4 字体与可读性优化**
+  - `globals.css`：添加中文正文行高优化（1.75）、标题行高优化（1.4）
+  - `Card` 组件：标题字号响应式（`text-xl sm:text-2xl`），内边距响应式（`p-4 sm:p-6`）
+  - `PracticeView`/`StoryView`：页面标题响应式（`text-xl sm:text-2xl`）
 
 ### 涉及文件
 - 修改：`src/components/ui/button.tsx`
@@ -32,6 +36,9 @@
 - 修改：`src/components/ui/dialog.tsx`
 - 修改：`src/components/ui/sheet.tsx`
 - 修改：`src/app/page.tsx`
+- 修改：`src/app/globals.css`
+- 修改：`src/components/ui/card.tsx`
+- 修改：`src/components/story-view.tsx`
 
 ### 背景/原因
 - 跨设备适配阶段一：所有触摸目标达到 WCAG 2.1 标准（44×44px），修复核心视图在小屏（375px-768px）下的布局问题
@@ -44,6 +51,8 @@
   - 拍照界面视频不溢出
   - 单词本卡片操作按钮可点击
   - 对话框/抽屉在小屏下可滚动
+  - 中文文本行高舒适（1.75），标题响应式缩小
+  - 卡片内边距在移动端更紧凑（p-4）
 
 ## 2026-03-24
 
