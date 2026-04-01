@@ -710,6 +710,9 @@ export function EssayReviewView() {
             }}
             placeholder="粘贴写作题目（英文）。留空则按通用雅思写作任务 2 要求评估。"
             className="min-h-[80px]"
+            inputMode="text"
+            autoCapitalize="off"
+            autoComplete="off"
             disabled={isReviewing || isParsingFile}
           />
         </div>
@@ -724,6 +727,10 @@ export function EssayReviewView() {
             }}
             placeholder="在此粘贴英文作文正文..."
             className="min-h-[220px]"
+            inputMode="text"
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck="false"
             disabled={isReviewing || isParsingFile}
           />
 

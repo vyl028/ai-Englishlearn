@@ -1091,6 +1091,10 @@ export function SpeakingTrainingView() {
           </div>
           <Textarea
             id="targetText"
+            inputMode="text"
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck="false"
             value={targetText}
             onChange={(e) => {
               setTargetText(e.target.value);

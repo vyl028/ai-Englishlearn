@@ -100,3 +100,34 @@
     background: hsl(var(--primary) / 0.18);
   }
 }
+
+/* Safe area insets for mobile devices */
+@supports (padding-top: env(safe-area-inset-top)) {
+  :root {
+    --sat: env(safe-area-inset-top);
+    --sab: env(safe-area-inset-bottom);
+    --sar: env(safe-area-inset-right);
+    --sal: env(safe-area-inset-left);
+  }
+}
+
+/* Utility class for safe area bottom padding */
+.h-safe-area-inset-bottom {
+  height: env(safe-area-inset-bottom, 0);
+}
+
+/* Touch action utilities */
+@layer utilities {
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+  .touch-pan-x {
+    touch-action: pan-x;
+  }
+  .touch-none {
+    touch-action: none;
+  }
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+}

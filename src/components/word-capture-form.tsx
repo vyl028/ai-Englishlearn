@@ -383,6 +383,10 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                         <Textarea
                           placeholder={"例如：\nephemeral, take off\nlook up"}
                           className="min-h-[96px]"
+                          inputMode="text"
+                          autoCapitalize="off"
+                          autoComplete="off"
+                          spellCheck="false"
                           {...field}
                         />
                       </FormControl>

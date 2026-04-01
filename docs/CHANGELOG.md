@@ -76,8 +76,38 @@
   - 拍照按钮为圆形大按钮，点击可拍照
   - 整体布局类似原生相机应用
 
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段二：任务2 表单输入体验提升**
+  - 英文输入框添加 `inputMode="text"` + `autoCapitalize="off"` + `autoComplete="off"` + `spellCheck="false"`
+  - 优化后移动端输入英文时：
+    - 不会自动首字母大写（适合输入小写单词）
+    - 不会触发拼写检查（减少红色波浪线干扰）
+    - 不会显示浏览器自动完成建议
+  - 涉及的输入区域：
+    - `WordCaptureForm`：手动输入单词/短语
+    - `ArticleReadingView`：文章正文输入
+    - `EssayReviewView`：作文题目和正文输入
+    - `SpeakingTrainingView`：跟读目标文本输入
+
+### 涉及文件
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/components/article-reading-view.tsx`
+- 修改：`src/components/essay-review-view.tsx`
+- 修改：`src/components/speaking-training-view.tsx`
+
+### 背景/原因
+- 跨设备适配阶段二：优化移动端英文输入体验，避免自动大写和拼写检查干扰
+
 ### 如何验证
 - 运行：`npm run typecheck`
+- 在 iOS Safari 或 Android Chrome 上测试：
+  - 进入"新增单词"手动输入，输入英文时键盘不应自动首字母大写
+  - 进入"文章阅读"粘贴英文文章，不应有拼写检查红色波浪线
+  - 进入"作文批改"输入作文，体验更纯粹的英文输入
 - 使用 Chrome DevTools 设备模拟器（375px宽度）测试：
   - 所有按钮/交互元素尺寸 ≥ 44×44px
   - 新增单词页面Tabs正常显示
@@ -880,3 +910,96 @@
 
 #### 如何验证
 - （如何确认改动有效）
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段二：任务3 导航与操作流优化**
+  1. **侧边栏滑动手势支持**：
+     - `Sidebar` 移动端抽屉式侧边栏支持左滑关闭（从屏幕边缘向内滑动关闭）
+     - 添加 `touch-pan-y` 样式支持触摸滚动
+  2. **批量操作移动端优化**：
+     - 新增 `MobileBulkActions` 组件：移动端批量选择时显示底部操作栏
+     - 底部操作栏包含：退出批量模式、全选/清空选择、批量移动、批量删除
+     - 优化小屏下批量操作的可见性和可达性
+  3. **新增手势支持 Hook**：
+     - `useSwipeGesture`：通用滑动手势检测 hook
+     - `useLongPress`：长按手势检测 hook（支持触摸和鼠标事件）
+  4. **新增交互组件**：
+     - `SwipeableCard`：可滑动卡片组件（支持左右滑动显示操作按钮）
+     - `MobileContextMenu`：长按上下文菜单组件（移动端替代右键菜单）
+  5. **安全区域支持**：
+     - `globals.css` 添加 iOS 安全区域环境变量支持（`env(safe-area-inset-*)`）
+     - 添加触摸动作工具类（`touch-pan-y`、`touch-none`等）
+
+### 涉及文件
+- 修改：`src/components/ui/sidebar.tsx`
+- 修改：`src/components/word-review-list.tsx`
+- 修改：`src/app/globals.css`
+- 新增：`src/hooks/use-swipe-gesture.ts`
+- 新增：`src/hooks/use-long-press.ts`
+- 新增：`src/components/swipeable-card.tsx`
+- 新增：`src/components/mobile-context-menu.tsx`
+- 新增：`src/components/mobile-bulk-actions.tsx`
+
+### 背景/原因
+- 跨设备适配阶段二：为移动端添加触摸友好的导航和操作交互
+- 解决移动端缺乏右键菜单、批量操作不便、侧边栏关闭困难等问题
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 移动端测试：
+  - 侧边栏：打开侧边栏后，从左向右滑动可关闭（左置侧边栏）
+  - 批量操作：进入批量选择模式，底部出现操作栏
+  - 手势 Hook：在其他组件中可复用滑动/长按交互
+
+
+---
+
+## 2026-04-01
+
+### 新增/修改内容
+- **跨设备适配 - 阶段二：任务4 移动端专属组件**
+  1. **移动端输入组件**：
+     - `MobileInput`：移动端优化的输入框（更大的触摸区域、16px字号防止缩放、支持图标）
+     - `MobileTextarea`：移动端优化的文本域
+  2. **移动端选择器**：
+     - `MobileSelect`：桌面端使用原生下拉，移动端使用底部抽屉式选择
+     - `MobileGroupSelect`：专用于单词分组选择的移动端选择器
+  3. **移动端单词卡片**：
+     - `MobileWordCard`：移动端优化的单词卡片（更紧凑的布局、折叠式详情区域）
+     - `MobileWordCardList`：移动端单词卡片列表
+  4. **移动端控制组件**：
+     - `MobileSegmentedControl`：分段控制器（iOS风格）
+     - `MobileFilterChips`：筛选标签组
+  5. **移动端导航组件**：
+     - `MobileBottomBar`：底部操作栏（适配安全区域）
+     - `MobileFAB`：浮动操作按钮
+     - `MobileQuickActions`：快速操作网格
+  6. **移动端列表组件**：
+     - `MobileList`：iOS风格列表
+     - `MobileGroupedList`：分组列表
+     - `MobileVirtualList`：虚拟列表（优化长列表性能）
+  7. **移动端搜索组件**：
+     - `MobileSearchBar`：移动端搜索栏（更大的触摸区域、一键清除）
+     - `MobileSearchFilterBar`：搜索+筛选组合组件
+
+### 涉及文件
+- 新增：`src/components/mobile-input.tsx`
+- 新增：`src/components/mobile-select.tsx`
+- 新增：`src/components/mobile-word-card.tsx`
+- 新增：`src/components/mobile-segmented-control.tsx`
+- 新增：`src/components/mobile-bottom-bar.tsx`
+- 新增：`src/components/mobile-list.tsx`
+- 新增：`src/components/mobile-search-bar.tsx`
+
+### 背景/原因
+- 跨设备适配阶段二：创建移动端专属组件库，提供更符合移动端交互习惯的UI组件
+- 解决移动端表单输入困难、选择器不易操作、列表展示不优化等问题
+
+### 如何验证
+- 运行：`npm run typecheck`（无类型错误）
+- 在移动端设备上测试各组件的触摸交互和布局
+

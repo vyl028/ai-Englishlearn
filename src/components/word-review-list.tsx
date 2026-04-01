@@ -29,6 +29,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { SwipeableCard } from "@/components/swipeable-card";
+import { MobileContextMenu } from "@/components/mobile-context-menu";
+import { MobileBulkActions } from "@/components/mobile-bulk-actions";
 
 interface WordReviewListProps {
   words: CapturedWord[];

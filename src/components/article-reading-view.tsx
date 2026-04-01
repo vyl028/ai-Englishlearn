@@ -1576,6 +1576,10 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
             }}
             placeholder="在此粘贴英文文章正文..."
             className="min-h-[240px]"
+            inputMode="text"
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck="false"
             disabled={isAnalyzing || isParsingFile}
           />
         </div>

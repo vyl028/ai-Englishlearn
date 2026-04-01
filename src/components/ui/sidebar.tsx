@@ -6,6 +6,7 @@ import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useSwipeGesture } from "@/hooks/use-swipe-gesture"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -193,12 +194,80 @@ const Sidebar = React.forwardRef<
     }
 
     if (isMobile) {
+      // Mobile sidebar with swipe gesture support
+      const MobileSidebarContent = () => {
+        const swipeRef = React.useRef<HTMLDivElement>(null);
+
+        React.useEffect(() => {
+          const element = swipeRef.current;
+          if (!element) return;
+
+          let startX = 0;
+          let startY = 0;
+          let isSwiping = false;
+
+          const handleTouchStart = (e: TouchEvent) => {
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            isSwiping = false;
+          };
+
+          const handleTouchMove = (e: TouchEvent) => {
+            if (!startX && !startY) return;
+            const touch = e.touches[0];
+            const diffX = touch.clientX - startX;
+            const diffY = touch.clientY - startY;
+
+            // Detect horizontal swipe
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 30) {
+              isSwiping = true;
+            }
+          };
+
+          const handleTouchEnd = (e: TouchEvent) => {
+            if (!startX) return;
+            const touch = e.changedTouches[0];
+            const diffX = touch.clientX - startX;
+
+            // Swipe left to close sidebar (for left sidebar)
+            if (isSwiping && Math.abs(diffX) > 50) {
+              if (side === 'left' && diffX < 0) {
+                setOpenMobile(false);
+              } else if (side === 'right' && diffX > 0) {
+                setOpenMobile(false);
+              }
+            }
+
+            startX = 0;
+            startY = 0;
+            isSwiping = false;
+          };
+
+          element.addEventListener('touchstart', handleTouchStart, { passive: true });
+          element.addEventListener('touchmove', handleTouchMove, { passive: true });
+          element.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+          return () => {
+            element.removeEventListener('touchstart', handleTouchStart);
+            element.removeEventListener('touchmove', handleTouchMove);
+            element.removeEventListener('touchend', handleTouchEnd);
+          };
+        }, [side, setOpenMobile]);
+
+        return (
+          <div ref={swipeRef} className="flex h-full w-full flex-col">
+            {children}
+          </div>
+        );
+      };
+
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+            className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden touch-pan-y"
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -206,7 +275,7 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <MobileSidebarContent />
           </SheetContent>
         </Sheet>
       )
