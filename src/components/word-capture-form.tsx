@@ -407,8 +407,35 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
               </TabsContent>
               <TabsContent value="camera">
                 <div className="space-y-4 mt-4">
-                  <video ref={videoRef} className="w-full max-h-[50vh] sm:max-h-none object-contain rounded-md bg-muted" autoPlay muted playsInline />
-                  <canvas ref={canvasRef} className="hidden" />
+                  {/* 视频预览区 - 移动端优化 */}
+                  <div className="relative rounded-lg overflow-hidden bg-muted">
+                    <video
+                      ref={videoRef}
+                      className="w-full aspect-[4/3] sm:aspect-video object-cover"
+                      autoPlay
+                      muted
+                      playsInline
+                    />
+                    {canSwitchCamera && hasCameraPermission === true && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        onClick={handleSwitchCamera}
+                        disabled={isAnalyzing}
+                        className="absolute top-3 right-3 h-12 w-12 rounded-full shadow-lg bg-background/90 hover:bg-background"
+                        aria-label="切换摄像头"
+                        title="切换前后摄像头"
+                      >
+                        <RefreshCcw className="h-5 w-5" />
+                      </Button>
+                    )}
+                    {hasCameraPermission === true && (
+                      <div className="absolute bottom-3 left-3 text-xs text-white/90 bg-black/50 px-2 py-1 rounded">
+                        {cameraFacingMode === 'environment' ? '后置摄像头' : '前置摄像头'}
+                      </div>
+                    )}
+                  </div>
                   {hasCameraPermission === false && (
                     <Alert variant="destructive">
                       <AlertTitle>需要摄像头权限</AlertTitle>
@@ -417,36 +444,23 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                       </AlertDescription>
                     </Alert>
                   )}
-                  {hasCameraPermission === true && (
-                    <div className="text-center text-sm text-muted-foreground">默认优先后置摄像头。</div>
-                  )}
-                  {canSwitchCamera && hasCameraPermission === true && (
+
+                  {/* 拍照按钮 - 大圆形设计 */}
+                  <div className="flex justify-center py-2">
                     <Button
                       type="button"
-                      variant="outline"
-                      onClick={handleSwitchCamera}
-                      disabled={isAnalyzing}
-                      className="w-full"
-                      aria-label="切换摄像头"
-                      title="切换前后摄像头"
+                      onClick={handleCapture}
+                      disabled={!hasCameraPermission || isAnalyzing}
+                      className="h-16 w-16 rounded-full shadow-lg"
+                      aria-label="拍照"
                     >
-                      <RefreshCcw className="mr-2 h-4 w-4" />
-                      切换摄像头
+                      {isAnalyzing ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      ) : (
+                        <Camera className="h-6 w-6" />
+                      )}
                     </Button>
-                  )}
-                  <Button type="button" onClick={handleCapture} disabled={!hasCameraPermission || isAnalyzing} className="w-full">
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        正在识别...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="mr-2 h-4 w-4" />
-                        拍照并识别
-                      </>
-                    )}
-                  </Button>
+                  </div>
                 </div>
               </TabsContent>
               <TabsContent value="upload">
