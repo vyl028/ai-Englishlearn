@@ -963,7 +963,7 @@ export function WordReviewList({
                              {isDefinitionOpen && <p className="text-muted-foreground truncate">{selected.definition}</p>}
                            </div>
 
-                           <div className="flex items-center flex-shrink-0 ml-4">
+                           <div className="flex items-center flex-shrink-0 ml-2 sm:ml-4 flex-wrap justify-end gap-1">
                            <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
                              {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
                            </div>

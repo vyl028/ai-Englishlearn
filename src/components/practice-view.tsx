@@ -269,7 +269,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 justify-end">
+              <div className="flex flex-wrap items-center gap-2 justify-start sm:justify-end w-full sm:w-auto">
                 {submitted && (
                   <>
                     <Button

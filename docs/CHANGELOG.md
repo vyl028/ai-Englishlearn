@@ -8,12 +8,18 @@
 
 ### 新增/修改内容
 - **跨设备适配 - 阶段一：任务2 触摸目标达标**
-  - 修复所有交互元素尺寸，确保符合 WCAG 2.1 标准（最小 44×44px）
   - `Button` 组件 `size="icon"` 默认尺寸从 40×40px 提升至 44×44px
   - `ThemeToggle` 按钮尺寸从 36×36px 提升至 44×44px
   - `WordReviewList` 单词卡片操作按钮从 32×32px 提升至 44×44px
   - `Carousel` 轮播按钮从 32×32px 提升至 44×44px
   - `Calendar` 日历组件：导航按钮 28×28px → 44×44px，日期单元格 36×36px → 44×44px
+- **跨设备适配 - 阶段一：任务3 关键视图布局修复**
+  - `WordCaptureForm`：TabsList适配小屏（字号/图标间距调整），拍照视频区域限制最大高度（`max-h-[50vh]`）
+  - `WordReviewList`：单词卡片操作按钮区支持换行显示（`flex-wrap`）
+  - `PracticeView`：顶部按钮区在小屏下左对齐（`justify-start sm:justify-end`）
+  - `Dialog`：添加`max-h-[90vh]`和`overflow-y-auto`防止小屏溢出，关闭按钮尺寸提升至44×44px
+  - `Sheet`：关闭按钮尺寸提升至44×44px
+  - 顶部栏：等级进度条在更小屏幕下隐藏（`md`→`lg`断点）
 
 ### 涉及文件
 - 修改：`src/components/ui/button.tsx`
@@ -21,22 +27,23 @@
 - 修改：`src/components/word-review-list.tsx`
 - 修改：`src/components/ui/carousel.tsx`
 - 修改：`src/components/ui/calendar.tsx`
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/components/practice-view.tsx`
+- 修改：`src/components/ui/dialog.tsx`
+- 修改：`src/components/ui/sheet.tsx`
+- 修改：`src/app/page.tsx`
 
 ### 背景/原因
-- 跨设备适配阶段一要求所有触摸目标达到 WCAG 2.1 标准（44×44px），确保移动端可访问性和可用性
+- 跨设备适配阶段一：所有触摸目标达到 WCAG 2.1 标准（44×44px），修复核心视图在小屏（375px-768px）下的布局问题
 
 ### 如何验证
 - 运行：`npm run typecheck`
-- 使用 Chrome DevTools 设备模拟器，检查所有按钮/交互元素尺寸 ≥ 44×44px
-- 实际移动设备触摸测试
-
----
-
-# 变更记录（Changelog）
-
-> 规则：从现在开始，本项目**每次修改**都需要在此文件追加一条记录（包括：改了什么、为什么改、涉及哪些文件）。
->
-> 注意：**不要**在此文件写入任何密钥/Token/账号密码等敏感信息（如 `.env` 内容），只描述"已新增/已配置"即可。
+- 使用 Chrome DevTools 设备模拟器（375px宽度）测试：
+  - 所有按钮/交互元素尺寸 ≥ 44×44px
+  - 新增单词页面Tabs正常显示
+  - 拍照界面视频不溢出
+  - 单词本卡片操作按钮可点击
+  - 对话框/抽屉在小屏下可滚动
 
 ## 2026-03-24
 
@@ -382,7 +389,7 @@
 - 新增：`src/ai/flows/speaking-chat.ts`
 - 修改：`src/app/actions.ts`
 - 修改：`src/lib/types.ts`
-- 修改：`docs/PROJECT_OVEROVER.md` (注意：这是 OOVER，可能拼写错误)
+- 修改：`docs/PROJECT_OVERVIEW.md`
 
 ### 背景/原因
 - 浏览器提供的 ASR 置信度在 Edge/Chromium 中经常缺失或为 0，不适合用作核心指标；候选切换更稳。

@@ -361,10 +361,10 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="text" disabled={isAnalyzing}>手动输入</TabsTrigger>
-                <TabsTrigger value="camera" disabled={isAnalyzing}><Camera className="w-4 h-4 mr-2"/>拍照</TabsTrigger>
-                <TabsTrigger value="upload" disabled={isAnalyzing}><Upload className="w-4 h-4 mr-2"/>上传</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 min-h-11">
+                <TabsTrigger value="text" disabled={isAnalyzing} className="text-sm sm:text-base">手动输入</TabsTrigger>
+                <TabsTrigger value="camera" disabled={isAnalyzing} className="text-sm sm:text-base"><Camera className="w-4 h-4 mr-1 sm:mr-2 shrink-0"/>拍照</TabsTrigger>
+                <TabsTrigger value="upload" disabled={isAnalyzing} className="text-sm sm:text-base"><Upload className="w-4 h-4 mr-1 sm:mr-2 shrink-0"/>上传</TabsTrigger>
               </TabsList>
               <TabsContent value="text" className="mt-4">
                  {isAnalyzing && (
@@ -407,7 +407,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
               </TabsContent>
               <TabsContent value="camera">
                 <div className="space-y-4 mt-4">
-                  <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                  <video ref={videoRef} className="w-full max-h-[50vh] sm:max-h-none object-contain rounded-md bg-muted" autoPlay muted playsInline />
                   <canvas ref={canvasRef} className="hidden" />
                   {hasCameraPermission === false && (
                     <Alert variant="destructive">

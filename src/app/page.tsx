@@ -1005,7 +1005,7 @@ export default function Home() {
               >
                 <Trophy className="h-4 w-4" />
                 <span className="text-sm font-semibold">Lv.{levelInfo.level}</span>
-                <span className="hidden md:inline-flex items-center ml-1 w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                <span className="hidden lg:inline-flex items-center ml-1 w-16 h-1.5 rounded-full bg-muted overflow-hidden">
                   <span
                     className="h-full bg-primary"
                     style={{ width: `${Math.round(levelInfo.progress * 100)}%` }}
