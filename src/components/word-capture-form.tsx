@@ -94,8 +94,8 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
         
         form.reset();
         toast({
-          title: `已识别 ${wordsFound.length} 个单词`,
-          description: `已从图片中识别并生成释义。`,
+          title: `已识别 ${wordsFound.length} 个单词${result.fromCache ? ' (缓存)' : ''}`,
+          description: result.fromCache ? '已从缓存读取识别结果。' : '已从图片中识别并生成释义。',
         });
         // setActiveTab('text'); // Don't switch tab, let user decide.
       } else {
