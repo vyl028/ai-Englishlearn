@@ -30,7 +30,7 @@ async function callAI(messages: any[], responseFormat?: { type: string }): Promi
     throw new Error(`AI API error: ${response.status} - ${error}`);
   }
 
-  const data = await response.json();
+  const data: any = await response.json();
   return data.choices[0]?.message?.content || '';
 }
 
@@ -367,5 +367,77 @@ ${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : ''}`,
     const result = extractJson(response);
 
     return result;
+  }
+
+  // 口语对话
+  static async speakingChat(params: {
+    scenario?: string;
+    userTextEn: string;
+    history?: Array<{ role: 'user' | 'assistant'; contentEn: string }>;
+    targetLevel?: string;
+  }) {
+    const { scenario, userTextEn, history, targetLevel } = params;
+
+    const historyText = (history || [])
+      .slice(-12)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.contentEn || '').trim()}`)
+      .filter((s) => s.trim())
+      .join('\n');
+
+    const messages = [
+      {
+        role: 'system',
+        content: `你是一个友好的英语对话伙伴和严格的口语教练，帮助中国学习者提高英语口语。
+
+重要约束：
+- 你没有访问用户音频的权限，只能基于转写文本进行反馈
+- 对话回复语言：英语
+- 教练/反馈语言：简体中文
+- 助手回复要自然简短（1-3句话），像真实对话一样
+- 给出实用的纠正建议，而非泛泛的表扬
+
+目标水平：${targetLevel || 'B1'}`,
+      },
+      {
+        role: 'user',
+        content: `场景：${scenario || '日常对话'}
+
+对话历史：
+${historyText || '（无）'}
+
+用户说的话（英语转写）：
+${userTextEn.trim()}
+
+请完成以下两件事：
+1) 作为助手用英语回复（1-3句话），自然地继续对话
+2) 基于文本评估用户的表达，用简体中文给出反馈：
+   - 指出 1-4 个关键问题（语法/用词/流利度/连贯性）
+   - 提供更自然的纠正版本（英语）
+   - 给出 1-2 条实用建议
+
+请以 JSON 格式返回：
+{
+  "assistantReplyEn": "助手回复（英语）",
+  "feedbackZh": "反馈（简体中文）",
+  "correctedUserEn": "纠正后的用户表达（英语，可选）",
+  "issues": [
+    {"type": "grammar|word_choice|fluency|coherence|other", "original": "原文", "suggestion": "建议", "reasonZh": "原因（中文）"}
+  ],
+  "scoreOverall": 75
+}`,
+      },
+    ];
+
+    const response = await callAI(messages);
+    const result = extractJson(response);
+
+    return {
+      kind: 'speaking_chat',
+      assistantReplyEn: result.assistantReplyEn || 'Could you say that again?',
+      feedbackZh: result.feedbackZh || '（AI 未返回反馈）',
+      correctedUserEn: result.correctedUserEn,
+      issues: result.issues || [],
+      scoreOverall: typeof result.scoreOverall === 'number' ? result.scoreOverall : undefined,
+    };
   }
 }

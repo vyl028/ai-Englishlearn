@@ -201,21 +201,38 @@ export async function generateQuizAction(
 }
 
 export async function generatePracticeAction(
-  input: GeneratePracticeInput
+  wordIds: string[],
+  options?: { questionCount?: number; allowedTypes?: string[] }
 ): Promise<{ success: boolean; data?: { questions: GeneratePracticeOutput }; error?: string }> {
-  // TODO: 后端 API 需要 wordIds，但前端传入的是 words 数组
-  // 需要重构：前端应该先获取单词 ID，再调用此函数
-  // 临时返回错误
-  console.warn("generatePracticeAction: 需要传入 wordIds 而不是 words 数组");
-  return { success: false, error: "API 接口需要更新以支持新的调用方式" };
+  const result = await apiRequest<any>("/api/ai/practice", {
+    method: "POST",
+    body: JSON.stringify({
+      wordIds,
+      questionCount: options?.questionCount ?? 10,
+      allowedTypes: options?.allowedTypes ?? ["mcq", "fill_blank", "reorder"],
+    }),
+  });
+
+  if (!result.success || !result.data?.questions) {
+    return { success: false, error: result.error || "无法生成练习题，请重试。" };
+  }
+
+  return { success: true, data: { questions: result.data.questions } };
 }
 
 export async function generateStoryAction(
-  input: GenerateStoryInput
+  wordIds: string[]
 ): Promise<{ success: boolean; data?: GenerateStoryOutput; error?: string }> {
-  // TODO: 后端 API 需要 wordIds，但前端传入的是 words 数组
-  console.warn("generateStoryAction: 需要传入 wordIds 而不是 words 数组");
-  return { success: false, error: "API 接口需要更新以支持新的调用方式" };
+  const result = await apiRequest<any>("/api/ai/story", {
+    method: "POST",
+    body: JSON.stringify({ wordIds }),
+  });
+
+  if (!result.success || !result.data) {
+    return { success: false, error: result.error || "无法生成故事，请重试。" };
+  }
+
+  return { success: true, data: result.data };
 }
 
 export async function exportStoryPdfAction(
@@ -249,8 +266,31 @@ export async function reviewEssayAction(
 export async function speakingChatAction(
   input: SpeakingChatInput
 ): Promise<{ success: boolean; data?: SpeakingChatOutput; error?: string }> {
-  // 注意：后端暂不支持 speaking chat，返回错误
-  return { success: false, error: "听说训练功能暂未接入后端 API" };
+  const result = await apiRequest<any>("/api/ai/speaking-chat", {
+    method: "POST",
+    body: JSON.stringify({
+      scenario: input.scenario,
+      userTextEn: input.userTextEn,
+      history: input.history,
+      targetLevel: input.targetLevel,
+    }),
+  });
+
+  if (!result.success || !result.data) {
+    return { success: false, error: result.error || "口语对话失败，请稍后重试。" };
+  }
+
+  return {
+    success: true,
+    data: {
+      kind: "speaking_chat",
+      assistantReplyEn: result.data.assistantReplyEn,
+      feedbackZh: result.data.feedbackZh,
+      correctedUserEn: result.data.correctedUserEn,
+      issues: result.data.issues,
+      scoreOverall: result.data.scoreOverall,
+    },
+  };
 }
 
 export async function extractEssayTextFromFileAction(
