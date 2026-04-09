@@ -139,7 +139,7 @@ export interface Word {
     name: string;
   };
   capturedAt: string;
-  isMastered: boolean;
+  mastered: boolean;
   photoData?: string;
 }
 
@@ -153,7 +153,7 @@ export interface WordListResult {
 export interface WordFilters {
   search?: string;
   groupId?: string;
-  isMastered?: boolean;
+  mastered?: boolean;
   page?: number;
   limit?: number;
 }
@@ -163,7 +163,7 @@ export const wordsApi = {
     const params = new URLSearchParams();
     if (filters.search) params.append('search', filters.search);
     if (filters.groupId !== undefined) params.append('groupId', filters.groupId);
-    if (filters.isMastered !== undefined) params.append('isMastered', String(filters.isMastered));
+    if (filters.mastered !== undefined) params.append('mastered', String(filters.mastered));
     if (filters.page) params.append('page', String(filters.page));
     if (filters.limit) params.append('limit', String(filters.limit));
 

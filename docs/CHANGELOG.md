@@ -1,3 +1,45 @@
+## 2026-04-09
+
+### 新增/修改内容
+- **前后端分离改造 - 第二阶段完成**
+  - 前端 API 客户端：`src/lib/api-client.ts`，封装所有后端 API 调用
+  - 认证状态管理：`src/lib/auth-context.tsx`，管理登录状态和 token
+  - 登录/注册页面：`src/app/login/page.tsx`
+  - 路由守卫：`src/components/auth-guard.tsx`，保护需要登录的页面
+  - API Hooks：`src/lib/api-hooks.ts`，提供 useWords, useGroups, useWordMutations 等
+  - 改造 `page.tsx`：将 localStorage 数据存储改为后端 API 调用
+    - 单词列表从后端 API 获取
+    - 分组列表从后端 API 获取
+    - 添加/更新/删除单词调用后端 API
+    - 分组管理（增删改查）调用后端 API
+    - 批量操作调用后端 API
+  - 移除 Turbopack，使用标准 Webpack 避免 HMR 问题
+
+### 涉及文件
+- 新增：`src/lib/api-client.ts`
+- 新增：`src/lib/auth-context.tsx`
+- 新增：`src/lib/api-hooks.ts`
+- 新增：`src/app/login/page.tsx`
+- 新增：`src/components/auth-guard.tsx`
+- 修改：`src/app/page.tsx`
+- 修改：`src/app/layout.tsx`
+- 修改：`package.json`（移除 --turbopack）
+- 修改：`server/src/index.ts`（修复类型问题）
+- 修改：`server/src/routes/words.ts`（修复类型问题）
+- 修改：`server/src/routes/groups.ts`（修复类型问题）
+
+### 背景/原因
+- 前后端分离架构，支持多设备数据同步
+- 用户登录后数据存储在服务端 SQLite 数据库
+
+### 如何验证
+- 启动后端：`cd server && npm run dev`
+- 启动前端：`npm run dev`
+- 访问 `http://localhost:9002/login`
+- 注册新账号，登录后添加单词，刷新页面数据应保留
+
+---
+
 ## 2026-04-02
 
 ### 新增/修改内容

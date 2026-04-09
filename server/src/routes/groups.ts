@@ -46,7 +46,7 @@ router.post('/', async (req: AuthRequest, res) => {
 // 获取单个分组
 router.get('/:id', async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const group = await GroupService.findById(userId, id);
 
@@ -61,7 +61,7 @@ router.get('/:id', async (req: AuthRequest, res) => {
 router.put('/:id', async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
-    const { id } = req.params;
+    const id = req.params.id as string;
     const data = groupUpdateSchema.parse(req.body);
 
     const group = await GroupService.update(userId, id, data);
@@ -77,7 +77,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
 // 删除分组
 router.delete('/:id', async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   await GroupService.delete(userId, id);
   return successResponse(res, { success: true });
