@@ -51,7 +51,8 @@ app.use((req, res) => {
 // 错误处理
 app.use(errorHandler);
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Server] API server running on http://0.0.0.0:${PORT}`);
-  console.log(`[Server] Health check: http://0.0.0.0:${PORT}/health`);
+const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+app.listen(portNumber, '0.0.0.0', () => {
+  console.log(`[Server] API server running on http://0.0.0.0:${portNumber}`);
+  console.log(`[Server] Health check: http://0.0.0.0:${portNumber}/health`);
 });

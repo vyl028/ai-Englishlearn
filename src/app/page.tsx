@@ -15,6 +15,7 @@ import { ArticleReadingView } from '@/components/article-reading-view';
 import { SpeakingTrainingView } from '@/components/speaking-training-view';
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsSheet } from "@/components/settings-sheet";
+import { AuthGuard } from "@/components/auth-guard";
 import type { CapturedWord, GeneratePracticeOutput, PracticeQuestionType, WordGroup, GenerateStoryOutput } from '@/lib/types';
 import { getPrimaryNavView, getViewDescription, getViewLabel, type AppView } from "@/lib/app-view";
 import { applyLearningEvent, createDefaultGamificationState, GAMIFICATION_STORAGE_KEY, getLevelInfo, normalizeGamificationState, normalizeTermKey, syncBadgesWithWords, type GamificationState } from '@/lib/gamification';
@@ -22,11 +23,13 @@ import { GROWTH_GOALS_STORAGE_KEY } from "@/lib/growth-goals";
 import { LEARNING_EVENTS_STORAGE_KEY, recordLearningEvent } from "@/lib/learning-events";
 import { SPEAKING_TRAINING_STATS_STORAGE_KEY } from "@/lib/speaking-training-stats";
 import { Button } from '@/components/ui/button';
-import { exportStoryPdfAction, regenerateCapturedWordAction } from '@/app/actions';
+import { regenerateCapturedWordAction, exportStoryPdfAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import { getAiCache, hashAiCachePayload, setAiCache } from '@/lib/ai-cache';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { useWords, useGroups, useWordMutations, useGroupMutations } from '@/lib/api-hooks';
+import { wordsApi, groupsApi, aiApi } from '@/lib/api-client';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,8 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const WORDS_STORAGE_KEY = 'lexi-capture-words';
-const GROUPS_STORAGE_KEY = 'lexi-capture-groups';
+// 本地存储 key（仅用于非数据类设置）
 const SELECTED_GROUP_STORAGE_KEY = 'lexi-capture-selected-group';
 const LAST_VIEW_STORAGE_KEY = 'lexi-capture-last-view';
 const THEME_STORAGE_KEY = 'lexi-theme';
@@ -100,6 +102,13 @@ function normalizeWordPosKey(word: string, partOfSpeech: string) {
 }
 
 export default function Home() {
+  // 使用后端 API 获取数据
+  const { words: apiWords, total: wordsTotal, isLoading: wordsLoading, error: wordsError, refresh: refreshWords } = useWords();
+  const { groups: apiGroups, isLoading: groupsLoading, error: groupsError, refresh: refreshGroups } = useGroups();
+  const { createWord, createBatch, updateWord, deleteWord, deleteBatch } = useWordMutations();
+  const { createGroup, updateGroup, deleteGroup, reorderGroups } = useGroupMutations();
+
+  // 本地状态
   const [words, setWords] = useState<CapturedWord[]>([]);
   const [groups, setGroups] = useState<WordGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(ALL_GROUP_ID);
@@ -179,25 +188,39 @@ export default function Home() {
     return (await resp.json()) as T;
   };
 
+  // 同步 API 数据到本地 state
   useEffect(() => {
-    const normalizeGroups = (raw: any): WordGroup[] => {
-      const parsed = Array.isArray(raw) ? raw : [];
-      const cleaned = parsed
-        .filter((g) => g && typeof g.id === 'string' && typeof g.name === 'string')
-        .map((g) => ({ id: String(g.id), name: String(g.name).trim() }))
-        // Reserved id and legacy "default" group id are not treated as user-defined groups.
-        .filter((g) => g.id !== ALL_GROUP_ID && g.id !== 'default' && g.name.length > 0);
+    if (!wordsLoading) {
+      setWords(apiWords.map(w => ({
+        id: w.id,
+        word: w.word,
+        partOfSpeech: w.partOfSpeech,
+        definition: w.definition,
+        enrichment: w.enrichment as any,
+        groupId: w.groupId || undefined,
+        capturedAt: new Date(w.capturedAt),
+        mastered: w.mastered,
+        photoDataUri: w.photoData,
+      })));
+    }
+  }, [apiWords, wordsLoading]);
 
-      const unique: WordGroup[] = [];
-      const seen = new Set<string>();
-      for (const g of cleaned) {
-        if (seen.has(g.id)) continue;
-        seen.add(g.id);
-        unique.push(g);
+  useEffect(() => {
+    if (!groupsLoading) {
+      setGroups(apiGroups);
+      // 同步选中分组
+      const groupIds = new Set(apiGroups.map((g) => g.id));
+      const storedSelected = localStorage.getItem(SELECTED_GROUP_STORAGE_KEY);
+      if (storedSelected && (storedSelected === ALL_GROUP_ID || groupIds.has(storedSelected))) {
+        setSelectedGroupId(storedSelected);
+      } else {
+        setSelectedGroupId(ALL_GROUP_ID);
       }
-      return unique;
-    };
+    }
+  }, [apiGroups, groupsLoading]);
 
+  // 初始加载：gamification、view 等
+  useEffect(() => {
     const readJson = (key: string) => {
       try {
         const txt = localStorage.getItem(key);
@@ -209,54 +232,18 @@ export default function Home() {
     };
 
     try {
-      const storedGroups = normalizeGroups(readJson(GROUPS_STORAGE_KEY));
-      setGroups(storedGroups);
-
-      const groupIds = new Set(storedGroups.map((g) => g.id));
-      const storedSelected = localStorage.getItem(SELECTED_GROUP_STORAGE_KEY);
-      if (storedSelected && (storedSelected === ALL_GROUP_ID || groupIds.has(storedSelected))) {
-        setSelectedGroupId(storedSelected);
-      } else {
-        setSelectedGroupId(ALL_GROUP_ID);
-      }
-
-      const rawWords = readJson(WORDS_STORAGE_KEY);
-      if (Array.isArray(rawWords)) {
-        const normalized = rawWords
-          .filter((w) => w && typeof w.id === 'string')
-          .map((w: any) => {
-            const capturedAt = new Date(w.capturedAt);
-            const groupId = typeof w.groupId === 'string' && groupIds.has(w.groupId) ? w.groupId : undefined;
-            return {
-              ...w,
-              capturedAt: Number.isNaN(capturedAt.getTime()) ? new Date() : capturedAt,
-              groupId,
-            } as CapturedWord;
-          });
-        setWords(normalized);
-      }
-
       const rawGamification = readJson(GAMIFICATION_STORAGE_KEY);
       setGamification(normalizeGamificationState(rawGamification));
 
       const storedView = normalizeStoredView(localStorage.getItem(LAST_VIEW_STORAGE_KEY));
       if (storedView) setView(storedView);
     } catch (error) {
-      console.error("Failed to parse words from localStorage", error);
+      console.error("Failed to load from localStorage", error);
     }
     setHydrated(true);
   }, []);
 
-  useEffect(() => {
-    // Save to localStorage, even if it's an empty array to clear it.
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(words));
-    } catch (error) {
-      console.error("Failed to save words to localStorage", error);
-    }
-  }, [words]);
-
+  // 同步徽章状态（保留）
   useEffect(() => {
     if (!hydrated) return;
     setGamification((prev) => syncBadgesWithWords(prev, words));
@@ -266,15 +253,6 @@ export default function Home() {
     if (!hydrated) return;
     setGamification((prev) => syncBadgesWithWords(prev, words));
   }, [hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
-    } catch (error) {
-      console.error("Failed to save groups to localStorage", error);
-    }
-  }, [groups]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -308,6 +286,7 @@ export default function Home() {
 
     const autoGroupId = groups.some((g) => g.id === selectedGroupId) ? selectedGroupId : undefined;
 
+    // 检查重复
     const existingCountByKey = new Map<string, number>();
     for (const w of words) {
       const key = normalizeWordPosKey(w.word, w.partOfSpeech);
@@ -338,82 +317,91 @@ export default function Home() {
       }
     }
 
-    const mergeWords = (
-      prevWords: CapturedWord[],
-      strategy: Exclude<DuplicateHandling, 'cancel'>,
-    ) => {
-      const firstIndexByKey = new Map<string, number>();
-      for (let i = 0; i < prevWords.length; i++) {
-        const it = prevWords[i];
-        const key = normalizeWordPosKey(it.word, it.partOfSpeech);
-        if (!key) continue;
-        if (!firstIndexByKey.has(key)) firstIndexByKey.set(key, i);
-      }
+    // 准备数据
+    const wordsToAdd: any[] = [];
+    const wordsToUpdate: { id: string; word: CapturedWord }[] = [];
+    let skippedCount = 0;
 
-      const updates: CapturedWord[] = [...prevWords];
-      const prepend: CapturedWord[] = [];
-      let addedCount = 0;
-      let overwrittenCount = 0;
-      let skippedCount = 0;
+    for (const inc of incoming) {
+      const key = normalizeWordPosKey(inc.word, inc.partOfSpeech);
+      const existingWord = words.find(w => normalizeWordPosKey(w.word, w.partOfSpeech) === key);
 
-      for (const inc of incoming) {
-        const key = normalizeWordPosKey(inc.word, inc.partOfSpeech);
-        const existingIndex = key ? firstIndexByKey.get(key) : undefined;
-
-        if (existingIndex === undefined) {
-          const { photoDataUri, ...rest } = inc;
-          prepend.push({ ...rest, groupId: autoGroupId });
-          addedCount++;
-          continue;
-        }
-
-        if (strategy === 'skip') {
-          skippedCount++;
-          continue;
-        }
-
-        if (strategy === 'add') {
-          const { photoDataUri, ...rest } = inc;
-          prepend.push({ ...rest, groupId: autoGroupId });
-          addedCount++;
-          continue;
-        }
-
-        overwrittenCount++;
-        const existing = updates[existingIndex];
-        updates[existingIndex] = {
-          ...existing,
+      if (!existingWord) {
+        // 新单词
+        wordsToAdd.push({
           word: inc.word,
           partOfSpeech: inc.partOfSpeech,
           definition: inc.definition,
           enrichment: inc.enrichment,
-        };
+          groupId: autoGroupId,
+          photoData: inc.photoDataUri,
+        });
+      } else if (handling === 'skip') {
+        skippedCount++;
+      } else if (handling === 'add') {
+        // 仍然添加（允许重复）
+        wordsToAdd.push({
+          word: inc.word,
+          partOfSpeech: inc.partOfSpeech,
+          definition: inc.definition,
+          enrichment: inc.enrichment,
+          groupId: autoGroupId,
+          photoData: inc.photoDataUri,
+        });
+      } else if (handling === 'overwrite') {
+        // 更新现有单词
+        wordsToUpdate.push({ id: existingWord.id, word: inc });
+      }
+    }
+
+    // 调用 API
+    let addedCount = 0;
+    let overwrittenCount = 0;
+
+    try {
+      // 批量添加新单词
+      if (wordsToAdd.length > 0) {
+        const result = await createBatch(wordsToAdd);
+        if (result.success && result.data) {
+          addedCount = result.data.created.length;
+        }
       }
 
-      return {
-        nextWords: [...prepend, ...updates],
-        addedCount,
-        overwrittenCount,
-        skippedCount,
-      };
-    };
+      // 逐个更新覆盖的单词
+      for (const { id, word } of wordsToUpdate) {
+        const result = await updateWord(id, {
+          word: word.word,
+          partOfSpeech: word.partOfSpeech,
+          definition: word.definition,
+          enrichment: word.enrichment as any,
+        });
+        if (result.success) {
+          overwrittenCount++;
+        }
+      }
 
-    const expected = mergeWords(words, handling);
-    setWords((prev) => mergeWords(prev, handling).nextWords);
+      // 刷新列表
+      await refreshWords();
 
-    if (expected.addedCount > 0) {
-      setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: expected.addedCount }));
-      recordLearningEvent({ type: "words_added", count: expected.addedCount });
+      // 更新成就
+      if (addedCount > 0) {
+        setGamification((prev) => applyLearningEvent(prev, { type: "words_added", count: addedCount }));
+        recordLearningEvent({ type: "words_added", count: addedCount });
+      }
+
+      if (totalDuplicates > 0) {
+        toast({
+          title: "已处理重复词条",
+          description: `新增 ${addedCount}，覆盖 ${overwrittenCount}，跳过 ${skippedCount}。`,
+        });
+      } else {
+        toast({ title: "添加成功", description: `已添加 ${addedCount} 个单词。` });
+      }
+
+      if (options?.navigateToReview) setView('review');
+    } catch (error) {
+      toast({ title: "添加失败", description: "请稍后重试。", variant: "destructive" });
     }
-
-    if (totalDuplicates > 0) {
-      toast({
-        title: "已处理重复词条",
-        description: `新增 ${expected.addedCount}，覆盖 ${expected.overwrittenCount}，跳过 ${expected.skippedCount}。`,
-      });
-    }
-
-    if (options?.navigateToReview) setView('review');
   };
 
   const handleWordAdded = (newWord: CapturedWord) => {
@@ -451,19 +439,35 @@ export default function Home() {
     setIsEditDialogOpen(true);
   };
 
-  const handleWordUpdated = (updatedWord: CapturedWord) => {
-    setWords(words.map(w => w.id === updatedWord.id ? updatedWord : w));
-    setEditingWord(null);
+  const handleWordUpdated = async (updatedWord: CapturedWord) => {
+    const result = await updateWord(updatedWord.id, {
+      word: updatedWord.word,
+      partOfSpeech: updatedWord.partOfSpeech,
+      definition: updatedWord.definition,
+      enrichment: updatedWord.enrichment as any,
+      groupId: updatedWord.groupId,
+    });
+    if (result.success) {
+      await refreshWords();
+      setEditingWord(null);
+    } else {
+      toast({ title: "更新失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
   const handleDeleteWord = (word: CapturedWord) => {
     setWordToDelete(word);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (wordToDelete) {
-      setWords(words.filter(w => w.id !== wordToDelete.id));
-      setWordToDelete(null);
+      const result = await deleteWord(wordToDelete.id);
+      if (result.success) {
+        await refreshWords();
+        setWordToDelete(null);
+      } else {
+        toast({ title: "删除失败", description: result.error?.message || "请重试", variant: "destructive" });
+      }
     }
   };
 
@@ -471,62 +475,86 @@ export default function Home() {
     setWordToDelete(null);
   };
 
-  const handleAddGroup = (name: string) => {
+  const handleAddGroup = async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const newGroup: WordGroup = { id: generateId(), name: trimmed };
-    setGroups((prev) => [...prev, newGroup]);
-    setSelectedGroupId(newGroup.id);
+    const result = await createGroup(trimmed);
+    if (result.success) {
+      await refreshGroups();
+      setSelectedGroupId(result.data!.id);
+    } else {
+      toast({ title: "创建失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
-  const handleRenameGroup = (groupId: string, name: string) => {
+  const handleRenameGroup = async (groupId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name: trimmed } : g)));
+    const result = await updateGroup(groupId, { name: trimmed });
+    if (result.success) {
+      await refreshGroups();
+    } else {
+      toast({ title: "重命名失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
-  const handleDeleteGroup = (groupId: string) => {
-    setGroups((prev) => prev.filter((g) => g.id !== groupId));
-    setWords((prev) => prev.map((w) => (w.groupId === groupId ? { ...w, groupId: undefined } : w)));
-    setSelectedGroupId((prev) => (prev === groupId ? ALL_GROUP_ID : prev));
+  const handleDeleteGroup = async (groupId: string) => {
+    const result = await deleteGroup(groupId);
+    if (result.success) {
+      await refreshGroups();
+      await refreshWords(); // 刷新单词（分组可能变为 null）
+      setSelectedGroupId((prev) => (prev === groupId ? ALL_GROUP_ID : prev));
+    } else {
+      toast({ title: "删除失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
-  const handleReorderGroups = (nextGroups: WordGroup[]) => {
-    setGroups(nextGroups);
+  const handleReorderGroups = async (nextGroups: WordGroup[]) => {
+    const groupIds = nextGroups.map(g => g.id);
+    const result = await reorderGroups(groupIds);
+    if (result.success) {
+      await refreshGroups();
+    }
   };
 
-  const handleMoveWordToGroup = (wordId: string, groupId: string) => {
+  const handleMoveWordToGroup = async (wordId: string, groupId: string) => {
     if (!groupId) return;
-    setWords((prev) => prev.map((w) => {
-      if (w.id !== wordId) return w;
-      if (groupId === UNGROUPED_GROUP_ID) return { ...w, groupId: undefined };
-      if (!groups.some((g) => g.id === groupId)) return w;
-      return { ...w, groupId };
-    }));
+    const actualGroupId = groupId === UNGROUPED_GROUP_ID ? null : groupId;
+    if (actualGroupId && !groups.some((g) => g.id === actualGroupId)) return;
+
+    const result = await updateWord(wordId, { groupId: actualGroupId });
+    if (result.success) {
+      await refreshWords();
+    } else {
+      toast({ title: "移动失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
-  const handleMoveWordsToGroup = (wordIds: string[], groupId: string) => {
+  const handleMoveWordsToGroup = async (wordIds: string[], groupId: string) => {
     if (!groupId) return;
     if (!Array.isArray(wordIds) || wordIds.length === 0) return;
 
-    const idSet = new Set(wordIds);
-    setWords((prev) =>
-      prev.map((w) => {
-        if (!idSet.has(w.id)) return w;
-        if (groupId === UNGROUPED_GROUP_ID) return { ...w, groupId: undefined };
-        if (!groups.some((g) => g.id === groupId)) return w;
-        return { ...w, groupId };
-      })
-    );
+    const actualGroupId = groupId === UNGROUPED_GROUP_ID ? null : groupId;
+    if (actualGroupId && !groups.some((g) => g.id === actualGroupId)) return;
+
+    // 逐个更新
+    for (const wordId of wordIds) {
+      await updateWord(wordId, { groupId: actualGroupId });
+    }
+    await refreshWords();
   };
 
-  const handleDeleteWords = (wordIds: string[]) => {
+  const handleDeleteWords = async (wordIds: string[]) => {
     if (!Array.isArray(wordIds) || wordIds.length === 0) return;
-    const idSet = new Set(wordIds);
-    setWords((prev) => prev.filter((w) => !idSet.has(w.id)));
+    const result = await deleteBatch(wordIds);
+    if (result.success) {
+      await refreshWords();
+    } else {
+      toast({ title: "批量删除失败", description: result.error?.message || "请重试", variant: "destructive" });
+    }
   };
 
-  const handleSetTermsMastered = (termKeys: string[], mastered: boolean) => {
+  const handleSetTermsMastered = async (termKeys: string[], mastered: boolean) => {
     const keys = Array.from(new Set((termKeys || []).map((k) => normalizeTermKey(k)).filter(Boolean)));
     if (keys.length === 0) return;
 
@@ -537,7 +565,14 @@ export default function Home() {
       if (w.mastered === true) prevMastered.add(key);
     }
 
-    setWords((prev) => prev.map((w) => (keys.includes(normalizeTermKey(w.word)) ? { ...w, mastered } : w)));
+    // 更新每个匹配的单词
+    for (const w of words) {
+      const key = normalizeTermKey(w.word);
+      if (keys.includes(key)) {
+        await updateWord(w.id, { mastered });
+      }
+    }
+    await refreshWords();
 
     if (mastered === true) {
       const newly = keys.filter((k) => !prevMastered.has(k) && words.some((w) => normalizeTermKey(w.word) === k));
@@ -834,12 +869,22 @@ export default function Home() {
     setGamification(syncBadgesWithWords(createDefaultGamificationState(), words));
   };
 
-  const handleResetLocalData = () => {
+  const handleResetLocalData = async () => {
     if (!hydrated) return;
 
+    // 删除所有单词
+    const wordIds = words.map(w => w.id);
+    if (wordIds.length > 0) {
+      await deleteBatch(wordIds);
+    }
+
+    // 删除所有分组
+    for (const group of groups) {
+      await deleteGroup(group.id);
+    }
+
+    // 清空本地存储的其他数据
     try {
-      localStorage.removeItem(WORDS_STORAGE_KEY);
-      localStorage.removeItem(GROUPS_STORAGE_KEY);
       localStorage.removeItem(SELECTED_GROUP_STORAGE_KEY);
       localStorage.removeItem(GAMIFICATION_STORAGE_KEY);
       localStorage.removeItem(GROWTH_GOALS_STORAGE_KEY);
@@ -856,8 +901,8 @@ export default function Home() {
       console.error("Failed to reset localStorage", error);
     }
 
-    setWords([]);
-    setGroups([]);
+    await refreshWords();
+    await refreshGroups();
     setSelectedGroupId(ALL_GROUP_ID);
     setView('capture');
     setPracticeData(null);
@@ -964,6 +1009,7 @@ export default function Home() {
   const viewDescription = getViewDescription(view);
 
   return (
+    <AuthGuard>
     <SidebarProvider defaultOpen>
       <AppSidebar
         view={view}
@@ -1129,5 +1175,6 @@ export default function Home() {
         busy={isBusy}
       />
     </SidebarProvider>
+    </AuthGuard>
   );
 }

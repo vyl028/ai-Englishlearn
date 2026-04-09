@@ -85,7 +85,7 @@ router.post('/batch', async (req: AuthRequest, res) => {
 // 获取单个单词
 router.get('/:id', async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const word = await WordService.findById(userId, id);
 
@@ -100,7 +100,7 @@ router.get('/:id', async (req: AuthRequest, res) => {
 router.put('/:id', async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
-    const { id } = req.params;
+    const id = req.params.id as string;
     const data = wordUpdateSchema.parse(req.body);
 
     const word = await WordService.update(userId, id, data);
@@ -116,7 +116,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
 // 删除单词
 router.delete('/:id', async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   await WordService.delete(userId, id);
   return successResponse(res, { success: true });
