@@ -162,4 +162,36 @@ router.post('/study-article', async (req: AuthRequest, res) => {
   }
 });
 
+// 口语对话
+const speakingChatSchema = z.object({
+  scenario: z.string().max(120).optional(),
+  userTextEn: z.string().min(1).max(600),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    contentEn: z.string().min(1),
+  })).max(20).optional(),
+  targetLevel: z.enum(['A2', 'B1', 'B2', 'C1']).optional(),
+});
+
+router.post('/speaking-chat', async (req: AuthRequest, res) => {
+  try {
+    const { scenario, userTextEn, history, targetLevel } = speakingChatSchema.parse(req.body);
+    const result = await AIService.speakingChat({
+      scenario,
+      userTextEn,
+      history,
+      targetLevel,
+    });
+    return successResponse(res, result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
+    }
+    if (error instanceof Error) {
+      return errorResponse(res, 'AI_ERROR', error.message, 500);
+    }
+    throw error;
+  }
+});
+
 export { router as aiRouter };

@@ -23,7 +23,7 @@ import { GROWTH_GOALS_STORAGE_KEY } from "@/lib/growth-goals";
 import { LEARNING_EVENTS_STORAGE_KEY, recordLearningEvent } from "@/lib/learning-events";
 import { SPEAKING_TRAINING_STATS_STORAGE_KEY } from "@/lib/speaking-training-stats";
 import { Button } from '@/components/ui/button';
-import { regenerateCapturedWordAction, exportStoryPdfAction } from '@/app/actions';
+import { regenerateCapturedWordAction, exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import { getAiCache, hashAiCachePayload, setAiCache } from '@/lib/ai-cache';
@@ -176,16 +176,6 @@ export default function Home() {
     globalTaskAbortRef.current = null;
     setGlobalTask(null);
     toast({ title: "已取消生成", description: "已恢复操作。" });
-  };
-
-  const postJson = async <T,>(url: string, body: unknown, signal: AbortSignal): Promise<T> => {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    });
-    return (await resp.json()) as T;
   };
 
   // 同步 API 数据到本地 state
@@ -645,23 +635,18 @@ export default function Home() {
       }
     }
 
-    const { id: taskId, signal } = startGlobalTask({
+    const { id: taskId } = startGlobalTask({
       kind: 'practice',
       title: "正在生成练习...",
       description: "AI 正在生成题目，请稍等片刻。",
     });
-    const input = {
-      words: practiceWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
-      questionCount: options.questionCount,
-      allowedTypes: options.allowedTypes,
-    };
 
     try {
-      const result = await postJson<{
-        success: boolean;
-        data?: { questions: GeneratePracticeOutput };
-        error?: string;
-      }>('/api/ai/generate-practice', input, signal);
+      const wordIds = practiceWords.map((w) => w.id);
+      const result = await generatePracticeAction(wordIds, {
+        questionCount: options.questionCount,
+        allowedTypes: options.allowedTypes,
+      });
       if (globalTaskIdRef.current !== taskId) return;
 
       if (result.success && result.data) {
@@ -671,8 +656,6 @@ export default function Home() {
         return;
       }
 
-      if (result.error === 'aborted') return;
-
       toast({
         variant: "destructive",
         title: "练习生成失败",
@@ -680,7 +663,6 @@ export default function Home() {
       });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;
-      if (error?.name === 'AbortError') return;
       toast({
         variant: "destructive",
         title: "练习生成失败",
@@ -752,34 +734,26 @@ export default function Home() {
       }
     }
 
-    const { id: taskId, signal } = startGlobalTask({
+    const { id: taskId } = startGlobalTask({
       kind: 'story',
       title: "正在生成故事...",
       description: "AI 正在生成故事内容，请稍等片刻。",
     });
-    const input = {
-      words: storyWords.map(({ word, partOfSpeech, definition }) => ({ word, partOfSpeech, definition })),
-    };
 
     try {
-      const result = await postJson<{ success: boolean; data?: GenerateStoryOutput; error?: string }>(
-        '/api/ai/generate-story',
-        input,
-        signal
-      );
+      const wordIds = storyWords.map((w) => w.id);
+      const result = await generateStoryAction(wordIds);
       if (globalTaskIdRef.current !== taskId) return;
 
-        if (result.success && result.data) {
-          setAiCache('story', storyCacheHash, result.data);
-          setStoryData(result.data);
-          setView('story');
-          setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
-          recordLearningEvent({ type: "story_generated", wordCount: storyWords.length });
-          toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
-          return;
-        }
-
-      if (result.error === 'aborted') return;
+      if (result.success && result.data) {
+        setAiCache('story', storyCacheHash, result.data);
+        setStoryData(result.data);
+        setView('story');
+        setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
+        recordLearningEvent({ type: "story_generated", wordCount: storyWords.length });
+        toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
+        return;
+      }
 
       toast({
         variant: "destructive",
@@ -788,7 +762,6 @@ export default function Home() {
       });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;
-      if (error?.name === 'AbortError') return;
       toast({
         variant: "destructive",
         title: "故事生成失败",
