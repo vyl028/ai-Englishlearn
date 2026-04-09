@@ -1,6 +1,28 @@
 ## 2026-04-09
 
 ### 新增/修改内容
+- **前后端分离改造 - 第三阶段完成**
+  - 重构 `src/app/actions.ts`：所有 AI Server Actions 改为调用后端 API
+    - `getDefinitionAction` → `POST /api/ai/define`
+    - `extractWordAndDefineAction` → `POST /api/ai/extract`
+    - `defineTermAutoAction` → `POST /api/ai/define`
+    - `reviewEssayAction` → `POST /api/ai/review-essay`
+    - `studyArticleAction` → `POST /api/ai/study-article`
+    - `extractEssayTextFromFileAction` 图片 OCR → `POST /api/ai/extract`
+  - 注意：`generatePracticeAction` 和 `generateStoryAction` 需要进一步重构（前端需传入 wordIds 而非 words 数组）
+
+### 涉及文件
+- 修改：`src/app/actions.ts`
+
+### 背景/原因
+- 所有 AI 调用都通过后端 API，前端不直接暴露 API Key
+- 统一 AI 调用入口，便于后续限流、缓存、计费
+
+---
+
+## 2026-04-09
+
+### 新增/修改内容
 - **前后端分离改造 - 第二阶段完成**
   - 前端 API 客户端：`src/lib/api-client.ts`，封装所有后端 API 调用
   - 认证状态管理：`src/lib/auth-context.tsx`，管理登录状态和 token
