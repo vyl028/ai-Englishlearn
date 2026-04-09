@@ -790,7 +790,6 @@ export function EssayReviewView() {
             <TabsList className="w-full justify-start overflow-x-auto">
               <TabsTrigger value="score" className="shrink-0">评分</TabsTrigger>
               <TabsTrigger value="issues" className="shrink-0">问题</TabsTrigger>
-              <TabsTrigger value="revised" className="shrink-0">优化后</TabsTrigger>
               <TabsTrigger value="compare" className="shrink-0">对照</TabsTrigger>
             </TabsList>
 
@@ -999,42 +998,6 @@ export function EssayReviewView() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="revised" className="space-y-3 mt-4">
-              <Card>
-                <CardHeader className="py-4">
-                  <CardTitle className="text-base">优化后的作文（英文）</CardTitle>
-                  <CardDescription>保留原意并提升雅思写作任务 2 的表达、结构与准确性。</CardDescription>
-                </CardHeader>
-                <CardContent className="pb-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button type="button" variant="outline" onClick={copyRevised} className="w-full sm:w-auto">
-                      <ClipboardCopy className="mr-2 h-4 w-4" />
-                      复制优化版
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => exportRevised("txt")}
-                      className="w-full sm:w-auto"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      导出 .txt
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => exportRevised("md")}
-                      className="w-full sm:w-auto"
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      导出 .md
-                    </Button>
-                  </div>
-                  <Textarea readOnly value={result.revisedTextEn} className="min-h-[260px]" />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             <TabsContent value="compare" className="space-y-3 mt-4">
               <Card>
                 <CardHeader className="py-4">
@@ -1049,6 +1012,20 @@ export function EssayReviewView() {
                     </div>
                     <div className="space-y-2">
                       <div className="text-sm font-medium">修改后</div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={copyRevised}>
+                          <ClipboardCopy className="mr-1 h-3 w-3" />
+                          复制
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("txt")}>
+                          <Download className="mr-1 h-3 w-3" />
+                          .txt
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("md")}>
+                          <Download className="mr-1 h-3 w-3" />
+                          .md
+                        </Button>
+                      </div>
                       <Textarea readOnly value={result.revisedTextEn} className="min-h-[260px]" />
                     </div>
                   </div>

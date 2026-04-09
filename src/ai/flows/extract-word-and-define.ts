@@ -15,33 +15,30 @@ import {
 export async function extractWordAndDefine(input: ExtractWordAndDefineInput): Promise<ExtractWordAndDefineOutput> {
   ExtractWordAndDefineInputSchema.parse(input);
 
-  const systemPrompt = `You are an OCR + bilingual lexicon expert.
-You read an image, extract distinct English words, and provide concise Chinese learning content.
-You must output valid JSON only.`;
-  const userPrompt = `Analyze the image and return ONLY a JSON array.
-Each element must have: {"word": string, "partOfSpeech": string, "definition": string, "enrichment"?: {...} }.
+  // 简化提示词，减少token开销和响应时间
+  const systemPrompt = `You are an OCR + bilingual lexicon expert. Extract distinct English words from images and provide concise Chinese definitions. Output valid JSON only.`;
 
-The "enrichment" object shape:
-{
-  "collocations": [{"phrase": string, "meaningZh"?: string, "exampleEn"?: string, "exampleZh"?: string}],
-  "synonyms": string[],
-  "antonyms": string[],
-  "examples": [{"en": string, "zh": string}],
-  "level": {"cefr"?: "A1"|"A2"|"B1"|"B2"|"C1"|"C2"|"Unknown", "usageZh"?: string}
-}
+  const userPrompt = `Analyze the image and return a JSON array of words.
+Each element: {"word": string, "partOfSpeech": string, "definition": string, "enrichment": {...}}
+
+enrichment fields (compact):
+- collocations: 2-3 items with phrase, meaningZh, exampleEn, exampleZh
+- synonyms: 2-3 words
+- antonyms: 1-2 words
+- examples: 1-2 items with en, zh
+- level: {cefr: "A1"-"C2"|"Unknown", usageZh: max 60 chars}
 
 Rules:
-- Return at most 8 items (avoid noise).
-- Avoid duplicates (case-insensitive).
-- definition: concise Chinese dictionary-style definition.
-- enrichment should be compact: collocations 2-4, synonyms/antonyms 2-4, examples 1-2, usageZh <= 80 Chinese characters.
-- If no valid English words, return [].`;
+- Max 6 items (reduce noise)
+- No duplicates (case-insensitive)
+- definition: concise Chinese dictionary-style
+- Omit empty fields`;
 
   const data = await generateJson<ExtractWordAndDefineOutput>({
     systemPrompt,
     userPrompt,
     image: { dataUri: input.photoDataUri },
-    schemaHint: 'Return ONLY valid compact JSON array, no markdown, no commentary.',
+    schemaHint: 'Return ONLY valid compact JSON array, no markdown.',
     schema: ExtractWordAndDefineOutputSchema,
   });
 

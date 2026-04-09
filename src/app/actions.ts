@@ -33,6 +33,7 @@ import { studyArticle } from '@/ai/flows/study-article';
 import { analyzeImage } from '@/ai/flows/analyze-image';
 import { aiDebug } from '@/ai/debug';
 import { generateId } from "@/lib/utils";
+import { getAiCache, setAiCache, hashAiCachePayload } from "@/lib/ai-cache";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
 import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
 
@@ -84,14 +85,33 @@ export async function regenerateCapturedWordAction(
 
 export async function extractWordAndDefineAction(
   photoDataUri: string
-): Promise<{ success: boolean; data?: ExtractWordAndDefineOutput; error?: string }> {
+): Promise<{ success: boolean; data?: ExtractWordAndDefineOutput; error?: string; fromCache?: boolean }> {
   try {
+    // 计算图片数据的缓存key（使用前1KB数据作为特征）
+    const cacheHash = hashAiCachePayload({
+      image: photoDataUri.slice(0, 1024),
+      type: 'extract-word-and-define',
+      version: 'v1'
+    });
+
+    // 尝试读取缓存
+    const cached = getAiCache<ExtractWordAndDefineOutput>('define', cacheHash);
+    if (cached) {
+      aiDebug('[extractWordAndDefineAction] Cache hit for hash=%s', cacheHash);
+      return { success: true, data: cached, fromCache: true };
+    }
+
+    aiDebug('[extractWordAndDefineAction] Cache miss, calling AI...');
     const result = await extractWordAndDefine({ photoDataUri });
     if (!result || result.length === 0) {
       aiDebug('[extractWordAndDefineAction] No words found in result');
       return { success: false, error: "无法从图片中识别到单词，请重试。" };
     }
     aiDebug('[extractWordAndDefineAction] Returning %s items', Array.isArray(result) ? result.length : 0);
+
+    // 保存到缓存（TTL 7天）
+    setAiCache('define', cacheHash, result, { ttlMs: 7 * 24 * 60 * 60 * 1000 });
+
     return { success: true, data: result };
   } catch (error: any) {
     console.error('extractWordAndDefineAction error:', error);

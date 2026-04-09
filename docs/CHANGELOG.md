@@ -1,8 +1,53 @@
-# 变更记录（Changelog）
+## 2026-04-02
 
-> 规则：从现在开始，本项目**每次修改**都需要在此文件追加一条记录（包括：改了什么、为什么改、涉及哪些文件）。
->
-> 注意：**不要**在此文件写入任何密钥/Token/账号密码等敏感信息（如 `.env` 内容），只描述"已新增/已配置"即可。
+### 新增/修改内容
+- **作文批改界面优化**
+  - 删除"优化后"独立tab（与"对照"模块重复）
+  - 将"优化后"模块的复制/导出功能合并到"对照"模块的"修改后"区域
+  - "对照"模块现在包含：原文、修改后（含操作按钮）、关键改写对照
+
+### 涉及文件
+- 修改：`src/components/essay-review-view.tsx`
+
+### 背景/原因
+- "优化后"模块只显示优化后的作文全文
+- "对照"模块右侧"修改后"已包含相同内容（result.revisedTextEn）
+- 删除重复模块，简化界面，功能集中在一处
+
+### 如何验证
+- 运行：`npm run typecheck`
+- 进入作文批改，提交后确认"对照"tab中"修改后"区域有复制、导出.txt、导出.md按钮
+
+---
+
+## 2026-04-02
+
+### 新增/修改内容
+- **AI 性能优化：图片识别缓存**
+  - `extractWordAndDefineAction` 添加基于图片特征的本地缓存（TTL 7天）
+  - 同一张图片重复识别将直接从缓存读取，避免重复AI请求
+  - 缓存提示显示在识别结果toast中
+- **AI 提示词优化**
+  - `extract-word-and-define.ts`：简化提示词，减少token开销（max items 6→6, collocations 2-4→2-3, examples 1-2）
+  - `define-term-auto.ts`：简化提示词（max items 1-4→1-3, collocations 3-6→2-3, examples 3-5→1-2, usageZh ≤120→≤80）
+  - 减少不必要的输出要求，降低模型响应时间
+
+### 涉及文件
+- 修改：`src/app/actions.ts`
+- 修改：`src/ai/flows/extract-word-and-define.ts`
+- 修改：`src/ai/flows/define-term-auto.ts`
+- 修改：`src/components/word-capture-form.tsx`
+
+### 背景/原因
+- Kimi-k2.5 是思考型模型，响应较慢
+- 图片识别无缓存导致重复请求同一张图片也慢
+- 提示词过长增加了模型处理时间
+
+### 如何验证
+- 运行：`npm run typecheck`
+- 拍照/上传同一张图片两次，第二次应显示"(缓存)"且响应更快
+
+---
 
 ## 2026-04-01
 
@@ -891,6 +936,54 @@
 
 #### 如何验证
 - 阅读 `docs/CROSS_DEVICE_SETUP.md` 文档，确认方案完整性与可操作性。
+
+---
+
+---
+
+## 2026-04-09
+
+### 新增/修改内容
+- **后端 API 服务搭建（阶段一）**
+  - 创建独立后端项目 `server/`，使用 Express + Prisma + SQLite
+  - 实现认证系统：注册/登录/JWT 验证
+  - 实现单词 CRUD API：单条/批量增删改查、搜索筛选
+  - 实现分组管理 API：增删改查、排序
+  - 迁移 AI 功能到后端：单词释义、图片识别、练习题、故事生成、作文批改、文章分析
+  - AI 服务使用 Kimi API（OpenAI 兼容格式）
+  - 数据库存储图片 base64 数据
+
+### 涉及文件
+- 新增：`server/package.json`
+- 新增：`server/tsconfig.json`
+- 新增：`server/.env.example`
+- 新增：`server/README.md`
+- 新增：`server/prisma/schema.prisma`
+- 新增：`server/src/config/database.ts`
+- 新增：`server/src/middleware/auth.ts`
+- 新增：`server/src/middleware/error.ts`
+- 新增：`server/src/routes/auth.ts`
+- 新增：`server/src/routes/words.ts`
+- 新增：`server/src/routes/groups.ts`
+- 新增：`server/src/routes/ai.ts`
+- 新增：`server/src/services/word-service.ts`
+- 新增：`server/src/services/group-service.ts`
+- 新增：`server/src/services/ai-service.ts`
+- 新增：`server/src/types/index.ts`
+- 新增：`server/src/utils/response.ts`
+- 新增：`server/src/index.ts`
+
+### 背景/原因
+- 前后端分离架构，支持多设备数据同步
+- SQLite 零配置，适合毕设单机部署
+- 统一 AI 调用入口，前端不暴露 API Key
+
+### 如何验证
+- 进入 `server/` 目录运行 `npm install`
+- 复制 `.env.example` 为 `.env` 并配置
+- 运行 `npm run db:push` 初始化数据库
+- 运行 `npm run dev` 启动服务
+- 访问 `http://localhost:4000/health` 检查服务状态
 
 ---
 

@@ -16,44 +16,41 @@ import {
 export async function defineTermAuto(input: DefineTermAutoInput): Promise<DefineTermAutoOutput> {
   DefineTermAutoInputSchema.parse(input);
 
-  const systemPrompt = `You are an expert bilingual lexicographer and English teacher.
-You provide accurate, concise learning content for a Grade 9 student in mainland China.
-You must output valid JSON only.`;
+  // 简化提示词，加速响应
+  const systemPrompt = `You are a bilingual lexicographer. Provide accurate, concise learning content for Grade 9 students in China. Output valid JSON only.`;
 
-  const userPrompt = `Target term: ${input.term}
+  const userPrompt = `Term: ${input.term}
 
-Return ONLY a JSON array of 1-4 objects, each representing a common part of speech of the term.
-Each object must have this shape:
+Return a JSON array of 1-3 objects (common parts of speech only):
 {
   "word": string,
-  "partOfSpeech": "noun"|"pronoun"|"verb"|"adjective"|"adverb"|"preposition"|"conjunction"|"interjection"|"phrase",
+  "partOfSpeech": "noun"|"verb"|"adjective"|"adverb"|"phrase",
   "definition": string,
   "enrichment": {
-    "collocations": [{"phrase": string, "meaningZh"?: string, "exampleEn"?: string, "exampleZh"?: string}],
+    "collocations": [{"phrase": string, "meaningZh"?: string}],
     "synonyms": string[],
     "antonyms": string[],
     "examples": [{"en": string, "zh": string}],
-    "level": {"cefr"?: "A1"|"A2"|"B1"|"B2"|"C1"|"C2"|"Unknown", "usageZh"?: string}
+    "level": {"cefr"?: "A1"-"C2"|"Unknown", "usageZh"?: string}
   }
 }
 
 Rules:
-- If the term contains whitespace (a phrase), prefer returning a single item with partOfSpeech "phrase".
-- Do not invent rare senses; include only common parts of speech used in real English.
-- definition: concise Chinese dictionary-style definition (no markdown).
-- collocations: 3-6 common collocations, keep short and practical.
-- synonyms/antonyms: 3-6 items each, single words preferred.
-- examples: 3-5 short natural English sentences that contain the target term, each with Chinese translation.
-- usageZh: brief Chinese usage notes (patterns, common mistakes), <= 120 Chinese characters.
-`;
+- Phrases (with whitespace) return single item with partOfSpeech "phrase"
+- Only common senses; omit rare usages
+- definition: concise Chinese dictionary-style
+- collocations: 2-3 items
+- synonyms/antonyms: 2-3 items each
+- examples: 1-2 short sentences
+- usageZh: <= 80 Chinese characters
+- Omit empty enrichment fields`;
 
   try {
     const data = await generateJson<DefineTermAutoOutput>({
       systemPrompt,
       userPrompt,
       image: input.photoDataUri ? { dataUri: input.photoDataUri } : undefined,
-      schemaHint:
-        'Return ONLY valid JSON array. No markdown. No extra keys outside the specified object shape.',
+      schemaHint: 'Return ONLY valid compact JSON array. No markdown.',
       schema: DefineTermAutoOutputSchema,
     });
 
@@ -69,12 +66,11 @@ Rules:
     console.error('[defineTermAuto] Generation failed:', e?.message || e);
   }
 
-  // Fallback: definition-only (best effort)
+  // Fallback: definition-only
   const trimmed = String(input.term || '').trim();
   const fallbackPos = /\s/.test(trimmed) ? 'phrase' : 'noun';
-  const fallbackSystemPrompt =
-    'You are an assistant that provides precise bilingual dictionary style Chinese definitions for English words and phrases.';
-  const fallbackUserPrompt = `Term: ${trimmed}\nPart of Speech: ${fallbackPos}\nProvide a concise Chinese definition. Output only the definition sentence(s).`;
+  const fallbackSystemPrompt = 'Provide a concise Chinese definition for the English term.';
+  const fallbackUserPrompt = `Term: ${trimmed}\nProvide a concise Chinese definition only.`;
   const text = await generateText({
     systemPrompt: fallbackSystemPrompt,
     userPrompt: fallbackUserPrompt,
