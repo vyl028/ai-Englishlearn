@@ -6,32 +6,102 @@ const BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.kimi.com/coding/';
 const MODEL = process.env.OPENAI_MODEL || 'kimi-k2.5';
 const TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '120000');
 
-// 通用 AI 请求函数
-async function callAI(messages: any[], responseFormat?: { type: string }): Promise<string> {
+// 带超时的 fetch 函数
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// 通用 AI 请求函数（带重试机制）
+async function callAI(
+  messages: any[],
+  responseFormat?: { type: string },
+  maxTokens: number = 4000,
+  retries: number = 2
+): Promise<string> {
   const url = `${BASE_URL}chat/completions`;
+  let lastError: Error | undefined;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.7,
-      max_tokens: 4000,
-      ...(responseFormat && { response_format: responseFormat }),
-    }),
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages,
+            temperature: 0.7,
+            max_tokens: maxTokens,
+            ...(responseFormat && { response_format: responseFormat }),
+          }),
+        },
+        TIMEOUT_MS
+      );
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI API error: ${response.status} - ${error}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`AI API error: ${response.status} - ${errorText}`);
+      }
+
+      const data: any = await response.json();
+      const content = data.choices[0]?.message?.content;
+
+      if (!content) {
+        throw new Error('AI 返回空内容');
+      }
+
+      return content;
+    } catch (error: any) {
+      lastError = error;
+
+      // 如果是最后一次尝试，直接抛出错误
+      if (attempt === retries) {
+        break;
+      }
+
+      // 检查是否是可重试的错误
+      const isRetryable =
+        error.name === 'AbortError' || // 超时
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('ETIMEDOUT') ||
+        error.message?.includes('fetch failed') ||
+        (error.message?.includes('AI API error') &&
+          (error.message?.includes('429') || // 速率限制
+            error.message?.includes('502') || // 网关错误
+            error.message?.includes('503') || // 服务不可用
+            error.message?.includes('504'))); // 网关超时
+
+      if (!isRetryable) {
+        throw error;
+      }
+
+      // 指数退避重试：1s, 2s
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`[AI] 请求失败，${delay}ms 后重试 (${attempt + 1}/${retries})...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 
-  const data: any = await response.json();
-  return data.choices[0]?.message?.content || '';
+  throw lastError || new Error('AI 请求失败');
 }
 
 // JSON 提取工具
@@ -99,7 +169,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 2000);
     const result = extractJson(response);
 
     // 验证返回格式
@@ -144,7 +214,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 2500);
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
@@ -200,7 +270,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 3500);
     const result = extractJson(response);
 
     if (!result.questions || !Array.isArray(result.questions)) {
@@ -240,7 +310,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 3500);
     const result = extractJson(response);
 
     if (!result.title || !result.story || !result.translation) {
@@ -296,7 +366,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 4500);
     const result = extractJson(response);
 
     return result;
@@ -363,7 +433,7 @@ ${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : ''}`,
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 4500);
     const result = extractJson(response);
 
     return result;
@@ -428,7 +498,7 @@ ${userTextEn.trim()}
       },
     ];
 
-    const response = await callAI(messages);
+    const response = await callAI(messages, undefined, 1500);
     const result = extractJson(response);
 
     return {
