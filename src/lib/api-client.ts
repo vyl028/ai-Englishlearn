@@ -37,6 +37,27 @@ export interface ApiResponse<T> {
 // 请求配置
 interface RequestConfig extends RequestInit {
   skipAuth?: boolean;
+  timeoutMs?: number;
+}
+
+// 带超时的 fetch
+async function fetchWithTimeout(
+  url: string,
+  config: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...config,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // 通用请求函数
@@ -45,6 +66,7 @@ async function request<T>(
   config: RequestConfig = {}
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const timeoutMs = config.timeoutMs || 30000; // 默认 30 秒
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -60,10 +82,14 @@ async function request<T>(
   }
 
   try {
-    const response = await fetch(url, {
-      ...config,
-      headers,
-    });
+    const response = await fetchWithTimeout(
+      url,
+      {
+        ...config,
+        headers,
+      },
+      timeoutMs
+    );
 
     const data: ApiResponse<T> = await response.json();
 
@@ -77,6 +103,15 @@ async function request<T>(
 
     return data;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        success: false,
+        error: {
+          code: 'TIMEOUT_ERROR',
+          message: '请求超时，请稍后重试',
+        },
+      };
+    }
     return {
       success: false,
       error: {
@@ -347,40 +382,49 @@ export interface ArticleStudyResult {
   }>;
 }
 
+// AI 请求超时时间（2 分钟）
+const AI_TIMEOUT_MS = 120000;
+
 export const aiApi = {
   define: (term: string) =>
     request<DefinitionResult>('/api/ai/define', {
       method: 'POST',
       body: JSON.stringify({ term }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   extract: (imageBase64: string) =>
     request<ExtractResult>('/api/ai/extract', {
       method: 'POST',
       body: JSON.stringify({ imageBase64 }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   practice: (wordIds: string[], questionCount?: number, allowedTypes?: QuestionType[]) =>
     request<PracticeResult>('/api/ai/practice', {
       method: 'POST',
       body: JSON.stringify({ wordIds, questionCount, allowedTypes }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   story: (wordIds: string[]) =>
     request<StoryResult>('/api/ai/story', {
       method: 'POST',
       body: JSON.stringify({ wordIds }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   reviewEssay: (essay: string, title?: string) =>
     request<EssayReviewResult>('/api/ai/review-essay', {
       method: 'POST',
       body: JSON.stringify({ essay, title }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 
   studyArticle: (article: string, generateQuestions?: boolean) =>
     request<ArticleStudyResult>('/api/ai/study-article', {
       method: 'POST',
       body: JSON.stringify({ article, generateQuestions }),
+      timeoutMs: AI_TIMEOUT_MS,
     }),
 };

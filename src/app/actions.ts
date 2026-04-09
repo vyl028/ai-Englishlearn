@@ -30,20 +30,48 @@ import { aiDebug } from "@/ai/debug";
 // 后端 API 基础 URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+// AI 请求超时时间（2 分钟）
+const AI_TIMEOUT_MS = 120000;
+
+// 带超时的 fetch
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // 带认证的 API 请求函数
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<{ success: boolean; data?: T; error?: string }> {
+  const { timeoutMs, ...fetchOptions } = options;
   try {
     const url = `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
+    const response = await fetchWithTimeout(
+      url,
+      {
+        ...fetchOptions,
+        headers: {
+          "Content-Type": "application/json",
+          ...fetchOptions.headers,
+        },
       },
-    });
+      timeoutMs || 30000 // 默认 30 秒
+    );
 
     const result = await response.json();
 
@@ -56,6 +84,9 @@ async function apiRequest<T>(
 
     return { success: true, data: result.data };
   } catch (error: any) {
+    if (error.name === "AbortError") {
+      return { success: false, error: "请求超时，请稍后重试" };
+    }
     console.error(`API request failed: ${endpoint}`, error);
     return { success: false, error: error.message || "网络请求失败" };
   }
@@ -68,6 +99,7 @@ export async function getDefinitionAction(
   const result = await apiRequest<any>("/api/ai/define", {
     method: "POST",
     body: JSON.stringify({ term: data.word }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data) {
@@ -99,6 +131,7 @@ export async function regenerateCapturedWordAction(
   const result = await apiRequest<any>("/api/ai/define", {
     method: "POST",
     body: JSON.stringify({ term: data.word }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data) {
@@ -142,6 +175,7 @@ export async function extractWordAndDefineAction(
     const result = await apiRequest<any>("/api/ai/extract", {
       method: "POST",
       body: JSON.stringify({ imageBase64: photoDataUri }),
+      timeoutMs: AI_TIMEOUT_MS,
     });
 
     if (!result.success || !result.data?.words) {
@@ -175,6 +209,7 @@ export async function defineTermAutoAction(
   const result = await apiRequest<any>("/api/ai/define", {
     method: "POST",
     body: JSON.stringify({ term: input.term }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data?.definitions) {
@@ -211,6 +246,7 @@ export async function generatePracticeAction(
       questionCount: options?.questionCount ?? 10,
       allowedTypes: options?.allowedTypes ?? ["mcq", "fill_blank", "reorder"],
     }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data?.questions) {
@@ -226,6 +262,7 @@ export async function generateStoryAction(
   const result = await apiRequest<any>("/api/ai/story", {
     method: "POST",
     body: JSON.stringify({ wordIds }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data) {
@@ -254,6 +291,7 @@ export async function reviewEssayAction(
   const result = await apiRequest<any>("/api/ai/review-essay", {
     method: "POST",
     body: JSON.stringify({ title: input.taskPrompt, essay: input.text }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data?.revisedTextEn) {
@@ -274,6 +312,7 @@ export async function speakingChatAction(
       history: input.history,
       targetLevel: input.targetLevel,
     }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data) {
@@ -386,6 +425,7 @@ export async function studyArticleAction(
   const result = await apiRequest<any>("/api/ai/study-article", {
     method: "POST",
     body: JSON.stringify({ article: input.text, generateQuestions: input.includeQuestions }),
+    timeoutMs: AI_TIMEOUT_MS,
   });
 
   if (!result.success || !result.data?.structure) {
