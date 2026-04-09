@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import {
   CapturedWord,
   DefineCapturedWordInput,
@@ -53,6 +54,17 @@ async function fetchWithTimeout(
   }
 }
 
+// 从 cookie 中读取认证 token（服务端 action 无法访问 localStorage）
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const tokenCookie = cookieStore.get("lexi-auth-token");
+    return tokenCookie?.value || null;
+  } catch {
+    return null;
+  }
+}
+
 // 带认证的 API 请求函数
 async function apiRequest<T>(
   endpoint: string,
@@ -61,12 +73,17 @@ async function apiRequest<T>(
   const { timeoutMs, ...fetchOptions } = options;
   try {
     const url = `${API_BASE_URL}${endpoint}`;
+    const token = await getAuthToken();
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
     const response = await fetchWithTimeout(
       url,
       {
         ...fetchOptions,
         headers: {
           "Content-Type": "application/json",
+          ...authHeaders,
           ...fetchOptions.headers,
         },
       },

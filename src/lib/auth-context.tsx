@@ -25,6 +25,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       const token = getToken();
       if (token) {
+        // 同步 token 到 cookie（兼容旧版用户：之前只存到 localStorage）
+        setToken(token);
         try {
           const response = await authApi.me();
           if (response.success && response.data) {

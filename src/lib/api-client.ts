@@ -10,10 +10,14 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-// 设置 token
+// 设置 token（同步写入 localStorage 和 cookie，服务端 action 通过 cookie 读取）
 export function setToken(token: string) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(TOKEN_KEY, token);
+    // 同步设置 cookie，以便服务端 action 可以读取
+    // 7 天过期，与 JWT 过期时间一致
+    const maxAge = 7 * 24 * 60 * 60;
+    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${maxAge}; samesite=lax`;
   }
 }
 
@@ -21,6 +25,7 @@ export function setToken(token: string) {
 export function clearToken() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(TOKEN_KEY);
+    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; samesite=lax`;
   }
 }
 
