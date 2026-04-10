@@ -34,6 +34,7 @@ const essaySchema = z.object({
 const articleSchema = z.object({
   article: z.string().min(10).max(50000),
   generateQuestions: z.boolean().optional().default(false),
+  questionCount: z.coerce.number().int().min(1).max(12).optional().default(5),
 });
 
 // 生成单词释义
@@ -165,9 +166,9 @@ router.post('/review-essay', async (req: AuthRequest, res) => {
 // 文章分析
 router.post('/study-article', async (req: AuthRequest, res) => {
   try {
-    const { article, generateQuestions } = articleSchema.parse(req.body);
-    console.log('[API] Received article study request, length:', article?.length, 'generateQuestions:', generateQuestions);
-    const result = await AIService.studyArticle(article, generateQuestions);
+    const { article, generateQuestions, questionCount } = articleSchema.parse(req.body);
+    console.log('[API] Received article study request, length:', article?.length, 'generateQuestions:', generateQuestions, 'questionCount:', questionCount);
+    const result = await AIService.studyArticle(article, generateQuestions, questionCount);
     console.log('[API] Sending article study response:', JSON.stringify({
       success: true,
       kind: result.kind,

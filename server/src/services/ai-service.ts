@@ -882,7 +882,7 @@ export class AIService {
   }
 
   // 文章分析
-  static async studyArticle(article: string, generateQuestions: boolean = false) {
+  static async studyArticle(article: string, generateQuestions: boolean = false, questionCount: number = 5) {
     const messages = [
       {
         role: 'system',
@@ -891,6 +891,7 @@ export class AIService {
 请以 JSON 格式返回：
 {
   "structure": {
+    "overallMainIdea": "全文主旨（中文总结）",
     "paragraphs": [
       {
         "index": 段落序号,
@@ -925,16 +926,16 @@ export class AIService {
   ]${generateQuestions ? `,
   "questions": [
     {
-      "question": "题目",
-      "options": ["A选项", "B选项", "C选项", "D选项"],
+      "question": "Question text in English",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": "A/B/C/D",
-      "explanation": "解析",
-      "location": "定位依据"
+      "explanation": "解析（中文）",
+      "location": "定位依据（中文）"
     }
   ]` : ''}
 }
 
-${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : '不要生成 questions 字段。'}`,
+${generateQuestions ? `请生成 ${questionCount} 道阅读理解选择题，题目和选项必须是全英文，但解析可以用中文。` : '不要生成 questions 字段。'}`,
       },
       {
         role: 'user',

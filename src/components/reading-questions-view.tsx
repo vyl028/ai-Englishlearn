@@ -95,7 +95,13 @@ export function ReadingQuestionsView({ questions, persistKey }: ReadingQuestions
 
   const persistedThisRoundRef = React.useRef(false);
 
-  const isCorrect = (q: ReadingQuestion, idx: number) => answers[idx] === q.answerIndex;
+  const isCorrect = (q: ReadingQuestion, idx: number) => {
+    // If not submitted, not correct/wrong yet
+    if (!submitted) return false;
+    // If no answer selected, treat as wrong
+    if (typeof answers[idx] !== "number") return false;
+    return answers[idx] === q.answerIndex;
+  };
 
   const correctCount = React.useMemo(() => {
     if (!submitted) return 0;
@@ -247,11 +253,14 @@ export function ReadingQuestionsView({ questions, persistKey }: ReadingQuestions
                   <CardDescription className="whitespace-pre-wrap">{q.questionEn}</CardDescription>
                 </div>
                 {submitted && (
-                  <div className="pt-1">
+                  <div className="pt-1 flex flex-col items-center gap-1">
                     {correct ? (
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                    )}
+                    {submitted && typeof answers[index] !== "number" && (
+                      <span className="text-xs text-rose-600 dark:text-rose-400">未作答</span>
                     )}
                   </div>
                 )}

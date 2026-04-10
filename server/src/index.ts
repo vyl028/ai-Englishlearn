@@ -20,7 +20,14 @@ const PORT = process.env.PORT || 4000;
 // 中间件
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:9002',
+  origin: [
+    'http://localhost:9002',
+    'http://0.0.0.0:9002',
+    'http://127.0.0.1:9002',
+    'http://localhost:9003',
+    'http://0.0.0.0:9003',
+    'http://127.0.0.1:9003',
+  ],
   credentials: true,
 }));
 app.use(morgan('dev'));

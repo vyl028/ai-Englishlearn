@@ -461,7 +461,7 @@ export async function studyArticleAction(
 
   const result = await apiRequest<any>("/api/ai/study-article", {
     method: "POST",
-    body: JSON.stringify({ article: input.text, generateQuestions: input.includeQuestions }),
+    body: JSON.stringify({ article: input.text, generateQuestions: input.includeQuestions, questionCount: input.questionCount }),
     timeoutMs: AI_TIMEOUT_MS,
   });
 
