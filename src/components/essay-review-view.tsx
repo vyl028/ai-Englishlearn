@@ -6,6 +6,7 @@ import { ClipboardCopy, Download, History, Loader2, RotateCcw, Trash2, Upload } 
 import { reviewEssayAction, extractTextFromFileAction } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewEssayOutput, EssayIssueCategory, EssayIssueSeverity } from "@/lib/types";
+import { extractTextFromImage } from "@/lib/ocr-utils";
 import { generateId } from "@/lib/utils";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -461,23 +462,55 @@ export function EssayReviewView() {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await extractTextFromFileAction(formData);
-      if (res.success && res.data?.text) {
-        setText(res.data.text);
+      // Check if file is an image
+      const isImage = file.type.startsWith("image/") || /\.(png|jpg|jpeg|webp)$/i.test(file.name);
 
-        const warningText = (res.data.warnings || []).filter(Boolean).join("；");
+      if (isImage) {
+        // Use frontend OCR for images
+        console.log("[EssayReview] Detected image file, using frontend OCR");
+        const reader = new FileReader();
+        const imageDataUri = await new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const extractedText = await extractTextFromImage(imageDataUri);
+
+        if (!extractedText || extractedText.length < 10) {
+          toast({
+            variant: "destructive",
+            title: "识别失败",
+            description: "未能从图片中识别到足够文字，请尝试更清晰的图片或手动输入。",
+          });
+          return;
+        }
+
+        setText(extractedText);
         toast({
-          title: "已读取文件",
-          description: warningText ? warningText : `已读取：${res.data.filename || file.name}`,
+          title: "图片识别完成",
+          description: `已从图片识别出 ${extractedText.length} 字符，请检查并按需修正。`,
         });
       } else {
-        toast({
-          variant: "destructive",
-          title: "读取失败",
-          description: res.error || "无法读取该文件，请重试。",
-        });
+        // Use backend for text/PDF/docx files
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await extractTextFromFileAction(formData);
+        if (res.success && res.data?.text) {
+          setText(res.data.text);
+
+          const warningText = (res.data.warnings || []).filter(Boolean).join("；");
+          toast({
+            title: "已读取文件",
+            description: warningText ? warningText : `已读取：${res.data.filename || file.name}`,
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "读取失败",
+            description: res.error || "无法读取该文件，请重试。",
+          });
+        }
       }
     } catch (e: any) {
       toast({

@@ -358,6 +358,8 @@ class AIService {
     }
     // 图片识别单词
     static async extractWordsFromImage(imageBase64) {
+        // 构建图片 URL（支持 data URI 格式）
+        const imageUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
         const messages = [
             {
                 role: 'system',
@@ -385,16 +387,25 @@ class AIService {
                 role: 'user',
                 content: [
                     { type: 'text', text: '请识别图片中的英语单词：' },
-                    { type: 'image_url', image_url: { url: imageBase64 } },
+                    { type: 'image_url', image_url: { url: imageUrl } },
                 ],
             },
         ];
-        const response = await callAI(messages, undefined, 2500);
-        const result = extractJson(response);
-        if (!result.words || !Array.isArray(result.words)) {
-            throw new Error('AI 返回格式不正确');
+        try {
+            console.log('[AI] Extracting words from image, base64 length:', imageBase64.length);
+            const response = await callAI(messages, undefined, 2500);
+            console.log('[AI] Raw extract response:', response.substring(0, 500));
+            const result = extractJson(response);
+            if (!result.words || !Array.isArray(result.words)) {
+                throw new Error('AI 返回格式不正确');
+            }
+            console.log('[AI] Extracted words count:', result.words.length);
+            return result;
         }
-        return result;
+        catch (error) {
+            console.error('[AI] Extract words error:', error.message);
+            throw error;
+        }
     }
     // 生成练习题
     static async generatePractice(words, questionCount = 10, allowedTypes = ['mcq', 'fill_blank', 'reorder']) {
