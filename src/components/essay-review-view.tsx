@@ -1038,29 +1038,143 @@ export function EssayReviewView() {
                   <CardDescription>原文 vs 优化文 + 关键改写对照。</CardDescription>
                 </CardHeader>
                 <CardContent className="pb-4 space-y-4">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-sm text-muted-foreground">高亮显示关键改写</div>
+                    <Switch checked={highlightDiff} onCheckedChange={(v) => setHighlightDiff(!!v)} />
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">修改前</div>
-                      <Textarea ref={originalTextareaRef} readOnly value={text.trim()} className="min-h-[260px]" />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">修改后</div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={copyRevised}>
-                          <ClipboardCopy className="mr-1 h-3 w-3" />
-                          复制
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("txt")}>
-                          <Download className="mr-1 h-3 w-3" />
-                          .txt
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("md")}>
-                          <Download className="mr-1 h-3 w-3" />
-                          .md
-                        </Button>
-                      </div>
-                      <Textarea readOnly value={result.revisedTextEn} className="min-h-[260px]" />
-                    </div>
+                    {(() => {
+                      // 使用 beforeAfter 中的片段来高亮文章
+                      const beforeAfter = result.beforeAfter || [];
+                      const originalText = text.trim();
+                      const revisedText = result.revisedTextEn;
+
+                      // 渲染带高亮的文本
+                      const renderHighlightedText = (
+                        fullText: string,
+                        snippets: string[],
+                        isOriginal: boolean
+                      ) => {
+                        if (!highlightDiff || snippets.length === 0) {
+                          return <div className="whitespace-pre-wrap">{fullText}</div>;
+                        }
+
+                        // 找到所有匹配片段的位置
+                        const matches: Array<{ start: number; end: number }> = [];
+                        for (const snippet of snippets) {
+                          const cleanSnippet = snippet.trim();
+                          if (cleanSnippet.length < 3) continue;
+
+                          // 尝试直接匹配
+                          let idx = fullText.indexOf(cleanSnippet);
+                          if (idx >= 0) {
+                            matches.push({ start: idx, end: idx + cleanSnippet.length });
+                            continue;
+                          }
+
+                          // 尝试模糊匹配（忽略多余空格）
+                          const normalizedText = fullText.replace(/\s+/g, ' ');
+                          const normalizedSnippet = cleanSnippet.replace(/\s+/g, ' ');
+                          idx = normalizedText.indexOf(normalizedSnippet);
+                          if (idx >= 0) {
+                            // 找到对应原始文本的位置
+                            let originalIdx = 0;
+                            let normalizedIdx = 0;
+                            for (let i = 0; i < fullText.length && normalizedIdx < idx; i++) {
+                              if (fullText[i] !== ' ' || fullText[i - 1] !== ' ') {
+                                normalizedIdx++;
+                              }
+                              originalIdx++;
+                            }
+                            matches.push({
+                              start: originalIdx,
+                              end: originalIdx + cleanSnippet.length,
+                            });
+                          }
+                        }
+
+                        // 按位置排序并去重
+                        matches.sort((a, b) => a.start - b.start);
+                        const uniqueMatches = matches.filter(
+                          (m, i) => i === 0 || m.start > matches[i - 1].end
+                        );
+
+                        if (uniqueMatches.length === 0) {
+                          return <div className="whitespace-pre-wrap">{fullText}</div>;
+                        }
+
+                        // 构建带高亮的文本
+                        const parts: Array<{ type: 'normal' | 'highlight'; content: string }> = [];
+                        let lastEnd = 0;
+                        for (const match of uniqueMatches) {
+                          if (match.start > lastEnd) {
+                            parts.push({
+                              type: 'normal',
+                              content: fullText.slice(lastEnd, match.start),
+                            });
+                          }
+                          parts.push({
+                            type: 'highlight',
+                            content: fullText.slice(match.start, match.end),
+                          });
+                          lastEnd = match.end;
+                        }
+                        if (lastEnd < fullText.length) {
+                          parts.push({ type: 'normal', content: fullText.slice(lastEnd) });
+                        }
+
+                        return (
+                          <div className="whitespace-pre-wrap">
+                            {parts.map((part, idx) =>
+                              part.type === 'highlight' ? (
+                                <mark
+                                  key={idx}
+                                  className="rounded-sm bg-amber-200/60 dark:bg-amber-400/20 px-0.5"
+                                >
+                                  {part.content}
+                                </mark>
+                              ) : (
+                                <span key={idx}>{part.content}</span>
+                              )
+                            )}
+                          </div>
+                        );
+                      };
+
+                      const beforeSnippets = beforeAfter.map((p) => p.before);
+                      const afterSnippets = beforeAfter.map((p) => p.after);
+
+                      return (
+                        <>
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium">修改前</div>
+                            <div className="relative min-h-[260px] rounded-md border bg-muted/30 p-3 text-sm overflow-auto">
+                              {renderHighlightedText(originalText, beforeSnippets, true)}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium">修改后</div>
+                            <div className="relative min-h-[260px] rounded-md border bg-muted/30 p-3 text-sm overflow-auto">
+                              {renderHighlightedText(revisedText, afterSnippets, false)}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={copyRevised}>
+                      <ClipboardCopy className="mr-1 h-3 w-3" />
+                      复制
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("txt")}>
+                      <Download className="mr-1 h-3 w-3" />
+                      .txt
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => exportRevised("md")}>
+                      <Download className="mr-1 h-3 w-3" />
+                      .md
+                    </Button>
                   </div>
 
                   {(result.beforeAfter?.length || 0) > 0 && (
@@ -1068,7 +1182,7 @@ export function EssayReviewView() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div className="text-sm font-medium">关键改写对照</div>
                         <div className="flex items-center gap-2">
-                          <div className="text-xs text-muted-foreground">高亮差异</div>
+                          <div className="text-xs text-muted-foreground">高亮显示关键改写</div>
                           <Switch checked={highlightDiff} onCheckedChange={(v) => setHighlightDiff(!!v)} />
                         </div>
                       </div>

@@ -126,6 +126,152 @@ function tryFixTruncatedJson(text: string): string | null {
     JSON.parse(fixed);
     return fixed;
   } catch {
+    // 简单补全失败，尝试更智能的修复
+    return trySmartFixTruncatedJson(text);
+  }
+}
+
+// 智能修复截断的 JSON，处理嵌套结构
+function trySmartFixTruncatedJson(text: string): string | null {
+  let fixed = text.trim();
+
+  // 找到最后一个完整的属性值对，尝试截断到那里
+  // 匹配模式："key": value (可以是字符串、数字、对象、数组、true/false/null)
+
+  // 如果文本以逗号结尾，移除逗号
+  if (fixed.endsWith(',')) {
+    fixed = fixed.slice(0, -1);
+  }
+
+  // 尝试找到最后一个完整的字符串值
+  const lastStringMatch = fixed.match(/"([^"]*)"\s*$/);
+  if (lastStringMatch && !fixed.match(/"[^"]*":\s*$/)) {
+    // 最后一个字符串不是键，可能是值，尝试关闭它
+  }
+
+  // 计算每个层级的括号状态
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let lastValidPos = 0;
+
+  for (let i = 0; i < fixed.length; i++) {
+    const char = fixed[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !inString) {
+      inString = true;
+      continue;
+    }
+
+    if (char === '"' && inString) {
+      inString = false;
+      // 记录可能的完整值位置
+      if (braceDepth === 1 && bracketDepth === 0) {
+        lastValidPos = i + 1;
+      }
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === '{') {
+      braceDepth++;
+    } else if (char === '}') {
+      braceDepth--;
+      if (braceDepth === 0) {
+        lastValidPos = i + 1;
+      }
+    } else if (char === '[') {
+      bracketDepth++;
+    } else if (char === ']') {
+      bracketDepth--;
+    }
+  }
+
+  // 如果我们在字符串中间截断了，需要修复
+  if (inString) {
+    // 找到最后一个未闭合的字符串开始位置
+    const lastQuote = fixed.lastIndexOf('"');
+    if (lastQuote > 0) {
+      // 检查这是否是一个键的开始
+      const afterQuote = fixed.slice(lastQuote + 1).trim();
+      if (afterQuote.startsWith(':')) {
+        // 这是一个键，后面应该有值但被截断了
+        fixed = fixed.slice(0, lastQuote) + '"';
+      } else {
+        // 这是一个字符串值被截断
+        fixed = fixed.slice(0, lastQuote + 1);
+      }
+    }
+  }
+
+  // 重新计算并补全括号
+  let newFixed = fixed;
+  let newBraceDepth = 0;
+  let newBracketDepth = 0;
+  let newInString = false;
+  let newEscape = false;
+
+  for (let i = 0; i < newFixed.length; i++) {
+    const char = newFixed[i];
+    if (newEscape) {
+      newEscape = false;
+      continue;
+    }
+    if (char === '\\') {
+      newEscape = true;
+      continue;
+    }
+    if (char === '"' && !newInString) {
+      newInString = true;
+      continue;
+    }
+    if (char === '"' && newInString) {
+      newInString = false;
+      continue;
+    }
+    if (newInString) continue;
+    if (char === '{') newBraceDepth++;
+    if (char === '}') newBraceDepth--;
+    if (char === '[') newBracketDepth++;
+    if (char === ']') newBracketDepth--;
+  }
+
+  if (newInString) {
+    newFixed += '"';
+  }
+
+  while (newBracketDepth > 0) {
+    newFixed += ']';
+    newBracketDepth--;
+  }
+
+  while (newBraceDepth > 0) {
+    newFixed += '}';
+    newBraceDepth--;
+  }
+
+  // 移除末尾的逗号
+  if (newFixed.endsWith(',')) {
+    newFixed = newFixed.slice(0, -1);
+  }
+
+  try {
+    JSON.parse(newFixed);
+    console.log('[AI] Smart fix successful');
+    return newFixed;
+  } catch {
     return null;
   }
 }
@@ -373,7 +519,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 2000);
+    const response = await callAI(messages, undefined, 4000);
     const result = extractJson(response);
 
     // 验证返回格式
@@ -418,7 +564,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 2500);
+    const response = await callAI(messages, undefined, 4000);
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
