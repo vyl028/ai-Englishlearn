@@ -417,28 +417,36 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
   };
 
   const handleAnalyze = async () => {
+    console.log("[ArticleReadingView] handleAnalyze called, text:", text, "length:", text?.length);
     const trimmed = text.trim();
+    console.log("[ArticleReadingView] trimmed text length:", trimmed?.length);
     if (!trimmed) {
+      console.log("[ArticleReadingView] Empty text, returning");
       toast({ variant: "destructive", title: "请输入文章", description: "请粘贴或上传英文文章正文后再开始分析。" });
       return;
     }
 
+    console.log("[ArticleReadingView] Starting analysis...");
     setIsAnalyzing(true);
     setAnalysisProgress(null);
     setAnalysisMeta(null);
     setResult(null);
 
     const baseTitle = title.trim() || undefined;
+    console.log("[ArticleReadingView] baseTitle:", baseTitle, "includeQuestions:", includeQuestions);
     try {
       if (trimmed.length <= 16000) {
+        console.log("[ArticleReadingView] Calling studyArticleAction...");
         const res = await studyArticleAction({
           title: baseTitle,
           text: trimmed,
           includeQuestions,
           questionCount,
         });
+        console.log("[ArticleReadingView] studyArticleAction returned:", res);
 
         if (res.success && res.data) {
+          console.log("[ArticleReadingView] Setting result data");
           setResult(res.data);
           toast({ title: "分析完成", description: "已生成结构、句法、难句拆解与词汇提取结果。" });
         } else {
@@ -798,7 +806,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           <div className="space-y-2">
             <div className="text-sm font-medium">段落主旨</div>
             <div className="space-y-2">
-              {r.structure.paragraphs.map((p) => (
+              {(r.structure.paragraphs || []).map((p) => (
                 <div key={p.index} className="rounded-md border p-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">第 {p.index} 段</Badge>
@@ -815,7 +823,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
             <div className="space-y-2">
               <div className="text-sm font-medium">逻辑关系（补充）</div>
               <div className="space-y-2">
-                {r.structure.relations!.slice(0, 12).map((rel, i) => (
+                {(r.structure.relations || []).slice(0, 12).map((rel, i) => (
                   <div key={i} className="text-sm text-muted-foreground">
                     第 {rel.from} 段 → 第 {rel.to} 段：{rel.relationZh}
                   </div>
@@ -842,11 +850,11 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
             <div className="space-y-2">
               <div className="text-sm font-medium">代表性句子讲解</div>
               <div className="space-y-2">
-                {r.syntax.highlights!.map((h, i) => (
+                {(r.syntax.highlights || []).map((h, i) => (
                   <div key={i} className="rounded-md border p-3 space-y-2">
                     <div className="text-sm font-medium whitespace-pre-wrap">{h.sentenceEn}</div>
                     <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                      {h.pointsZh.slice(0, 6).map((pt, j) => (
+                      {(h.pointsZh || []).slice(0, 6).map((pt, j) => (
                         <li key={j} className="whitespace-pre-wrap">{pt}</li>
                       ))}
                     </ul>
@@ -868,7 +876,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           <CardDescription>主干提取 + 从句拆解 + 简化与重写示范</CardDescription>
         </CardHeader>
         <CardContent className="pb-4 space-y-3">
-          {r.hardSentences.map((s, i) => (
+          {(r.hardSentences || []).map((s, i) => (
             <div key={i} className="rounded-md border p-3 space-y-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">原句</div>
@@ -897,7 +905,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
                 <div className="space-y-1">
                   <div className="text-sm font-medium">从句/结构拆解</div>
                   <div className="space-y-2">
-                    {s.clauses!.slice(0, 10).map((c, idx) => (
+                    {(s.clauses || []).slice(0, 10).map((c, idx) => (
                       <div key={idx} className="text-sm">
                         <div className="whitespace-pre-wrap">{c.clauseEn}</div>
                         <div className="text-muted-foreground whitespace-pre-wrap">{c.functionZh}</div>
@@ -945,7 +953,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       exampleEn?: string;
     };
 
-    const keywordItems: VocabItem[] = r.keywords
+    const keywordItems: VocabItem[] = (r.keywords || [])
       .map((k) => ({
         key: normalizeTermKey(k.term),
         kind: "keyword" as const,
@@ -1024,11 +1032,11 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
             </div>
           )}
 
-          {Array.isArray(enrichment?.collocations) && enrichment!.collocations!.length > 0 && (
+          {Array.isArray(enrichment?.collocations) && (enrichment?.collocations?.length || 0) > 0 && (
             <div>
               <div className="text-xs font-semibold text-muted-foreground">常见搭配</div>
               <ul className="mt-1 space-y-1 text-sm">
-                {enrichment!.collocations!.slice(0, 6).map((c, idx) => (
+                {(enrichment?.collocations || []).slice(0, 6).map((c, idx) => (
                   <li key={idx} className="text-muted-foreground">
                     <span className="text-foreground">{c.phrase}</span>
                     {c.meaningZh ? ` — ${c.meaningZh}` : ""}
@@ -1038,29 +1046,29 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
             </div>
           )}
 
-          {Array.isArray(enrichment?.synonyms) && enrichment!.synonyms!.length > 0 && (
+          {Array.isArray(enrichment?.synonyms) && (enrichment?.synonyms?.length || 0) > 0 && (
             <div>
               <div className="text-xs font-semibold text-muted-foreground">同义词</div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {enrichment!.synonyms!.slice(0, 10).join(", ")}
+                {(enrichment?.synonyms || []).slice(0, 10).join(", ")}
               </div>
             </div>
           )}
 
-          {Array.isArray(enrichment?.antonyms) && enrichment!.antonyms!.length > 0 && (
+          {Array.isArray(enrichment?.antonyms) && (enrichment?.antonyms?.length || 0) > 0 && (
             <div>
               <div className="text-xs font-semibold text-muted-foreground">反义词</div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {enrichment!.antonyms!.slice(0, 10).join(", ")}
+                {(enrichment?.antonyms || []).slice(0, 10).join(", ")}
               </div>
             </div>
           )}
 
-          {Array.isArray(enrichment?.examples) && enrichment!.examples!.length > 0 && (
+          {Array.isArray(enrichment?.examples) && (enrichment?.examples?.length || 0) > 0 && (
             <div>
               <div className="text-xs font-semibold text-muted-foreground">例句</div>
               <ul className="mt-1 space-y-2 text-sm">
-                {enrichment!.examples!.slice(0, 4).map((ex, idx) => (
+                {(enrichment?.examples || []).slice(0, 4).map((ex, idx) => (
                   <li key={idx}>
                     <div className="text-foreground whitespace-pre-wrap">{ex.en}</div>
                     {ex.zh && <div className="text-muted-foreground whitespace-pre-wrap">{ex.zh}</div>}
@@ -1624,7 +1632,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || isParsingFile} className="w-full sm:w-auto">
+          <Button type="button" onClick={() => { console.log("[ArticleReadingView] Button clicked"); handleAnalyze(); }} disabled={isAnalyzing || isParsingFile} className="w-full sm:w-auto">
             {isAnalyzing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -87,6 +87,11 @@ router.post('/practice', async (req: AuthRequest, res) => {
     }
 
     const result = await AIService.generatePractice(words, questionCount, allowedTypes);
+    console.log('[API] Practice generated, questions count:', result.questions?.length);
+    if (result.questions?.length > 0) {
+      const firstQ = result.questions[0];
+      console.log('[API] First question type:', firstQ.type, 'has parts:', !!firstQ.parts, 'has acceptableAnswers:', !!firstQ.acceptableAnswers);
+    }
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -161,9 +166,19 @@ router.post('/review-essay', async (req: AuthRequest, res) => {
 router.post('/study-article', async (req: AuthRequest, res) => {
   try {
     const { article, generateQuestions } = articleSchema.parse(req.body);
+    console.log('[API] Received article study request, length:', article?.length, 'generateQuestions:', generateQuestions);
     const result = await AIService.studyArticle(article, generateQuestions);
+    console.log('[API] Sending article study response:', JSON.stringify({
+      success: true,
+      kind: result.kind,
+      hasStructure: !!result.structure,
+      hasSyntax: !!result.syntax,
+      hardSentencesCount: result.hardSentences?.length || 0,
+      keywordsCount: result.keywords?.length || 0,
+    }, null, 2));
     return successResponse(res, result);
   } catch (error) {
+    console.error('[API] Article study error:', error);
     if (error instanceof z.ZodError) {
       return errorResponse(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
     }

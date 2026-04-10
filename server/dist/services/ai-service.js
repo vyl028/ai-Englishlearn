@@ -417,20 +417,26 @@ class AIService {
       "targetWord": "目标单词",
       "promptZh": "题干中文（仅mcq需要）",
       "promptEn": "题干英文",
-      "options": ["A选项", "B选项", "C选项", "D选项"], // mcq only
+      "options": ["English option A", "English option B", "English option C", "English option D"], // mcq only: 四个英文选项
       "correctAnswer": "正确答案",
       "answer": "标准答案（与correctAnswer相同，兼容性）",
       "explanation": "答案解析",
       "analysis": "详细分析（与explanation相同，兼容性）",
       "grammar": "语法讲解",
       "usage": "词汇用法讲解",
-      "parts": ["单词1", "单词2", "单词3", "单词4"], // reorder only: 打乱顺序的句子片段，至少4个
+      "parts": ["word1", "word2", "word3", "word4"], // reorder only: 打乱顺序的英文句子片段，至少4个
       "correctOrder": [2, 0, 1, 3], // reorder only: 正确顺序的索引数组，对应parts的索引
-      "answerSentenceEn": "正确句子英文", // reorder only: 可选，完整正确句子
-      "translationZh": "句子中文翻译" // reorder only: 可选
+      "answerSentenceEn": "Correct sentence in English", // reorder only: 可选，完整正确句子
+      "translationZh": "句子中文翻译", // reorder only: 可选
+      "sentenceEn": "Fill in the blank sentence with ____ placeholder", // fill_blank only
+      "acceptableAnswers": ["answer1", "answer2"] // fill_blank only: 可接受的答案列表（必填）
     }
   ]
 }
+
+重要说明：
+- mcq 的 options 必须是英文选项（四个选项都是英文）
+- reorder 的 parts 必须是英文句子片段
 
 共生成 ${questionCount} 道题，题型从 [${allowedTypes.join(', ')}] 中随机选择。`,
             },
@@ -444,6 +450,47 @@ class AIService {
         if (!result.questions || !Array.isArray(result.questions)) {
             throw new Error('AI 返回格式不正确');
         }
+        // 数据规范化，确保所有必需字段都存在
+        result.questions = result.questions.map((q) => {
+            const normalized = {
+                type: q.type || 'mcq',
+                targetWord: q.targetWord || '',
+                promptZh: q.promptZh || '',
+                promptEn: q.promptEn || '',
+                explanation: q.explanation || q.analysis || '',
+                analysisZh: q.analysisZh || q.analysis || q.explanation || '',
+                grammarZh: q.grammarZh || q.grammar || '',
+                usageZh: q.usageZh || q.usage || '',
+            };
+            if (q.type === 'mcq') {
+                normalized.options = Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'];
+                normalized.answerIndex = typeof q.answerIndex === 'number' ? q.answerIndex : 0;
+                if (q.correctAnswer && typeof normalized.answerIndex !== 'number') {
+                    const idx = ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer);
+                    normalized.answerIndex = idx >= 0 ? idx : 0;
+                }
+            }
+            if (q.type === 'fill_blank') {
+                normalized.sentenceEn = q.sentenceEn || q.promptEn || '____';
+                normalized.acceptableAnswers = Array.isArray(q.acceptableAnswers) ? q.acceptableAnswers :
+                    (q.correctAnswer ? [q.correctAnswer] : ['']);
+            }
+            if (q.type === 'reorder') {
+                normalized.parts = Array.isArray(q.parts) ? q.parts : [];
+                normalized.correctOrder = Array.isArray(q.correctOrder) ? q.correctOrder :
+                    normalized.parts.map((_, i) => i);
+                normalized.answerSentenceEn = q.answerSentenceEn || '';
+                normalized.translationZh = q.translationZh || '';
+            }
+            return normalized;
+        });
+        console.log('[AI] Practice generated:', JSON.stringify({
+            totalQuestions: result.questions.length,
+            mcqCount: result.questions.filter((q) => q.type === 'mcq').length,
+            fillBlankCount: result.questions.filter((q) => q.type === 'fill_blank').length,
+            reorderCount: result.questions.filter((q) => q.type === 'reorder').length,
+            sampleQuestion: result.questions[0] || null,
+        }, null, 2));
         return result;
     }
     // 生成故事
@@ -599,8 +646,8 @@ class AIService {
       "meaning": "中文释义",
       "usage": "用法提示"
     }
-  ],
-  "questions": [ // 仅在 generateQuestions 为 true 时
+  ]${generateQuestions ? `,
+  "questions": [
     {
       "question": "题目",
       "options": ["A选项", "B选项", "C选项", "D选项"],
@@ -608,10 +655,10 @@ class AIService {
       "explanation": "解析",
       "location": "定位依据"
     }
-  ]
+  ]` : ''}
 }
 
-${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : ''}`,
+${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : '不要生成 questions 字段。'}`,
             },
             {
                 role: 'user',
@@ -619,7 +666,86 @@ ${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : ''}`,
             },
         ];
         const response = await callAI(messages, undefined, 4500);
-        const result = extractJson(response);
+        const rawResult = extractJson(response);
+        console.log('[AI] Article study raw result keys:', Object.keys(rawResult));
+        console.log('[AI] Article study raw structure:', JSON.stringify(rawResult.structure ? { hasParagraphs: !!rawResult.structure.paragraphs, paragraphsCount: rawResult.structure.paragraphs?.length } : null));
+        console.log('[AI] Article study raw syntax:', JSON.stringify(rawResult.syntax ? { hasHighlights: !!rawResult.syntax.highlights, highlightsCount: rawResult.syntax.highlights?.length } : null));
+        console.log('[AI] Article study raw difficultSentences:', Array.isArray(rawResult.difficultSentences) ? `count: ${rawResult.difficultSentences.length}` : `type: ${typeof rawResult.difficultSentences}`);
+        console.log('[AI] Article study raw keyVocabulary:', Array.isArray(rawResult.keyVocabulary) ? `count: ${rawResult.keyVocabulary.length}` : `type: ${typeof rawResult.keyVocabulary}`);
+        console.log('[AI] Article study raw phrases:', Array.isArray(rawResult.phrases) ? `count: ${rawResult.phrases.length}` : `type: ${typeof rawResult.phrases}`);
+        // AI 返回的字段名映射到前端期望的字段名
+        const rawStructure = rawResult.structure || {};
+        const rawSyntax = rawResult.syntax || {};
+        // 数据规范化，确保返回格式符合前端期望
+        const result = {
+            kind: 'article_study',
+            structure: {
+                overallMainIdeaZh: rawStructure.overallMainIdea || rawStructure.overallMainIdeaZh || '',
+                outlineZh: rawStructure.outline || rawStructure.outlineZh || '',
+                paragraphs: (rawStructure.paragraphs || []).map((p) => ({
+                    index: p.index || 0,
+                    mainIdeaZh: p.mainIdea || p.mainIdeaZh || '',
+                    roleZh: p.role || p.roleZh || '',
+                    logicToPrevZh: p.relationToPrevious || p.logicToPrevZh || '',
+                })),
+                relations: (rawStructure.relations || []).map((r) => ({
+                    from: r.from || 0,
+                    to: r.to || 0,
+                    relationZh: r.relationZh || r.relation || '',
+                })),
+            },
+            syntax: {
+                overviewZh: rawSyntax.overview || rawSyntax.overviewZh || '',
+                highlights: (rawSyntax.highlights || []).map((h) => ({
+                    sentenceEn: h.sentence || h.sentenceEn || '',
+                    pointsZh: Array.isArray(h.pointsZh) ? h.pointsZh : (h.analysis ? [h.analysis] : []),
+                })),
+            },
+            hardSentences: (rawResult.difficultSentences || []).map((s) => ({
+                originalEn: s.original || s.originalEn || '',
+                translationZh: s.translation || s.translationZh || '',
+                coreStructureEn: s.breakdown || s.coreStructure || s.coreStructureEn || '',
+                tenseVoiceZh: s.tenseVoice || s.tenseVoiceZh || '',
+                clauses: Array.isArray(s.clauses) ? s.clauses.map((c) => ({
+                    clauseEn: c.clause || c.clauseEn || '',
+                    functionZh: c.function || c.functionZh || '',
+                })) : [],
+                explanationZh: s.explanation || s.explanationZh || '',
+                simplifiedEn: s.simplified || s.simplifiedEn || '',
+                rebuiltEn: s.rewrite || s.rebuilt || s.rebuiltEn || '',
+            })),
+            keywords: (rawResult.keyVocabulary || []).map((k) => ({
+                term: k.word || k.term || '',
+                pos: k.partOfSpeech || k.pos || '',
+                meaningZh: k.meaning || k.meaningZh || '',
+                noteZh: k.usage || k.note || k.noteZh || '',
+                exampleEn: k.example || k.exampleEn || '',
+            })),
+            phrases: (rawResult.phrases || []).map((p) => ({
+                phrase: p.phrase || '',
+                meaningZh: p.meaning || p.meaningZh || '',
+                noteZh: p.note || p.noteZh || '',
+                exampleEn: p.example || p.exampleEn || '',
+            })),
+            questions: (rawResult.questions || []).map((q) => ({
+                questionEn: q.question || q.questionEn || '',
+                options: q.options || [],
+                answerIndex: q.correctAnswer ? ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer) : (q.answerIndex || 0),
+                analysisZh: q.explanation || q.analysis || q.analysisZh || '',
+                locate: q.location ? { quoteEn: q.location } : (q.locate || {}),
+            })),
+        };
+        console.log('[AI] Article study normalized result:', JSON.stringify({
+            kind: result.kind,
+            hasStructure: !!result.structure,
+            structureParagraphsCount: result.structure?.paragraphs?.length || 0,
+            hasSyntax: !!result.syntax,
+            syntaxHighlightsCount: result.syntax?.highlights?.length || 0,
+            hardSentencesCount: result.hardSentences?.length || 0,
+            keywordsCount: result.keywords?.length || 0,
+            phrasesCount: result.phrases?.length || 0,
+            questionsCount: result.questions?.length || 0,
+        }));
         return result;
     }
     // 口语对话

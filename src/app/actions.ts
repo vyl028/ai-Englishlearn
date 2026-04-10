@@ -457,11 +457,29 @@ export async function extractTextFromFileAction(
 export async function studyArticleAction(
   input: StudyArticleInput
 ): Promise<{ success: boolean; data?: StudyArticleOutput; error?: string }> {
+  console.log("[studyArticleAction] Called with text length:", input.text?.length, "generateQuestions:", input.includeQuestions);
+
   const result = await apiRequest<any>("/api/ai/study-article", {
     method: "POST",
     body: JSON.stringify({ article: input.text, generateQuestions: input.includeQuestions }),
     timeoutMs: AI_TIMEOUT_MS,
   });
+
+  console.log("[Frontend] Received article study response:", JSON.stringify({
+    success: result.success,
+    hasData: !!result.data,
+    kind: result.data?.kind,
+    hasStructure: !!result.data?.structure,
+    structureParagraphsCount: result.data?.structure?.paragraphs?.length || 0,
+    hasSyntax: !!result.data?.syntax,
+    syntaxHighlightsCount: result.data?.syntax?.highlights?.length || 0,
+    hardSentencesCount: result.data?.hardSentences?.length || 0,
+    keywordsCount: result.data?.keywords?.length || 0,
+    phrasesCount: result.data?.phrases?.length || 0,
+    questionsCount: result.data?.questions?.length || 0,
+    firstParagraph: result.data?.structure?.paragraphs?.[0] || null,
+    firstKeyword: result.data?.keywords?.[0] || null,
+  }, null, 2));
 
   if (!result.success || !result.data?.structure) {
     return { success: false, error: result.error || "无法完成文章分析，请重试。" };

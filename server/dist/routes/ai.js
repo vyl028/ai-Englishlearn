@@ -82,6 +82,11 @@ router.post('/practice', async (req, res) => {
             return (0, response_1.errorResponse)(res, 'WORDS_NOT_FOUND', '未找到指定单词', 404);
         }
         const result = await ai_service_1.AIService.generatePractice(words, questionCount, allowedTypes);
+        console.log('[API] Practice generated, questions count:', result.questions?.length);
+        if (result.questions?.length > 0) {
+            const firstQ = result.questions[0];
+            console.log('[API] First question type:', firstQ.type, 'has parts:', !!firstQ.parts, 'has acceptableAnswers:', !!firstQ.acceptableAnswers);
+        }
         return (0, response_1.successResponse)(res, result);
     }
     catch (error) {
@@ -153,10 +158,20 @@ router.post('/review-essay', async (req, res) => {
 router.post('/study-article', async (req, res) => {
     try {
         const { article, generateQuestions } = articleSchema.parse(req.body);
+        console.log('[API] Received article study request, length:', article?.length, 'generateQuestions:', generateQuestions);
         const result = await ai_service_1.AIService.studyArticle(article, generateQuestions);
+        console.log('[API] Sending article study response:', JSON.stringify({
+            success: true,
+            kind: result.kind,
+            hasStructure: !!result.structure,
+            hasSyntax: !!result.syntax,
+            hardSentencesCount: result.hardSentences?.length || 0,
+            keywordsCount: result.keywords?.length || 0,
+        }, null, 2));
         return (0, response_1.successResponse)(res, result);
     }
     catch (error) {
+        console.error('[API] Article study error:', error);
         if (error instanceof zod_1.z.ZodError) {
             return (0, response_1.errorResponse)(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
         }

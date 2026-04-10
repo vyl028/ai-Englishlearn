@@ -126,8 +126,9 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
     if (q.type !== "reorder") return [];
     const a = answers[questionIndex];
     const order = Array.isArray(a?.reorder) ? a!.reorder! : [];
-    if (order.length === q.parts.length) return order;
-    return q.parts.map((_, idx) => idx);
+    const parts = q.parts || [];
+    if (order.length === parts.length) return order;
+    return parts.map((_, idx) => idx);
   };
 
   const isCorrect = (q: PracticeQuestion, questionIndex: number) => {
@@ -138,14 +139,15 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
 
     if (q.type === "fill_blank") {
       const a = answers[questionIndex];
-      const user = normalizeAnswer(a.blank || "");
-      const accepted = q.acceptableAnswers.map(normalizeAnswer);
+      const user = normalizeAnswer(a?.blank || "");
+      const accepted = (q.acceptableAnswers || []).map(normalizeAnswer);
       return user.length > 0 && accepted.includes(user);
     }
 
     if (q.type === "reorder") {
       const order = getReorderOrder(q, questionIndex);
-      return order.length === q.correctOrder.length && arraysEqual(order, q.correctOrder);
+      const correctOrder = q.correctOrder || [];
+      return order.length === correctOrder.length && arraysEqual(order, correctOrder);
     }
 
     return false;
@@ -154,7 +156,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
   const isAnswered = (q: PracticeQuestion, questionIndex: number) => {
     if (q.type === "mcq") return typeof answers[questionIndex]?.mcq === "number";
     if (q.type === "fill_blank") return normalizeAnswer(answers[questionIndex]?.blank || "").length > 0;
-    if (q.type === "reorder") return getReorderOrder(q, questionIndex).length === q.parts.length;
+    if (q.type === "reorder") return getReorderOrder(q, questionIndex).length === (q.parts || []).length;
     return false;
   };
 
@@ -536,7 +538,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
 
                     {q.type === "fill_blank" && (
                       <div className="text-sm text-muted-foreground">
-                        正确答案：<span className="text-foreground">{q.acceptableAnswers.join(" / ")}</span>
+                        正确答案：<span className="text-foreground">{(q.acceptableAnswers || []).join(" / ")}</span>
                       </div>
                     )}
 
