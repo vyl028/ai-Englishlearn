@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileWarning, HardDrive, Upload, Trash2, Wrench } from "lucide-react";
+import { Download, FileWarning, HardDrive, LogOut, Upload, Trash2, Wrench, User } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import {
   applyBackup,
   createBackup,
@@ -54,6 +55,7 @@ type SettingsSheetProps = {
 
 export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = false }: SettingsSheetProps) {
   const { toast } = useToast();
+  const { user, logout } = useAuth();
   const [confirmResetStep1Open, setConfirmResetStep1Open] = React.useState(false);
   const [confirmResetStep2Open, setConfirmResetStep2Open] = React.useState(false);
 
@@ -336,6 +338,33 @@ export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = fal
                 </Button>
                 {busy && <div className="text-xs text-muted-foreground mt-2">AI 请求进行中时不可清空。</div>}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">账号</CardTitle>
+              <CardDescription>管理当前登录账号。</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {user ? (
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    当前登录：<span className="font-medium text-foreground">{user.username}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={logout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    退出登录
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">未登录</div>
+              )}
             </CardContent>
           </Card>
         </div>

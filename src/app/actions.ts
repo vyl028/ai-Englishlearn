@@ -1,5 +1,6 @@
 "use server";
 
+import { getAuthCookie } from "@/app/auth-actions";
 import {
   CapturedWord,
   DefineCapturedWordInput,
@@ -61,14 +62,33 @@ async function apiRequest<T>(
   const { timeoutMs, ...fetchOptions } = options;
   try {
     const url = `${API_BASE_URL}${endpoint}`;
+
+    // 从 cookie 获取 token
+    const token = await getAuthCookie();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // 复制原有的 headers
+    if (fetchOptions.headers) {
+      Object.entries(fetchOptions.headers).forEach(([key, value]) => {
+        if (typeof value === "string") {
+          headers[key] = value;
+        }
+      });
+    }
+
+    // 添加认证头
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await fetchWithTimeout(
       url,
       {
         ...fetchOptions,
-        headers: {
-          "Content-Type": "application/json",
-          ...fetchOptions.headers,
-        },
+        headers,
       },
       timeoutMs || 30000 // 默认 30 秒
     );
@@ -288,11 +308,26 @@ export async function exportStoryPdfAction(
 export async function reviewEssayAction(
   input: ReviewEssayInput
 ): Promise<{ success: boolean; data?: ReviewEssayOutput; error?: string }> {
+  console.log("[Frontend] Sending essay review request, text length:", input.text?.length);
+
   const result = await apiRequest<any>("/api/ai/review-essay", {
     method: "POST",
     body: JSON.stringify({ title: input.taskPrompt, essay: input.text }),
     timeoutMs: AI_TIMEOUT_MS,
   });
+
+  console.log("[Frontend] Received essay review response:", JSON.stringify({
+    success: result.success,
+    hasData: !!result.data,
+    hasOverallBand: !!result.data?.overallBand,
+    overallBand: result.data?.overallBand,
+    hasScores: !!result.data?.scores,
+    scores: result.data?.scores,
+    issuesCount: result.data?.issues?.length || 0,
+    beforeAfterCount: result.data?.beforeAfter?.length || 0,
+    firstIssue: result.data?.issues?.[0] || null,
+    hasRevisedTextEn: !!result.data?.revisedTextEn,
+  }, null, 2));
 
   if (!result.success || !result.data?.revisedTextEn) {
     return { success: false, error: result.error || "无法完成作文批改，请重试。" };

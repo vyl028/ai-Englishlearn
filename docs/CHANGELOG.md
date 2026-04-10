@@ -1,3 +1,109 @@
+## 2026-04-10
+
+### 新增/修改内容
+- **在设置面板添加退出登录功能**
+  - 在 `settings-sheet.tsx` 新增"账号"卡片，显示当前登录用户名
+  - 添加"退出登录"按钮，调用 `auth-context.tsx` 中的 `logout` 函数
+  - 最小化改动：仅添加必要的 import 和组件代码，不影响其他设置功能
+
+### 涉及文件
+- 修改：`src/components/settings-sheet.tsx`
+
+### 背景/原因
+- 用户反馈界面没有登出选项
+- 登出功能已在 `auth-context.tsx` 中实现，但缺少 UI 入口
+
+### 如何验证
+- 打开设置面板（右上角齿轮图标）
+- 底部"账号"区域应显示当前用户名和"退出登录"按钮
+- 点击"退出登录"应清除认证状态并跳转到登录页
+
+---
+
+## 2026-04-10
+
+### 新增/修改内容
+- **修复练习题重组题（reorder）白屏崩溃问题**
+  - 问题：生成练习后界面白屏，报错 "Cannot read properties of undefined (reading 'length')"
+  - 原因：后端 AI 提示词字段名与前端类型定义不一致
+    - 后端返回 `fragments`，前端期望 `parts`
+    - 后端缺少 `correctOrder` 字段
+  - 解决：修改 `server/src/services/ai-service.ts` 中的 `generatePractice` 提示词
+    - `fragments` → `parts`
+    - 新增 `correctOrder` 字段说明
+    - 新增可选字段 `answerSentenceEn` 和 `translationZh`
+
+### 涉及文件
+- 修改：`server/src/services/ai-service.ts`
+
+### 背景/原因
+- 前后端字段名不一致导致 reorder 类型题目数据缺失
+- 前端代码访问 `q.parts.length` 时 `parts` 为 `undefined` 导致崩溃
+
+### 如何验证
+- 生成包含重组题的练习（勾选"句子重组"题型）
+- 界面应正常显示题目，不再白屏
+- 重组题应能正常作答和判分
+
+---
+
+## 2026-04-10
+
+### 新增/修改内容
+- **修复作文批改结果不显示问题**
+  - 问题：批改成功但评分界面无结果、问题界面无类别区分、对照界面无内容
+  - 原因：后端 AI 提示词与前端类型定义完全不匹配
+    - scores 字段：后端 `tr/cc/lr/gra`，前端期望 `taskResponse/coherenceCohesion/lexicalResource/grammaticalRangeAccuracy`
+    - issues 字段：后端 `type/message`，前端期望 `category/explanationZh`
+    - 对照字段：后端 `keyChanges/explanation`，前端期望 `beforeAfter/reasonZh`
+    - 缺失字段：`summaryZh`, `strengthsZh`, `weaknessesZh`, `level.cefr`, `overallBand`
+  - 解决：修改 `server/src/services/ai-service.ts` 中的 `reviewEssay` 提示词
+    - 所有字段名与前端类型定义完全对齐
+    - 新增缺失的 summaryZh, strengthsZh, weaknessesZh 字段
+    - 完善 issues 和 beforeAfter 的字段结构
+
+### 涉及文件
+- 修改：`server/src/services/ai-service.ts`
+
+### 背景/原因
+- 前后端字段名不一致导致前端无法正确解析批改结果
+- 前端使用 Zod schema 校验，字段不匹配时数据被过滤或报错
+
+### 如何验证
+- 提交作文进行批改
+- 评分界面应显示 TR/CC/LR/GRA 四项分数和总分
+- 问题界面应显示类别标签和严重程度筛选
+- 对照界面应显示关键词句对照表
+
+---
+
+## 2026-04-10
+
+### 新增/修改内容
+- **修复练习生成功能 401 错误**
+  - 问题：生成练习时报错 "Cannot read properties of undefined (reading 'success')"
+  - 原因：`src/app/actions.ts` 中的 `apiRequest` 调用后端 API 时未传递认证 token，导致后端返回 401
+  - 解决：
+    - 新增 `src/app/auth-actions.ts`：Server Actions 用于设置/清除/获取 cookie 中的 token
+    - 修改 `src/lib/auth-context.tsx`：登录/注册时同时设置 cookie，登出时清除 cookie
+    - 修改 `src/app/actions.ts`：`apiRequest` 从 cookie 读取 token 并添加到请求头
+  - 方案选择：使用 HTTP-only cookie 传递 token，不影响现有 localStorage 认证逻辑
+
+### 涉及文件
+- 新增：`src/app/auth-actions.ts`
+- 修改：`src/lib/auth-context.tsx`
+- 修改：`src/app/actions.ts`
+
+### 背景/原因
+- 前后端分离后，Server Actions 需要调用后端 API，但后端需要 JWT 认证
+- localStorage 的 token 无法直接从 Server Actions 访问（服务端无法访问浏览器 localStorage）
+
+### 如何验证
+- 登录后生成练习，应正常返回题目而不再报错
+- 后端日志应显示 `POST /api/ai/practice 200` 而非 `401`
+
+---
+
 ## 2026-04-09
 
 ### 新增/修改内容

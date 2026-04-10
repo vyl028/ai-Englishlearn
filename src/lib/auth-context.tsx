@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi, User } from './api-client';
 import { getToken, setToken, clearToken } from './api-client';
+import { setAuthCookie, clearAuthCookie } from '@/app/auth-actions';
 
 interface AuthContextType {
   user: User | null;
@@ -48,6 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (response.success && response.data) {
       setToken(response.data.token);
+      // 同时设置 cookie，供 Server Actions 使用
+      await setAuthCookie(response.data.token);
       setUser(response.data.user);
       return { success: true };
     } else {
@@ -64,6 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (response.success && response.data) {
       setToken(response.data.token);
+      // 同时设置 cookie，供 Server Actions 使用
+      await setAuthCookie(response.data.token);
       setUser(response.data.user);
       return { success: true };
     } else {
@@ -75,8 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 登出
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     clearToken();
+    // 清除 cookie
+    await clearAuthCookie();
     setUser(null);
     window.location.href = '/login';
   }, []);

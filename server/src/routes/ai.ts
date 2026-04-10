@@ -132,9 +132,21 @@ router.post('/story', async (req: AuthRequest, res) => {
 router.post('/review-essay', async (req: AuthRequest, res) => {
   try {
     const { title, essay } = essaySchema.parse(req.body);
+    console.log('[API] Received essay review request, title:', title ? 'provided' : 'empty', 'essay length:', essay?.length);
     const result = await AIService.reviewEssay(title, essay);
+    console.log('[API] Sending essay review response:', JSON.stringify({
+      success: true,
+      hasOverallBand: !!result.overallBand,
+      overallBand: result.overallBand,
+      hasScores: !!result.scores,
+      scores: result.scores,
+      issuesCount: result.issues?.length || 0,
+      beforeAfterCount: result.beforeAfter?.length || 0,
+      firstIssue: result.issues?.[0] || null,
+    }, null, 2));
     return successResponse(res, result);
   } catch (error) {
+    console.error('[API] Essay review error:', error);
     if (error instanceof z.ZodError) {
       return errorResponse(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
     }

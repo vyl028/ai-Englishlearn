@@ -104,6 +104,32 @@ async function callAI(
   throw lastError || new Error('AI 请求失败');
 }
 
+// 尝试修复截断的 JSON
+function tryFixTruncatedJson(text: string): string | null {
+  let fixed = text.trim();
+
+  // 如果结尾缺少 }，尝试补全
+  const openBraces = (fixed.match(/\{/g) || []).length;
+  const closeBraces = (fixed.match(/\}/g) || []).length;
+  const openBrackets = (fixed.match(/\[/g) || []).length;
+  const closeBrackets = (fixed.match(/\]/g) || []).length;
+
+  // 补全缺失的 ] 和 }
+  for (let i = 0; i < openBrackets - closeBrackets; i++) {
+    fixed += ']';
+  }
+  for (let i = 0; i < openBraces - closeBraces; i++) {
+    fixed += '}';
+  }
+
+  try {
+    JSON.parse(fixed);
+    return fixed;
+  } catch {
+    return null;
+  }
+}
+
 // JSON 提取工具
 function extractJson(text: string): any {
   // 尝试直接解析
@@ -116,7 +142,9 @@ function extractJson(text: string): any {
       try {
         return JSON.parse(match[1]);
       } catch {
-        // ignore
+        // 尝试修复截断的 JSON
+        const fixed = tryFixTruncatedJson(match[1]);
+        if (fixed) return JSON.parse(fixed);
       }
     }
     // 尝试从文本中提取 JSON 对象
@@ -125,11 +153,187 @@ function extractJson(text: string): any {
       try {
         return JSON.parse(jsonMatch[0]);
       } catch {
-        // ignore
+        // 尝试修复截断的 JSON
+        const fixed = tryFixTruncatedJson(jsonMatch[0]);
+        if (fixed) return JSON.parse(fixed);
       }
     }
   }
+  // 输出原始内容以便调试
+  console.error('[AI] Failed to extract JSON. Raw text preview:', text.substring(0, 500));
   throw new Error('无法从响应中提取 JSON');
+}
+
+// 辅助函数：将值转换为数字（支持字符串数字）
+function toNumber(v: any): number {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return isNaN(n) ? 0 : n;
+  }
+  return 0;
+}
+
+// 验证并规范化作文批改结果
+function validateAndNormalizeEssayReview(raw: any): any {
+  // AI 实际返回的字段映射到前端期望的字段
+  const result: any = {
+    kind: 'ielts_task2_review',
+    overallBand: 0,
+    scores: {
+      taskResponse: 0,
+      coherenceCohesion: 0,
+      lexicalResource: 0,
+      grammaticalRangeAccuracy: 0,
+      overallBand: 0,
+    },
+    summaryZh: '',
+    strengthsZh: [],
+    weaknessesZh: [],
+    issues: [],
+    beforeAfter: [],
+    revisedTextEn: '',
+  };
+
+  console.log('[AI] Raw result keys:', Object.keys(raw));
+  console.log('[AI] Raw scores:', JSON.stringify(raw.scores));
+  console.log('[AI] Raw issues count:', Array.isArray(raw.issues) ? raw.issues.length : 0);
+  console.log('[AI] Raw keyChanges count:', Array.isArray(raw.keyChanges) ? raw.keyChanges.length : 0);
+
+  // 处理 overallBand（AI 可能返回为 scores.overall）
+  if (raw.scores && typeof raw.scores === 'object') {
+    // AI 返回的字段名：tr, cc, lr, gra, overall
+    result.scores.taskResponse = toNumber(raw.scores.tr ?? raw.scores.taskResponse ?? raw.scores.task_response ?? 0);
+    result.scores.coherenceCohesion = toNumber(raw.scores.cc ?? raw.scores.coherenceCohesion ?? raw.scores.coherence_cohesion ?? 0);
+    result.scores.lexicalResource = toNumber(raw.scores.lr ?? raw.scores.lexicalResource ?? raw.scores.lexical_resource ?? 0);
+    result.scores.grammaticalRangeAccuracy = toNumber(raw.scores.gra ?? raw.scores.grammaticalRangeAccuracy ?? raw.scores.grammatical_range_accuracy ?? 0);
+    result.scores.overallBand = toNumber(raw.scores.overall ?? raw.scores.overallBand ?? raw.scores.overall_band ?? 0);
+    result.overallBand = toNumber(raw.scores.overall ?? raw.overallBand ?? result.scores.overallBand);
+
+    // 处理 CEFR 等级
+    if (raw.scores.cefr) {
+      result.level = {
+        cefr: raw.scores.cefr,
+        commentZh: '',
+      };
+    }
+  }
+
+  // 处理 level 对象（如果 AI 返回了单独的 level）
+  if (raw.level && typeof raw.level === 'object') {
+    result.level = {
+      cefr: raw.level.cefr || raw.scores?.cefr || 'Unknown',
+      commentZh: raw.level.commentZh || raw.level.comment_zh || '',
+    };
+  }
+
+  // 处理 summaryZh
+  if (raw.summaryZh) {
+    result.summaryZh = raw.summaryZh;
+  } else if (raw.summary_zh) {
+    result.summaryZh = raw.summary_zh;
+  } else {
+    // 从 strengthsZh 和 weaknessesZh 生成 summary
+    const parts: string[] = [];
+    if (Array.isArray(raw.strengthsZh) && raw.strengthsZh.length > 0) {
+      parts.push('优点：' + raw.strengthsZh.join('；'));
+    }
+    if (Array.isArray(raw.weaknessesZh) && raw.weaknessesZh.length > 0) {
+      parts.push('可改进点：' + raw.weaknessesZh.join('；'));
+    }
+    result.summaryZh = parts.join('\n') || '作文批改完成';
+  }
+
+  // 处理 strengthsZh 和 weaknessesZh
+  if (Array.isArray(raw.strengthsZh)) {
+    result.strengthsZh = raw.strengthsZh;
+  } else if (Array.isArray(raw.strengths_zh)) {
+    result.strengthsZh = raw.strengths_zh;
+  }
+
+  if (Array.isArray(raw.weaknessesZh)) {
+    result.weaknessesZh = raw.weaknessesZh;
+  } else if (Array.isArray(raw.weaknesses_zh)) {
+    result.weaknessesZh = raw.weaknesses_zh;
+  }
+
+  // 处理 revisedTextEn
+  result.revisedTextEn = raw.revisedTextEn || raw.revised_text_en || raw.revisedText || '';
+
+  // 规范化 issues 数组
+  const validCategories = ['grammar', 'spelling', 'tense', 'logic', 'coherence', 'task_response', 'word_choice', 'punctuation', 'style', 'other'];
+  const validSeverities = ['low', 'medium', 'high'];
+
+  if (Array.isArray(raw.issues)) {
+    result.issues = raw.issues.map((issue: any) => {
+      const normalized: any = {
+        category: 'other',
+        suggestion: '',
+        explanationZh: '',
+      };
+
+      if (issue && typeof issue === 'object') {
+        // 处理 category（AI 可能返回 type）
+        const cat = issue.category || issue.type;
+        if (cat && validCategories.includes(cat)) {
+          normalized.category = cat;
+        } else if (cat) {
+          const catLower = String(cat).toLowerCase();
+          if (catLower.includes('grammar')) normalized.category = 'grammar';
+          else if (catLower.includes('spell')) normalized.category = 'spelling';
+          else if (catLower.includes('tense')) normalized.category = 'tense';
+          else if (catLower.includes('logic')) normalized.category = 'logic';
+          else if (catLower.includes('coheren')) normalized.category = 'coherence';
+          else if (catLower.includes('task')) normalized.category = 'task_response';
+          else if (catLower.includes('word') || catLower.includes('vocab')) normalized.category = 'word_choice';
+          else if (catLower.includes('punct')) normalized.category = 'punctuation';
+          else if (catLower.includes('style')) normalized.category = 'style';
+        }
+
+        // 处理 severity
+        const sev = issue.severity;
+        if (sev && validSeverities.includes(sev)) {
+          normalized.severity = sev;
+        } else if (sev) {
+          const sevLower = String(sev).toLowerCase();
+          if (sevLower.includes('high') || sevLower.includes('严重')) normalized.severity = 'high';
+          else if (sevLower.includes('medium') || sevLower.includes('中等')) normalized.severity = 'medium';
+          else if (sevLower.includes('low') || sevLower.includes('轻微')) normalized.severity = 'low';
+        }
+
+        // 处理字段映射
+        normalized.original = issue.original || issue.original_text || issue.text || '';
+        normalized.suggestion = issue.suggestion || issue.suggested || issue.correction || '';
+        // AI 可能返回 message 而不是 explanationZh
+        normalized.explanationZh = issue.explanationZh || issue.explanation_zh || issue.explanation || issue.message || '';
+        normalized.exampleEn = issue.exampleEn || issue.example_en || issue.example || issue.corrected || '';
+        normalized.exampleZh = issue.exampleZh || issue.example_zh || '';
+      }
+
+      return normalized;
+    });
+  }
+
+  // 处理 beforeAfter（AI 可能返回 keyChanges）
+  const beforeAfterSource = raw.beforeAfter || raw.before_after || raw.keyChanges || raw.key_changes;
+  if (Array.isArray(beforeAfterSource)) {
+    result.beforeAfter = beforeAfterSource.map((item: any) => ({
+      before: item.before || item.original || '',
+      after: item.after || item.revised || '',
+      reasonZh: item.reasonZh || item.reason_zh || item.reason || item.explanation || item.explanationZh || '',
+    }));
+  }
+
+  console.log('[AI] Normalized result:', JSON.stringify({
+    overallBand: result.overallBand,
+    scores: result.scores,
+    issuesCount: result.issues.length,
+    beforeAfterCount: result.beforeAfter.length,
+    hasSummaryZh: !!result.summaryZh,
+    hasRevisedTextEn: !!result.revisedTextEn,
+  }));
+
+  return result;
 }
 
 export class AIService {
@@ -257,7 +461,10 @@ export class AIService {
       "analysis": "详细分析（与explanation相同，兼容性）",
       "grammar": "语法讲解",
       "usage": "词汇用法讲解",
-      "fragments": ["单词1", "单词2", "单词3"] // reorder only
+      "parts": ["单词1", "单词2", "单词3", "单词4"], // reorder only: 打乱顺序的句子片段，至少4个
+      "correctOrder": [2, 0, 1, 3], // reorder only: 正确顺序的索引数组，对应parts的索引
+      "answerSentenceEn": "正确句子英文", // reorder only: 可选，完整正确句子
+      "translationZh": "句子中文翻译" // reorder only: 可选
     }
   ]
 }
@@ -329,31 +536,37 @@ export class AIService {
 
 请以 JSON 格式返回：
 {
-  "scores": {
-    "tr": "任务回应分数 (0-9)",
-    "cc": "连贯与衔接分数 (0-9)",
-    "lr": "词汇资源分数 (0-9)",
-    "gra": "语法范围与准确性分数 (0-9)",
-    "overall": "总分 (0-9)",
-    "cefr": "CEFR等级 (A1-C2)"
+  "overallBand": "总分 (0-9)",
+  "level": {
+    "cefr": "CEFR等级 (A1-C2)",
+    "commentZh": "等级评价中文说明（可选）"
   },
+  "scores": {
+    "taskResponse": "任务回应分数 (0-9)",
+    "coherenceCohesion": "连贯与衔接分数 (0-9)",
+    "lexicalResource": "词汇资源分数 (0-9)",
+    "grammaticalRangeAccuracy": "语法范围与准确性分数 (0-9)"
+  },
+  "summaryZh": "总体评价中文摘要",
+  "strengthsZh": ["优点1", "优点2"],
+  "weaknessesZh": ["需改进1", "需改进2"],
   "issues": [
     {
-      "type": "grammar|spelling|vocabulary|logic|coherence",
-      "severity": "high|medium|low",
-      "message": "问题描述",
-      "original": "原文片段",
-      "suggestion": "修改建议",
-      "corrected": "修正后的句子"
+      "category": "grammar|spelling|tense|logic|coherence|task_response|word_choice|punctuation",
+      "severity": "low|medium|high",
+      "original": "原文片段（英文）",
+      "suggestion": "修改建议（英文）",
+      "explanationZh": "问题中文解释",
+      "exampleEn": "示例句子（英文，可选）",
+      "exampleZh": "示例句子中文翻译（可选）"
     }
   ],
   "revisedTextEn": "优化后的完整作文（英文）",
-  "revisedTextZh": "优化后作文的中文翻译",
-  "keyChanges": [
+  "beforeAfter": [
     {
-      "before": "修改前",
-      "after": "修改后",
-      "explanation": "修改原因"
+      "before": "修改前片段",
+      "after": "修改后片段",
+      "reasonZh": "修改原因中文说明"
     }
   ]
 }
@@ -366,8 +579,35 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 4500);
-    const result = extractJson(response);
+    const response = await callAI(messages, undefined, 8000);
+    const rawResult = extractJson(response);
+
+    console.log('[AI] Essay review raw result:', JSON.stringify({
+      hasOverallBand: !!rawResult.overallBand,
+      overallBandValue: rawResult.overallBand,
+      hasScores: !!rawResult.scores,
+      scoresValue: rawResult.scores,
+      hasIssues: !!rawResult.issues,
+      issuesCount: Array.isArray(rawResult.issues) ? rawResult.issues.length : 0,
+      hasBeforeAfter: !!(rawResult.beforeAfter || rawResult.keyChanges),
+      beforeAfterCount: Array.isArray(rawResult.beforeAfter || rawResult.keyChanges) ? (rawResult.beforeAfter || rawResult.keyChanges).length : 0,
+      hasSummaryZh: !!rawResult.summaryZh,
+      hasRevisedTextEn: !!rawResult.revisedTextEn,
+    }, null, 2));
+
+    // 数据验证和补全，确保返回格式符合前端期望
+    const result = validateAndNormalizeEssayReview(rawResult);
+
+    console.log('[AI] Essay review normalized result:', JSON.stringify({
+      kind: result.kind,
+      overallBand: result.overallBand,
+      scores: result.scores,
+      issuesCount: result.issues?.length || 0,
+      beforeAfterCount: result.beforeAfter?.length || 0,
+      hasSummaryZh: !!result.summaryZh,
+      summaryZhPreview: result.summaryZh?.substring(0, 100),
+      hasRevisedTextEn: !!result.revisedTextEn,
+    }, null, 2));
 
     return result;
   }
