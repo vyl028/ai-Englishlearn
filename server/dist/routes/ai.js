@@ -55,13 +55,10 @@ router.post('/define', async (req, res) => {
 router.post('/extract', async (req, res) => {
     try {
         const { imageBase64 } = extractSchema.parse(req.body);
-        console.log('[API] Received image extract request, base64 length:', imageBase64?.length);
         const result = await ai_service_1.AIService.extractWordsFromImage(imageBase64);
-        console.log('[API] Image extract success, words count:', result.words?.length);
         return (0, response_1.successResponse)(res, result);
     }
     catch (error) {
-        console.error('[API] Image extract error:', error);
         if (error instanceof zod_1.z.ZodError) {
             return (0, response_1.errorResponse)(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
         }

@@ -451,31 +451,50 @@ export class AIService {
   "questions": [
     {
       "type": "mcq|fill_blank|reorder",
-      "targetWord": "目标单词",
-      "promptZh": "题干中文（仅mcq需要）",
-      "promptEn": "题干英文",
-      "options": ["English option A", "English option B", "English option C", "English option D"], // mcq only: 四个英文选项
-      "correctAnswer": "正确答案",
-      "answer": "标准答案（与correctAnswer相同，兼容性）",
-      "explanation": "答案解析",
-      "analysis": "详细分析（与explanation相同，兼容性）",
-      "grammar": "语法讲解",
-      "usage": "词汇用法讲解",
+      "word": "目标单词",
+      "promptEn": "题干英文（mcq和reorder需要）",
+      "options": ["选项A英文", "选项B英文", "选项C英文", "选项D英文"], // mcq only: 四个英文选项
+      "answerIndex": 0, // mcq only: 正确答案的索引 0-3（A=0, B=1, C=2, D=3）
+      "analysisZh": "答案解析（必须是中文，详细解释为什么选择该答案）",
+      "grammarZh": "语法讲解（必须是中文，讲解涉及的语法知识点）",
+      "usageZh": "用法讲解（必须是中文，讲解单词的用法和搭配）",
       "parts": ["word1", "word2", "word3", "word4"], // reorder only: 打乱顺序的英文句子片段，至少4个
       "correctOrder": [2, 0, 1, 3], // reorder only: 正确顺序的索引数组，对应parts的索引
-      "answerSentenceEn": "Correct sentence in English", // reorder only: 可选，完整正确句子
-      "translationZh": "句子中文翻译", // reorder only: 可选
-      "sentenceEn": "Fill in the blank sentence with ____ placeholder", // fill_blank only
+      "answerSentenceEn": "Correct sentence in English", // reorder only: 完整正确句子
+      "translationZh": "句子中文翻译", // reorder only: 中文翻译
+      "sentenceEn": "Fill in the blank sentence with ____ placeholder", // fill_blank only: 带空格的句子
       "acceptableAnswers": ["answer1", "answer2"] // fill_blank only: 可接受的答案列表（必填）
     }
   ]
 }
 
-重要说明：
-- mcq 的 options 必须是英文选项（四个选项都是英文）
-- reorder 的 parts 必须是英文句子片段
+【强制要求 - 非常重要，必须严格遵守】：
+1. 所有解析字段必须是中文：
+   - analysisZh: 必须是中文答案解析（不能用英文！）
+   - grammarZh: 必须是中文语法讲解（不能用英文！）
+   - usageZh: 必须是中文用法讲解（不能用英文！）
+   注意：如果返回英文内容，系统会报错！
 
-共生成 ${questionCount} 道题，题型从 [${allowedTypes.join(', ')}] 中随机选择。`,
+2. MCQ 题型：
+   - promptEn: 英文题目句子（含空格）
+   - options: 四个英文选项
+   - answerIndex: 0-3 数字
+   - 不要把题目放进选项里
+
+3. fill_blank 题型：
+   - sentenceEn: 带 ____ 的英文句子
+   - acceptableAnswers: 答案列表
+
+4. reorder 题型：
+   - parts: 打乱顺序的英文片段
+   - correctOrder: 索引数组
+
+【题型分布要求】：
+- 从 [${allowedTypes.join(', ')}] 中随机选择题型
+- 不要按固定顺序（如选择、填空、重组、选择...）
+- 确保题型分布随机，相邻题目可以是相同或不同题型
+
+注意：analysisZh, grammarZh, usageZh 这三个字段的内容必须是纯中文，不要用英文！`,
       },
       {
         role: 'user',
@@ -490,38 +509,84 @@ export class AIService {
       throw new Error('AI 返回格式不正确');
     }
 
+    // 辅助函数：检测文本是否包含中文字符
+    const containsChinese = (text: string): boolean => {
+      if (!text || typeof text !== 'string') return false;
+      return /[\u4e00-\u9fa5]/.test(text);
+    };
+
+    // 辅助函数：获取中文内容，优先选择包含中文的字段
+    const getChineseContent = (zhField: string, ...fallbackFields: string[]): string => {
+      // 优先检查 zh 结尾的字段
+      if (containsChinese(zhField)) return zhField;
+      // 然后检查其他字段是否有中文内容
+      for (const field of fallbackFields) {
+        if (containsChinese(field)) return field;
+      }
+      // 如果都没有中文，优先返回 zh 字段（即使它是英文）
+      return zhField || fallbackFields[0] || '';
+    };
+
     // 数据规范化，确保所有必需字段都存在
-    result.questions = result.questions.map((q: any) => {
+    result.questions = result.questions.map((q: any, index: number) => {
       const normalized: any = {
         type: q.type || 'mcq',
-        targetWord: q.targetWord || '',
-        promptZh: q.promptZh || '',
+        word: q.word || q.targetWord || '',
         promptEn: q.promptEn || '',
-        explanation: q.explanation || q.analysis || '',
-        analysisZh: q.analysisZh || q.analysis || q.explanation || '',
-        grammarZh: q.grammarZh || q.grammar || '',
-        usageZh: q.usageZh || q.usage || '',
       };
 
-      if (q.type === 'mcq') {
-        normalized.options = Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'];
-        normalized.answerIndex = typeof q.answerIndex === 'number' ? q.answerIndex : 0;
-        if (q.correctAnswer && typeof normalized.answerIndex !== 'number') {
-          const idx = ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer);
-          normalized.answerIndex = idx >= 0 ? idx : 0;
+      // 强制使用中文解析字段，优先选择包含中文的内容
+      normalized.analysisZh = getChineseContent(
+        q.analysisZh,
+        q.explanationZh,
+        q.analysis,
+        q.explanation
+      );
+      normalized.grammarZh = getChineseContent(q.grammarZh, q.grammar);
+      normalized.usageZh = getChineseContent(q.usageZh, q.usage);
+
+      // 如果没有中文内容，添加提示标记
+      if (!containsChinese(normalized.analysisZh)) {
+        normalized.analysisZh = '（解析内容非中文）' + normalized.analysisZh;
+      }
+
+      if (normalized.type === 'mcq') {
+        // 确保有4个选项
+        let options = Array.isArray(q.options) ? q.options.slice(0, 4) : [];
+        while (options.length < 4) {
+          options.push(`Option ${String.fromCharCode(65 + options.length)}`);
+        }
+        normalized.options = options;
+
+        // 处理答案索引
+        let answerIndex = 0;
+        if (typeof q.answerIndex === 'number' && q.answerIndex >= 0 && q.answerIndex <= 3) {
+          answerIndex = q.answerIndex;
+        } else if (q.correctAnswer && typeof q.correctAnswer === 'string') {
+          // 转换 A/B/C/D 为 0/1/2/3
+          const idx = ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer.toUpperCase());
+          answerIndex = idx >= 0 ? idx : 0;
+        }
+        normalized.answerIndex = answerIndex;
+
+        // 验证答案索引对应的选项是否存在
+        if (!normalized.options[normalized.answerIndex]) {
+          normalized.answerIndex = 0;
         }
       }
 
-      if (q.type === 'fill_blank') {
+      if (normalized.type === 'fill_blank') {
         normalized.sentenceEn = q.sentenceEn || q.promptEn || '____';
-        normalized.acceptableAnswers = Array.isArray(q.acceptableAnswers) ? q.acceptableAnswers :
-                                        (q.correctAnswer ? [q.correctAnswer] : ['']);
+        normalized.acceptableAnswers = Array.isArray(q.acceptableAnswers) && q.acceptableAnswers.length > 0
+          ? q.acceptableAnswers
+          : (q.correctAnswer ? [q.correctAnswer] : ['answer']);
       }
 
-      if (q.type === 'reorder') {
-        normalized.parts = Array.isArray(q.parts) ? q.parts : [];
-        normalized.correctOrder = Array.isArray(q.correctOrder) ? q.correctOrder :
-                                   normalized.parts.map((_: any, i: number) => i);
+      if (normalized.type === 'reorder') {
+        normalized.parts = Array.isArray(q.parts) && q.parts.length >= 2 ? q.parts : ['Part 1', 'Part 2', 'Part 3', 'Part 4'];
+        normalized.correctOrder = Array.isArray(q.correctOrder) && q.correctOrder.length === normalized.parts.length
+          ? q.correctOrder
+          : normalized.parts.map((_: any, i: number) => i);
         normalized.answerSentenceEn = q.answerSentenceEn || '';
         normalized.translationZh = q.translationZh || '';
       }
@@ -529,12 +594,17 @@ export class AIService {
       return normalized;
     });
 
+    // Fisher-Yates 打乱算法，确保题型随机分布
+    for (let i = result.questions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result.questions[i], result.questions[j]] = [result.questions[j], result.questions[i]];
+    }
+
     console.log('[AI] Practice generated:', JSON.stringify({
       totalQuestions: result.questions.length,
       mcqCount: result.questions.filter((q: any) => q.type === 'mcq').length,
       fillBlankCount: result.questions.filter((q: any) => q.type === 'fill_blank').length,
       reorderCount: result.questions.filter((q: any) => q.type === 'reorder').length,
-      sampleQuestion: result.questions[0] || null,
     }, null, 2));
 
     return result;

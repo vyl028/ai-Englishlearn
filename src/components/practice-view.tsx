@@ -235,7 +235,7 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
 
   const questionItems = practiceData.questions.map((q, index) => ({ q, index }));
   const visibleItems = submitted && wrongOnly
-    ? questionItems.filter(({ q, index }) => !isCorrect(q, index))
+    ? questionItems.filter(({ q, index }) => !isCorrect(q, index) || !isAnswered(q, index))
     : questionItems;
 
   return (
@@ -370,11 +370,16 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
                     </CardDescription>
                   </div>
                   {submitted && (
-                    <div className="pt-1 shrink-0">
-                      {correct ? (
-                        <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                    <div className="pt-1 shrink-0 text-right">
+                      <div className="flex items-center gap-2">
+                        {correct ? (
+                          <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                        )}
+                      </div>
+                      {!isAnswered(q, index) && (
+                        <span className="text-xs text-rose-600 dark:text-rose-400">未作答</span>
                       )}
                     </div>
                   )}
