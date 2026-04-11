@@ -52,6 +52,8 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
   const [canSwitchCamera, setCanSwitchCamera] = React.useState(false);
   const cameraStreamRef = React.useRef<MediaStream | null>(null);
   const [activeTab, setActiveTab] = React.useState("text");
+  const [cameraActive, setCameraActive] = React.useState(false);
+  const [cameraError, setCameraError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploadPreviewDataUri, setUploadPreviewDataUri] = React.useState<string | null>(null);
   const imageAnalysisTokenRef = React.useRef(0);
@@ -188,7 +190,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
 
 
   React.useEffect(() => {
-    if (activeTab !== "camera") return;
+    if (activeTab !== "camera" || !cameraActive) return;
     let cancelled = false;
 
     const stop = () => {
@@ -232,13 +234,15 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
           cameraStreamRef.current = stream;
           setHasCameraPermission(true);
           if (videoRef.current) videoRef.current.srcObject = stream;
-        } catch (fallbackError) {
-          console.error("Error accessing camera:", fallbackError);
+        } catch (fallbackError: any) {
+          console.error("[Camera] Error accessing camera:", fallbackError);
+          const errorMsg = fallbackError?.name || fallbackError?.message || String(fallbackError);
+          setCameraError(`摄像头错误: ${errorMsg}`);
           setHasCameraPermission(false);
           toast({
             variant: "destructive",
             title: "无法访问摄像头",
-            description: "请在浏览器设置中允许摄像头权限后再使用此功能。",
+            description: `错误: ${errorMsg}。请检查浏览器权限设置。`,
           });
         }
       }
@@ -250,7 +254,7 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       stop();
       setCanSwitchCamera(false);
     };
-  }, [activeTab, cameraFacingMode, toast]);
+  }, [activeTab, cameraActive, cameraFacingMode, toast]);
 
   const handleSwitchCamera = () => {
     setCameraFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
@@ -441,7 +445,14 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={(v) => {
+              setActiveTab(v);
+              if (v !== "camera") {
+                setCameraActive(false);
+                cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+                cameraStreamRef.current = null;
+              }
+            }} className="w-full">
               <TabsList className="grid w-full grid-cols-3 min-h-11">
                 <TabsTrigger value="text" disabled={isAnalyzing} className="text-sm sm:text-base">手动输入</TabsTrigger>
                 <TabsTrigger value="camera" disabled={isAnalyzing} className="text-sm sm:text-base"><Camera className="w-4 h-4 mr-1 sm:mr-2 shrink-0"/>拍照</TabsTrigger>
@@ -492,8 +503,26 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
               </TabsContent>
               <TabsContent value="camera">
                 <div className="space-y-4 mt-4">
+                  {/* 启动摄像头按钮 - 需要用户手势触发权限请求 */}
+                  {!cameraActive && (
+                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                      <div className="text-sm text-muted-foreground text-center">
+                        点击按钮启动摄像头权限
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => setCameraActive(true)}
+                        disabled={isAnalyzing}
+                        className="w-full sm:w-auto"
+                      >
+                        <Camera className="mr-2 h-4 w-4" />
+                        启动摄像头
+                      </Button>
+                    </div>
+                  )}
+
                   {/* 视频预览区 - 移动端优化 */}
-                  <div className="relative rounded-lg overflow-hidden bg-muted">
+                  <div className={`relative rounded-lg overflow-hidden bg-muted ${!cameraActive ? 'hidden' : ''}`}>
                     <video
                       ref={videoRef}
                       className="w-full aspect-[4/3] sm:aspect-video object-cover"
@@ -525,7 +554,10 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
                     <Alert variant="destructive">
                       <AlertTitle>需要摄像头权限</AlertTitle>
                       <AlertDescription>
-                        请允许摄像头访问权限后再使用此功能。
+                        {cameraError || "请允许摄像头访问权限后再使用此功能。"}
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          提示：手机浏览器通常需要 HTTPS 或用户手势才能请求摄像头权限。
+                        </div>
                       </AlertDescription>
                     </Alert>
                   )}

@@ -27,6 +27,7 @@ app.use(cors({
     'http://localhost:9003',
     'http://0.0.0.0:9003',
     'http://127.0.0.1:9003',
+    'http://192.168.0.102:9002',
   ],
   credentials: true,
 }));

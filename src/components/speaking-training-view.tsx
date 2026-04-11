@@ -349,7 +349,13 @@ function isLikelySecureContext() {
   if (typeof window === "undefined") return false;
   if (window.isSecureContext) return true;
   const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
+  // 允许 localhost 和局域网 IP（192.168.x.x, 10.x.x.x, 172.16-31.x.x）
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  // 检查局域网 IP
+  if (/^192\.168\.\d+\.\d+$/.test(host)) return true;
+  if (/^10\.\d+\.\d+\.\d+$/.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host)) return true;
+  return false;
 }
 
 function getSpeechRecognitionCtor(): any | null {
@@ -740,7 +746,7 @@ export function SpeakingTrainingView() {
     }
   }, [autoSpeakAi, chatLevel, chatScenarioEn, chatTurns, speakText, supportsTts, toast]);
 
-  const startRecognition = React.useCallback((kind: SpeechSessionKind) => {
+  const startRecognition = React.useCallback(async (kind: SpeechSessionKind) => {
     setAsrError(null);
     setInterimText("");
     finalTranscriptRef.current = "";
@@ -760,6 +766,15 @@ export function SpeakingTrainingView() {
     }
     if (!isLikelySecureContext()) {
       setAsrError("语音识别通常需要 HTTPS 或 localhost。请使用 https 访问或在本机 localhost 打开。");
+      return;
+    }
+
+    // 请求麦克风权限（手机浏览器需要显式请求）
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+    } catch (err) {
+      setAsrError("无法访问麦克风。请在浏览器设置中允许麦克风权限。");
       return;
     }
 

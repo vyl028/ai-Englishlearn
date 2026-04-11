@@ -1,5 +1,5 @@
 // API 客户端配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.102:4000';
 
 // 存储 key
 const TOKEN_KEY = 'lexi-auth-token';
