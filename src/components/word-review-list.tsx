@@ -877,17 +877,17 @@ export function WordReviewList({
          <div className="space-y-8">
             {weekSectionsToRender.map(({ weekKey, groups: weekTermGroups }) => (
               <div key={weekKey}>
-               <div className="flex justify-between items-center mb-3">
-                         <h3 className="text-lg font-semibold text-foreground mb-3">
+               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0 mb-3">
+                         <h3 className="text-base sm:text-lg font-semibold text-foreground">
            {formatWeekRange(getWeekStart(new Date(weekKey)), getWeekEnd(new Date(weekKey)))}
          </h3>
                  <div className="flex items-center gap-2">
-                   <Button variant="outline" size="sm" onClick={() => openGenerator('practice', groupedWords[weekKey])}>
-                     <ListChecks className="h-4 w-4 mr-2" />
+                   <Button variant="outline" size="sm" className="text-xs sm:text-sm" onClick={() => openGenerator('practice', groupedWords[weekKey])}>
+                     <ListChecks className="h-4 w-4 mr-1 sm:mr-2" />
                      练习
                    </Button>
-                   <Button variant="outline" size="sm" onClick={() => openGenerator('story', groupedWords[weekKey])}>
-                     <Newspaper className="h-4 w-4 mr-2" />
+                   <Button variant="outline" size="sm" className="text-xs sm:text-sm" onClick={() => openGenerator('story', groupedWords[weekKey])}>
+                     <Newspaper className="h-4 w-4 mr-1 sm:mr-2" />
                      故事
                    </Button>
                  </div>
@@ -919,9 +919,9 @@ export function WordReviewList({
 
                    return (
                      <Card key={groupKey} className="w-full">
-                       <CardContent className="p-3">
-                         <div className="flex items-center justify-between">
-                           <div className="flex-grow flex items-center gap-2 overflow-hidden">
+                       <CardContent className="p-3 sm:p-4">
+                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+                           <div className="flex-grow flex flex-wrap items-center gap-2 min-w-0">
                              {bulkMode && (
                                <div className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                                  <Checkbox
@@ -941,7 +941,7 @@ export function WordReviewList({
                                </div>
                              )}
                              <span
-                               className="font-bold text-lg cursor-pointer hover:underline"
+                               className="font-bold text-base sm:text-lg cursor-pointer hover:underline truncate"
                                onClick={() => handleWordClick(selected.word)}
                              >
                                {g.display}
@@ -959,7 +959,7 @@ export function WordReviewList({
                                <>
                                  <div className="sm:hidden shrink-0">
                                    <Select value={selected.id} onValueChange={(id) => selectVariant(id)}>
-                                     <SelectTrigger className="h-7 w-[120px]">
+                                     <SelectTrigger className="h-7 w-[100px] text-xs">
                                        <SelectValue placeholder="词性" />
                                      </SelectTrigger>
                                      <SelectContent>
@@ -991,13 +991,13 @@ export function WordReviewList({
                                  </div>
                                </>
                              ) : (
-                               <Badge variant="secondary" className="capitalize shrink-0">{selected.partOfSpeech}</Badge>
+                               <Badge variant="secondary" className="capitalize shrink-0 text-xs">{selected.partOfSpeech}</Badge>
                              )}
 
-                             {isDefinitionOpen && <p className="text-muted-foreground truncate">{selected.definition}</p>}
+                             {isDefinitionOpen && <p className="text-muted-foreground text-sm w-full mt-1 sm:mt-0 sm:truncate">{selected.definition}</p>}
                            </div>
 
-                           <div className="flex items-center flex-shrink-0 ml-2 sm:ml-4 flex-wrap justify-end gap-1">
+                           <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto sm:overflow-visible pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
                            <div className="text-xs text-muted-foreground mr-4 hidden sm:block">
                              {formatDistanceToNow(new Date(g.latestCapturedAt), { addSuffix: true })}
                            </div>
@@ -1048,73 +1048,79 @@ export function WordReviewList({
                                 </TooltipContent>
                               </Tooltip>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-11 w-11 text-muted-foreground"
-                                    aria-label="复制单词"
-                                    title="复制单词"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void copyToClipboard(g.display, "单词");
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4" />
-                                    <span className="sr-only">复制单词</span>
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>复制单词</TooltipContent>
-                              </Tooltip>
+                              <div className="hidden sm:block">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-11 w-11 text-muted-foreground"
+                                      aria-label="复制单词"
+                                      title="复制单词"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void copyToClipboard(g.display, "单词");
+                                      }}
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                      <span className="sr-only">复制单词</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>复制单词</TooltipContent>
+                                </Tooltip>
+                              </div>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-11 w-11 text-muted-foreground"
-                                    aria-label="复制释义"
-                                    title="复制释义"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void copyToClipboard(selected.definition, "释义");
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4" />
-                                    <span className="sr-only">复制释义</span>
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>复制释义</TooltipContent>
-                              </Tooltip>
+                              <div className="hidden sm:block">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-11 w-11 text-muted-foreground"
+                                      aria-label="复制释义"
+                                      title="复制释义"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void copyToClipboard(selected.definition, "释义");
+                                      }}
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                      <span className="sr-only">复制释义</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>复制释义</TooltipContent>
+                                </Tooltip>
+                              </div>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-11 w-11 text-muted-foreground"
-                                    aria-label="重新生成释义与拓展"
-                                    title="重新生成"
-                                    disabled={isRegenerating}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void handleRegenerate(selected);
-                                    }}
-                                  >
-                                    {isRegenerating ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <RefreshCcw className="h-4 w-4" />
-                                    )}
-                                    <span className="sr-only">重新生成释义与拓展</span>
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>重新生成</TooltipContent>
-                              </Tooltip>
+                              <div className="hidden sm:block">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-11 w-11 text-muted-foreground"
+                                      aria-label="重新生成释义与拓展"
+                                      title="重新生成"
+                                      disabled={isRegenerating}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleRegenerate(selected);
+                                      }}
+                                    >
+                                      {isRegenerating ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCcw className="h-4 w-4" />
+                                      )}
+                                      <span className="sr-only">重新生成释义与拓展</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>重新生成</TooltipContent>
+                                </Tooltip>
+                              </div>
                             </div>
 
                              <Tooltip>
@@ -1182,7 +1188,7 @@ export function WordReviewList({
                            </div>
                          </div>
 
-                         <Accordion type="single" collapsible className="mt-2">
+                         <Accordion type="single" collapsible className="mt-3 sm:mt-2">
                            <AccordionItem value="details" className="border-none">
                              <AccordionTrigger className="py-2 text-sm">
                                了解更多

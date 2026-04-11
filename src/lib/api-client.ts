@@ -1,5 +1,11 @@
 // API 客户端配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.102:4000';
+// 使用电脑IP地址，支持手机和电脑访问
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.100:4000';
+
+// 调试：在浏览器控制台显示当前使用的API地址
+if (typeof window !== 'undefined') {
+  console.log('[API] Base URL:', API_BASE_URL);
+}
 
 // 存储 key
 const TOKEN_KEY = 'lexi-auth-token';
@@ -103,6 +109,10 @@ async function request<T>(
 
     return data;
   } catch (error) {
+    // 调试：在控制台显示请求错误详情
+    if (typeof window !== 'undefined') {
+      console.error('[API] Request failed:', url, error);
+    }
     if (error instanceof Error && error.name === 'AbortError') {
       return {
         success: false,
