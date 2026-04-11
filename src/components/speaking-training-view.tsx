@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Bot, Download, Loader2, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 
-import { speakingChatAction } from "@/app/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { recordSpeakingTrainingAttempt } from "@/lib/speaking-training-stats";
 import { cn, generateId } from "@/lib/utils";
 import type { SpeakingChatIssue, SpeakingChatMessage } from "@/lib/types";
+import { aiApi } from "@/lib/api-client";
 
 type SpeechSessionKind = "target" | "attempt" | "chat";
 type SpeakingSubView = "training" | "chat";
@@ -679,7 +679,7 @@ export function SpeakingTrainingView() {
     ]);
 
     try {
-      const res = await speakingChatAction({
+      const res = await aiApi.speakingChat({
         scenario: chatScenarioEn || undefined,
         userTextEn: text,
         history: history.length > 0 ? history : undefined,
@@ -687,7 +687,7 @@ export function SpeakingTrainingView() {
       });
 
       if (!res.success || !res.data) {
-        const msg = res.error || "口语对话失败，请稍后重试。";
+        const msg = res.error?.message || "口语对话失败，请稍后重试。";
         setChatError(msg);
         setChatTurns((prev) =>
           prev.map((t) =>

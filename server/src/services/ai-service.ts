@@ -585,7 +585,9 @@ export class AIService {
     const messages = [
       {
         role: 'system',
-        content: `你是一个英语练习题生成助手。请基于给定的单词列表生成练习题。
+        content: `你是一个英语练习题生成助手。请基于给定的单词列表生成${questionCount}道练习题。
+
+【重要】必须生成${questionCount}道题目，不能多也不能少。
 
 题型说明：
 1. mcq (选择题): 单句填空，A/B/C/D 选项，测试词义和用法
@@ -691,9 +693,16 @@ export class AIService {
       normalized.grammarZh = getChineseContent(q.grammarZh, q.grammar);
       normalized.usageZh = getChineseContent(q.usageZh, q.usage);
 
-      // 如果没有中文内容，添加提示标记
-      if (!containsChinese(normalized.analysisZh)) {
-        normalized.analysisZh = '（解析内容非中文）' + normalized.analysisZh;
+      // 确保解析字段有中文内容，如果为空或非中文则提供默认中文解释
+      const targetWord = normalized.word || q.word || '该单词';
+      if (!containsChinese(normalized.analysisZh) || !normalized.analysisZh.trim()) {
+        normalized.analysisZh = `正确答案是「${normalized.options?.[normalized.answerIndex] || targetWord}」。本题考查对单词「${targetWord}」含义的理解，需要结合上下文语境选择最合适的选项。`;
+      }
+      if (!containsChinese(normalized.grammarZh) || !normalized.grammarZh.trim()) {
+        normalized.grammarZh = `本题涉及单词「${targetWord}」的语法应用。注意该单词在句中的成分和搭配关系，确保语法结构正确。`;
+      }
+      if (!containsChinese(normalized.usageZh) || !normalized.usageZh.trim()) {
+        normalized.usageZh = `「${targetWord}」是一个常用词汇，建议多阅读相关例句来掌握其用法，注意与其他近义词的区别。`;
       }
 
       if (normalized.type === 'mcq') {
@@ -935,7 +944,12 @@ export class AIService {
   ]` : ''}
 }
 
-${generateQuestions ? `请生成 ${questionCount} 道阅读理解选择题，题目和选项必须是全英文，但解析可以用中文。` : '不要生成 questions 字段。'}`,
+${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解选择题，不能多也不能少。
+
+要求：
+1. 题目和选项必须是全英文
+2. 解析可以用中文
+3. 严格只生成 ${questionCount} 道题目` : '不要生成 questions 字段。'}`,
       },
       {
         role: 'user',
@@ -1008,13 +1022,15 @@ ${generateQuestions ? `请生成 ${questionCount} 道阅读理解选择题，题
         noteZh: p.note || p.noteZh || '',
         exampleEn: p.example || p.exampleEn || '',
       })),
-      questions: (rawResult.questions || []).map((q: any) => ({
-        questionEn: q.question || q.questionEn || '',
-        options: q.options || [],
-        answerIndex: q.correctAnswer ? ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer) : (q.answerIndex || 0),
-        analysisZh: q.explanation || q.analysis || q.analysisZh || '',
-        locate: q.location ? { quoteEn: q.location } : (q.locate || {}),
-      })),
+      questions: (rawResult.questions || [])
+        .slice(0, generateQuestions ? questionCount : 0)
+        .map((q: any) => ({
+          questionEn: q.question || q.questionEn || '',
+          options: q.options || [],
+          answerIndex: q.correctAnswer ? ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer) : (q.answerIndex || 0),
+          analysisZh: q.explanation || q.analysis || q.analysisZh || '',
+          locate: q.location ? { quoteEn: q.location } : (q.locate || {}),
+        })),
     };
 
     console.log('[AI] Article study normalized result:', JSON.stringify({

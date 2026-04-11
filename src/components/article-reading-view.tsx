@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Copy, Eye, ListPlus, Loader2, RotateCcw, Upload } from "lucide-react";
 
-import { defineTermAutoAction, extractTextFromFileAction, studyArticleAction } from "@/app/actions";
+import { extractTextFromFileAction } from "@/app/actions";
+import { aiApi } from "@/lib/api-client";
 import type { CapturedWord, DefineTermAutoOutput, StudyArticleOutput, WordEnrichment } from "@/lib/types";
 import { extractTextFromImage } from "@/lib/ocr-utils";
 import { useToast } from "@/hooks/use-toast";
@@ -472,12 +473,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
     try {
       if (trimmed.length <= 16000) {
         console.log("[ArticleReadingView] Calling studyArticleAction...");
-        const res = await studyArticleAction({
-          title: baseTitle,
-          text: trimmed,
-          includeQuestions,
-          questionCount,
-        });
+        const res = await aiApi.studyArticle(trimmed, includeQuestions, questionCount);
         console.log("[ArticleReadingView] studyArticleAction returned:", res);
 
         if (res.success && res.data) {
@@ -488,7 +484,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           toast({
             variant: "destructive",
             title: "分析失败",
-            description: res.error || "文章分析失败，请稍后重试。",
+            description: res.error?.message || "文章分析失败，请稍后重试。",
           });
         }
         return;
@@ -544,15 +540,14 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       for (let i = 0; i < chunks.length; i += 1) {
         setAnalysisProgress({ current: i + 1, total: chunks.length });
         const chunk = chunks[i];
-        const res = await studyArticleAction({
-          title: baseTitle,
-          text: chunk.text,
-          includeQuestions: includeQuestions && i === 0,
-          questionCount: includeQuestions && i === 0 ? questionCount : undefined,
-        });
+        const res = await aiApi.studyArticle(
+          chunk.text,
+          includeQuestions && i === 0,
+          questionCount
+        );
 
         if (!res.success || !res.data) {
-          throw new Error(res.error || "文章分析失败，请稍后重试。");
+          throw new Error(res.error?.message || "文章分析失败，请稍后重试。");
         }
 
         outputs.push({ startParagraphIndex: chunk.startParagraphIndex, paragraphCount: chunk.paragraphCount, output: res.data });
@@ -673,13 +668,13 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const res = await defineTermAutoAction({ term: cleanedTerm });
-      if (!res.success || !res.data) {
+      const res = await aiApi.define(cleanedTerm);
+      if (!res.success || !res.data?.definitions) {
         setPreviewGenerated(null);
-        setPreviewError(res.error || "无法生成词条内容，请稍后重试。");
+        setPreviewError(res.error?.message || "无法生成词条内容，请稍后重试。");
         return;
       }
-      setPreviewGenerated(res.data);
+      setPreviewGenerated(res.data.definitions);
     } catch (e: any) {
       setPreviewGenerated(null);
       setPreviewError(e?.message || "生成词条时发生未知错误。");
@@ -742,11 +737,11 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
         }
 
         try {
-          const res = await defineTermAutoAction({ term: cleanedTerm });
-          if (!res.success || !res.data) {
-            failures.push({ term: cleanedTerm, error: res.error || "无法生成词条内容。" });
+          const res = await aiApi.define(cleanedTerm);
+          if (!res.success || !res.data?.definitions) {
+            failures.push({ term: cleanedTerm, error: res.error?.message || "无法生成词条内容。" });
           } else {
-            nextWords.push(...buildCapturedWordsFromDefineOutput(cleanedTerm, res.data, new Date()));
+            nextWords.push(...buildCapturedWordsFromDefineOutput(cleanedTerm, res.data.definitions, new Date()));
           }
         } catch (e: any) {
           failures.push({ term: cleanedTerm, error: e?.message || "生成词条时发生未知错误。" });
@@ -795,17 +790,17 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
 
     setAddingKey(key);
     try {
-      const res = await defineTermAutoAction({ term: cleanedTerm });
-      if (!res.success || !res.data) {
+      const res = await aiApi.define(cleanedTerm);
+      if (!res.success || !res.data?.definitions) {
         toast({
           variant: "destructive",
           title: "加入失败",
-          description: res.error || "无法生成词条内容，请稍后重试。",
+          description: res.error?.message || "无法生成词条内容，请稍后重试。",
         });
         return;
       }
 
-      const newWords = buildCapturedWordsFromDefineOutput(cleanedTerm, res.data, new Date());
+      const newWords = buildCapturedWordsFromDefineOutput(cleanedTerm, res.data.definitions, new Date());
       if (newWords.length === 0) {
         toast({ variant: "destructive", title: "加入失败", description: "模型未返回有效结果，请稍后重试。" });
         return;

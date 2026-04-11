@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { defineTermAutoAction } from "@/app/actions";
+import { aiApi } from "@/lib/api-client";
 import { withRetry, isRetryableError } from "@/lib/ai-retry";
 import { useToast } from "@/hooks/use-toast";
 import type { CapturedWord } from "@/lib/types";
@@ -105,23 +105,26 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
 
         try {
           const defineCacheHash = hashAiCachePayload({ term: word.trim().toLowerCase() });
-          const cached = getAiCache<NonNullable<Awaited<ReturnType<typeof defineTermAutoAction>>["data"]>>(
+          type DefinitionItem = { word: string; partOfSpeech: string; definition: string; enrichment?: any };
+          const cached = getAiCache<DefinitionItem[]>(
             'define',
             defineCacheHash
           );
-          const result = cached ? { success: true, data: cached } : await defineTermAutoAction({ term: word });
+          const result = cached
+            ? { success: true as const, data: { definitions: cached } }
+            : await aiApi.define(word);
 
-          if (!result.success || !result.data) {
+          if (!result.success || !result.data?.definitions) {
             failed.push(word);
             continue;
           }
 
           if (!cached) {
-            setAiCache('define', defineCacheHash, result.data);
+            setAiCache('define', defineCacheHash, result.data.definitions);
           }
 
           const seenPos = new Set<string>();
-          for (const it of result.data) {
+          for (const it of result.data.definitions) {
             const rawPos = String(it.partOfSpeech || "").trim();
             const partOfSpeech = rawPos || ( /\s/.test(word) ? "phrase" : "noun");
             const posKey = partOfSpeech.toLowerCase();
@@ -329,25 +332,28 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
 
         try {
           const defineCacheHash = hashAiCachePayload({ term: term.trim().toLowerCase() });
-          const cached = getAiCache<NonNullable<Awaited<ReturnType<typeof defineTermAutoAction>>["data"]>>(
+          type DefinitionItem = { word: string; partOfSpeech: string; definition: string; enrichment?: any };
+          const cached = getAiCache<DefinitionItem[]>(
             'define',
             defineCacheHash
           );
-          const result = cached ? { success: true, data: cached } : await defineTermAutoAction({ term });
-          if (!result.success || !result.data) {
-            failed.push({ term, reason: result.error || "生成失败" });
+          const result = cached
+            ? { success: true as const, data: { definitions: cached } }
+            : await aiApi.define(term);
+          if (!result.success || !result.data?.definitions) {
+            failed.push({ term, reason: result.error?.message || "生成失败" });
             continue;
           }
 
           if (!cached) {
-            setAiCache('define', defineCacheHash, result.data);
+            setAiCache('define', defineCacheHash, result.data.definitions);
           }
 
           const capturedAt = new Date();
           const seenPos = new Set<string>();
           const newWords: CapturedWord[] = [];
 
-          for (const it of result.data) {
+          for (const it of result.data.definitions) {
             const rawPos = String(it.partOfSpeech || "").trim();
             const partOfSpeech = rawPos || (/\s/.test(term) ? "phrase" : "noun");
             const posKey = partOfSpeech.toLowerCase();

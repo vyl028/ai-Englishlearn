@@ -421,10 +421,143 @@ export const aiApi = {
       timeoutMs: AI_TIMEOUT_MS,
     }),
 
-  studyArticle: (article: string, generateQuestions?: boolean) =>
+  studyArticle: (article: string, generateQuestions?: boolean, questionCount?: number) =>
     request<ArticleStudyResult>('/api/ai/study-article', {
       method: 'POST',
-      body: JSON.stringify({ article, generateQuestions }),
+      body: JSON.stringify({ article, generateQuestions, questionCount }),
       timeoutMs: AI_TIMEOUT_MS,
+    }),
+
+  speakingChat: (params: {
+    scenario?: string;
+    userTextEn: string;
+    history?: Array<{ role: 'user' | 'assistant'; contentEn: string }>;
+    targetLevel?: 'A2' | 'B1' | 'B2' | 'C1';
+  }) =>
+    request<{
+      assistantReplyEn: string;
+      feedbackZh: string;
+      correctedUserEn?: string;
+      issues?: Array<{
+        type?: string;
+        suggestion: string;
+        reasonZh?: string;
+      }>;
+      scoreOverall?: number;
+    }>('/api/ai/speaking-chat', {
+      method: 'POST',
+      body: JSON.stringify(params),
+      timeoutMs: AI_TIMEOUT_MS,
+    }),
+};
+
+// ===== 学习统计 API =====
+
+export interface GamificationState {
+  version: number;
+  xp: number;
+  unlockedBadges: string[];
+  streak: {
+    current: number;
+    longest: number;
+    lastActiveDate?: string;
+  };
+  totals: {
+    wordsAdded: number;
+    practiceCompleted: number;
+    storiesGenerated: number;
+    masteredMarked: number;
+  };
+  daily: Record<string, { xp: number; wordsAdded: number }>;
+}
+
+export interface GrowthGoals {
+  weeklyXpGoal: number;
+  weeklyWordsGoal: number;
+}
+
+export interface LearningEvent {
+  id?: string;
+  type: string;
+  at: string;
+  count?: number;
+  correctCount?: number;
+  totalCount?: number;
+  wordCount?: number;
+  termKey?: string;
+}
+
+export const userStatsApi = {
+  getLearningStats: () =>
+    request<GamificationState>('/api/user-stats/learning', {
+      method: 'GET',
+    }),
+
+  updateLearningStats: (stats: GamificationState) =>
+    request<{ success: boolean }>('/api/user-stats/learning', {
+      method: 'POST',
+      body: JSON.stringify({ stats }),
+    }),
+
+  getGoals: () =>
+    request<GrowthGoals>('/api/user-stats/goals', {
+      method: 'GET',
+    }),
+
+  updateGoals: (goals: GrowthGoals) =>
+    request<{ success: boolean }>('/api/user-stats/goals', {
+      method: 'POST',
+      body: JSON.stringify({ goals }),
+    }),
+
+  getReadingStats: (articleKey: string) =>
+    request<{ attempts: number; best: number; last: number; total: number; bestAt?: number; lastAt?: number }>(
+      `/api/user-stats/reading?articleKey=${encodeURIComponent(articleKey)}`,
+      { method: 'GET' }
+    ),
+
+  updateReadingStats: (data: { articleKey: string; score: number; total: number }) =>
+    request<{ success: boolean }>('/api/user-stats/reading', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getSpeakingStats: () =>
+    request<{ days: Record<string, { attempts: number; scoreSum: number; best: number; last: number; lastAt?: number }> }>(
+      '/api/user-stats/speaking',
+      { method: 'GET' }
+    ),
+
+  updateSpeakingStats: (data: { dateKey: string; score: number; at: string }) =>
+    request<{ success: boolean }>('/api/user-stats/speaking', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getEvents: (limit?: number) =>
+    request<{ events: LearningEvent[] }>(`/api/user-stats/events?limit=${limit ?? 120}`, {
+      method: 'GET',
+    }),
+
+  addEvent: (event: Omit<LearningEvent, 'id'>) =>
+    request<{ events: LearningEvent[] }>('/api/user-stats/events', {
+      method: 'POST',
+      body: JSON.stringify({ event }),
+    }),
+
+  clearEvents: () =>
+    request<{ success: boolean }>('/api/user-stats/events', {
+      method: 'DELETE',
+    }),
+
+  recordEvent: (event: Omit<LearningEvent, 'id'>) =>
+    request<GamificationState>('/api/user-stats/events/record', {
+      method: 'POST',
+      body: JSON.stringify({ event }),
+    }),
+
+  resetAll: () =>
+    request<{ success: boolean }>('/api/user-stats/reset', {
+      method: 'POST',
     }),
 };

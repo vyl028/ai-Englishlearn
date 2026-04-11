@@ -55,7 +55,7 @@ type SettingsSheetProps = {
 
 export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = false }: SettingsSheetProps) {
   const { toast } = useToast();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [confirmResetStep1Open, setConfirmResetStep1Open] = React.useState(false);
   const [confirmResetStep2Open, setConfirmResetStep2Open] = React.useState(false);
 
@@ -80,7 +80,9 @@ export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = fal
   React.useEffect(() => {
     if (!open) return;
     setUsage(getLocalStorageUsageEstimate());
-  }, [open]);
+    // 刷新用户信息，确保账户部分显示最新数据（特别是在切换账户后）
+    void refreshUser();
+  }, [open, refreshUser]);
 
   const quotaBytes = 5 * 1024 * 1024;
   const usagePercent = Math.min(100, Math.round((usage.totalBytes / quotaBytes) * 100));

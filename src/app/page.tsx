@@ -23,7 +23,7 @@ import { GROWTH_GOALS_STORAGE_KEY } from "@/lib/growth-goals";
 import { LEARNING_EVENTS_STORAGE_KEY, recordLearningEvent } from "@/lib/learning-events";
 import { SPEAKING_TRAINING_STATS_STORAGE_KEY } from "@/lib/speaking-training-stats";
 import { Button } from '@/components/ui/button';
-import { regenerateCapturedWordAction, exportStoryPdfAction, generatePracticeAction, generateStoryAction } from '@/app/actions';
+import { exportStoryPdfAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn, generateId } from '@/lib/utils';
 import { getAiCache, hashAiCachePayload, setAiCache } from '@/lib/ai-cache';
@@ -580,17 +580,15 @@ export default function Home() {
 
   const handleRegenerateWord = async (word: CapturedWord): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = await regenerateCapturedWordAction({
-        word: word.word,
-        partOfSpeech: word.partOfSpeech,
-        photoDataUri: word.photoDataUri,
-      });
+      const result = await aiApi.define(word.word);
 
-      if (!result.success || !result.data) {
-        return { success: false, error: result.error || "模型未返回有效结果，请稍后重试。" };
+      if (!result.success || !result.data?.definitions?.[0]) {
+        return { success: false, error: result.error?.message || "模型未返回有效结果，请稍后重试。" };
       }
 
-      const { definition, enrichment } = result.data;
+      const def = result.data.definitions[0];
+      const definition = def.definition;
+      const enrichment = def.enrichment;
       setWords((prev) =>
         prev.map((w) => (w.id === word.id ? { ...w, definition, enrichment } : w))
       );
@@ -643,10 +641,11 @@ export default function Home() {
 
     try {
       const wordIds = practiceWords.map((w) => w.id);
-      const result = await generatePracticeAction(wordIds, {
-        questionCount: options.questionCount,
-        allowedTypes: options.allowedTypes,
-      });
+      const result = await aiApi.practice(
+        wordIds,
+        options.questionCount,
+        options.allowedTypes
+      );
       if (globalTaskIdRef.current !== taskId) return;
 
       if (result.success && result.data) {
@@ -659,7 +658,7 @@ export default function Home() {
       toast({
         variant: "destructive",
         title: "练习生成失败",
-        description: result.error || "发生未知错误，请稍后重试。",
+        description: result.error?.message || "发生未知错误，请稍后重试。",
       });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;
@@ -742,7 +741,7 @@ export default function Home() {
 
     try {
       const wordIds = storyWords.map((w) => w.id);
-      const result = await generateStoryAction(wordIds);
+      const result = await aiApi.story(wordIds);
       if (globalTaskIdRef.current !== taskId) return;
 
       if (result.success && result.data) {
@@ -758,7 +757,7 @@ export default function Home() {
       toast({
         variant: "destructive",
         title: "故事生成失败",
-        description: result.error || "发生未知错误，请稍后重试。",
+        description: result.error?.message || "发生未知错误，请稍后重试。",
       });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;

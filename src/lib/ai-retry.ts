@@ -3,7 +3,7 @@
  * 为 AI 相关请求提供重试机制
  */
 
-import { extractWordAndDefineAction, defineTermAutoAction } from "@/app/actions";
+import { aiApi } from "@/lib/api-client";
 
 export interface RetryConfig {
   maxRetries?: number;
@@ -66,7 +66,13 @@ export async function extractWordWithRetry(
   dataUri: string,
   config?: RetryConfig
 ) {
-  return withRetry(() => extractWordAndDefineAction(dataUri), config);
+  return withRetry(async () => {
+    const result = await aiApi.extract(dataUri);
+    if (!result.success) {
+      throw new Error(result.error?.message || "图片分析失败");
+    }
+    return result.data;
+  }, config);
 }
 
 /**
@@ -76,7 +82,13 @@ export async function defineTermWithRetry(
   term: string,
   config?: RetryConfig
 ) {
-  return withRetry(() => defineTermAutoAction({ term }), config);
+  return withRetry(async () => {
+    const result = await aiApi.define(term);
+    if (!result.success) {
+      throw new Error(result.error?.message || "单词释义生成失败");
+    }
+    return result.data?.definitions;
+  }, config);
 }
 
 /**

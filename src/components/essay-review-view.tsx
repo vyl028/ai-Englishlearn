@@ -3,7 +3,8 @@
 import * as React from "react";
 import { ClipboardCopy, Download, History, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 
-import { reviewEssayAction, extractTextFromFileAction } from "@/app/actions";
+import { extractTextFromFileAction } from "@/app/actions";
+import { aiApi } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewEssayOutput, EssayIssueCategory, EssayIssueSeverity } from "@/lib/types";
 import { extractTextFromImage } from "@/lib/ocr-utils";
@@ -543,7 +544,7 @@ export function EssayReviewView() {
     setIsReviewing(true);
     setResult(null);
     try {
-      const res = await reviewEssayAction({ text: trimmed, taskPrompt: taskPrompt.trim() || undefined });
+      const res = await aiApi.reviewEssay(trimmed, taskPrompt.trim() || undefined);
       if (res.success && res.data) {
         setResult(res.data);
 
@@ -579,7 +580,7 @@ export function EssayReviewView() {
         toast({
           variant: "destructive",
           title: "批改失败",
-          description: res.error || "作文批改失败，请稍后重试。",
+          description: res.error?.message || "作文批改失败，请稍后重试。",
         });
       }
     } catch (e: any) {
