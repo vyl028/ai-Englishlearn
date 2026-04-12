@@ -282,7 +282,7 @@ function extractJson(text: string): any {
   try {
     return JSON.parse(text);
   } catch {
-    // 尝试从代码块中提取
+    // 尝试从完整代码块中提取（有开头和结尾围栏）
     const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (match) {
       try {
@@ -291,6 +291,22 @@ function extractJson(text: string): any {
         // 尝试修复截断的 JSON
         const fixed = tryFixTruncatedJson(match[1]);
         if (fixed) return JSON.parse(fixed);
+      }
+    }
+    // 处理有开头围栏但无结尾围栏的截断响应（AI 输出被 token 限制截断）
+    const openFenceMatch = text.match(/```(?:json)?\s*([\s\S]*)/);
+    if (openFenceMatch) {
+      const partial = openFenceMatch[1].trim();
+      try {
+        return JSON.parse(partial);
+      } catch {
+        const fixed = tryFixTruncatedJson(partial);
+        if (fixed) {
+          try {
+            console.log('[AI] Recovered truncated JSON from open fence');
+            return JSON.parse(fixed);
+          } catch { /* 继续尝试其他方式 */ }
+        }
       }
     }
     // 尝试从文本中提取 JSON 对象
@@ -318,6 +334,32 @@ function toNumber(v: any): number {
     return isNaN(n) ? 0 : n;
   }
   return 0;
+}
+
+// 去除 AI 在 revisedTextEn 开头添加的说明性文字（如 "Note: This revision..."）
+function stripRevisedTextPreamble(text: string): string {
+  if (!text) return '';
+
+  // 常见的说明性前缀模式，匹配后删除到下一个段落
+  const preamblePatterns = [
+    /^Note:[^\n]*\n+/i,
+    /^Note —[^\n]*\n+/i,
+    /^Notice:[^\n]*\n+/i,
+    /^This revision[^\n]*\n+/i,
+    /^The following[^\n]*\n+/i,
+    /^Below is[^\n]*\n+/i,
+    /^Here is[^\n]*\n+/i,
+    /^I have[^\n]*\n+/i,
+    /^Please note[^\n]*\n+/i,
+    /^\*\*Note\*\*:[^\n]*\n+/i,
+    /^\[Note:[^\]]*\]\n+/i,
+  ];
+
+  let cleaned = text.trim();
+  for (const pattern of preamblePatterns) {
+    cleaned = cleaned.replace(pattern, '').trimStart();
+  }
+  return cleaned;
 }
 
 // 验证并规范化作文批改结果
@@ -403,8 +445,9 @@ function validateAndNormalizeEssayReview(raw: any): any {
     result.weaknessesZh = raw.weaknesses_zh;
   }
 
-  // 处理 revisedTextEn
-  result.revisedTextEn = raw.revisedTextEn || raw.revised_text_en || raw.revisedText || '';
+  // 处理 revisedTextEn — 去除 AI 有时在开头添加的说明性文字
+  const rawRevisedText = raw.revisedTextEn || raw.revised_text_en || raw.revisedText || '';
+  result.revisedTextEn = stripRevisedTextPreamble(rawRevisedText);
 
   // 规范化 issues 数组
   const validCategories = ['grammar', 'spelling', 'tense', 'logic', 'coherence', 'task_response', 'word_choice', 'punctuation', 'style', 'other'];
@@ -535,41 +578,58 @@ export class AIService {
     const messages = [
       {
         role: 'system',
-        content: `你是一个图像文字识别助手。请识别图片中的英语单词，并为每个单词生成中文释义和拓展信息。
+        content: `你是一个专业的英语单词识别和词典助手。你的任务是：
+1. 识别图片中所有可见的英语单词（包括教材页面、手写笔记、屏幕截图、单词卡片、标签等各种场景）
+2. 对每个识别出的单词生成详细的中文释义和学习资料
 
-请以 JSON 格式返回：
+重要规则：
+- 识别图片中所有清晰可见的英语单词，不要遗漏
+- 如果图片是句子或段落，提取其中的关键词汇（名词、动词、形容词、副词为主，忽略 the/a/is 等功能词）
+- 每个单词只返回最常用的一个词性和释义
+- 最多返回 10 个单词
+- 必须返回纯 JSON，不加任何说明文字
+
+返回格式（JSON）：
 {
   "words": [
     {
-      "word": "识别出的单词",
-      "partOfSpeech": "词性",
-      "definition": "中文释义",
+      "word": "单词原形",
+      "partOfSpeech": "词性（noun/verb/adjective/adverb/phrase等）",
+      "definition": "简明中文释义",
       "enrichment": {
-        "collocations": ["搭配1", "搭配2", "搭配3"],
-        "examples": [{ "en": "例句", "zh": "翻译" }],
-        "usageZh": "用法说明"
+        "collocations": ["常见搭配1", "常见搭配2", "常见搭配3"],
+        "synonyms": ["近义词1", "近义词2"],
+        "examples": [
+          { "en": "例句（含该单词）", "zh": "中文翻译" },
+          { "en": "例句2", "zh": "翻译2" }
+        ],
+        "usageZh": "简要用法说明（不超过60字）",
+        "difficulty": "easy|medium|hard"
       }
     }
   ]
-}
-
-最多返回 6 个单词，优先选择图片中最清晰、最重要的词汇。`,
+}`,
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: '请识别图片中的英语单词：' },
+          { type: 'text', text: '请识别图片中的所有英语单词，并生成释义和学习资料：' },
           { type: 'image_url', image_url: { url: imageBase64 } },
         ],
       },
     ];
 
-    const response = await callAI(messages, undefined, 4000);
+    const response = await callAI(messages, undefined, 6000);
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
       throw new Error('AI 返回格式不正确');
     }
+
+    // 过滤无效条目（word 或 definition 为空）
+    result.words = result.words.filter(
+      (w: any) => w && typeof w.word === 'string' && w.word.trim() && w.definition
+    );
 
     return result;
   }
@@ -839,7 +899,7 @@ export class AIService {
       "exampleZh": "示例句子中文翻译（可选）"
     }
   ],
-  "revisedTextEn": "优化后的完整作文（英文）",
+  "revisedTextEn": "优化后的完整作文（英文）。重要：此字段只能包含修改后的作文正文，禁止包含任何说明、注释、前言或解释性文字（如 'Note:'、'This revision...' 等）。直接从作文第一段开始。",
   "beforeAfter": [
     {
       "before": "修改前片段",
@@ -957,7 +1017,7 @@ ${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解
       },
     ];
 
-    const response = await callAI(messages, undefined, 4500);
+    const response = await callAI(messages, undefined, 8000);
     const rawResult = extractJson(response);
 
     console.log('[AI] Article study raw result keys:', Object.keys(rawResult));

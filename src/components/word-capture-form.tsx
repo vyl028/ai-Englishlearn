@@ -26,7 +26,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateId } from "@/lib/utils";
 import { getAiCache, hashAiCachePayload, setAiCache } from "@/lib/ai-cache";
 import { LazyImage } from "@/components/lazy-image";
-import { extractTextFromImage, extractWordsFromText } from "@/lib/ocr-utils";
 
 const formSchema = z.object({
   word: z
@@ -69,90 +68,40 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     const token = ++imageAnalysisTokenRef.current;
     setIsAnalyzing(true);
     try {
-      // 步骤 1: 使用前端 OCR 提取图片中的文字
-      console.log("[ImageAnalysis] Step 1: OCR text extraction");
-      const extractedText = await extractTextFromImage(dataUri);
-
-      if (!extractedText || extractedText.length < 3) {
-        toast({
-          variant: "destructive",
-          title: "识别失败",
-          description: "未能从图片中识别到文字，请尝试更清晰的图片。",
-        });
-        return;
-      }
-
-      // 步骤 2: 从文本中提取可能的单词
-      console.log("[ImageAnalysis] Step 2: Extracting words from text");
-      const extractedWords = extractWordsFromText(extractedText);
-
-      if (extractedWords.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "识别失败",
-          description: "未能从图片中提取到有效单词。",
-        });
-        return;
-      }
-
-      console.log("[ImageAnalysis] Extracted words:", extractedWords);
-
-      // 步骤 3: 为每个单词获取定义
-      const capturedAt = new Date();
-      const newWords: CapturedWord[] = [];
-      const failed: string[] = [];
-
-      for (const word of extractedWords) {
-        if (token !== imageAnalysisTokenRef.current) return;
-
-        try {
-          const defineCacheHash = hashAiCachePayload({ term: word.trim().toLowerCase() });
-          type DefinitionItem = { word: string; partOfSpeech: string; definition: string; enrichment?: any };
-          const cached = getAiCache<DefinitionItem[]>(
-            'define',
-            defineCacheHash
-          );
-          const result = cached
-            ? { success: true as const, data: { definitions: cached } }
-            : await aiApi.define(word);
-
-          if (!result.success || !result.data?.definitions) {
-            failed.push(word);
-            continue;
-          }
-
-          if (!cached) {
-            setAiCache('define', defineCacheHash, result.data.definitions);
-          }
-
-          const seenPos = new Set<string>();
-          for (const it of result.data.definitions) {
-            const rawPos = String(it.partOfSpeech || "").trim();
-            const partOfSpeech = rawPos || ( /\s/.test(word) ? "phrase" : "noun");
-            const posKey = partOfSpeech.toLowerCase();
-            if (seenPos.has(posKey)) continue;
-            seenPos.add(posKey);
-
-            const definition = String(it.definition || "").trim();
-            if (!definition) continue;
-
-            newWords.push({
-              id: generateId(),
-              word: word,
-              partOfSpeech,
-              definition,
-              enrichment: it.enrichment,
-              capturedAt,
-              photoDataUri: dataUri,
-            });
-          }
-        } catch (error) {
-          console.error(`[ImageAnalysis] Failed to define word "${word}":`, error);
-          failed.push(word);
-        }
-      }
+      // 直接将图片发给后端多模态 AI，一步完成识别+释义
+      console.log("[ImageAnalysis] Sending image to AI for recognition...");
+      const result = await aiApi.extract(dataUri);
 
       if (token !== imageAnalysisTokenRef.current) return;
+
+      if (!result.success || !result.data?.words || result.data.words.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "识别失败",
+          description: result.error?.message || "未能从图片中识别到有效单词，请尝试更清晰的图片。",
+        });
+        return;
+      }
+
+      const capturedAt = new Date();
+      const newWords: CapturedWord[] = [];
+
+      for (const item of result.data.words) {
+        const word = String(item.word || "").trim();
+        const definition = String(item.definition || "").trim();
+        const partOfSpeech = String(item.partOfSpeech || "noun").trim();
+        if (!word || !definition) continue;
+
+        newWords.push({
+          id: generateId(),
+          word,
+          partOfSpeech,
+          definition,
+          enrichment: item.enrichment,
+          capturedAt,
+          photoDataUri: dataUri,
+        });
+      }
 
       if (newWords.length === 0) {
         toast({
@@ -166,22 +115,18 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
       onMultipleWordsAdded(newWords);
       form.reset();
 
-      const failMsg = failed.length > 0 ? `（${failed.length} 个单词未成功）` : '';
       toast({
-        title: `已识别 ${newWords.length} 个单词${failMsg}`,
+        title: `已识别 ${newWords.length} 个单词`,
         description: `从图片中识别并生成了 ${newWords.length} 个单词的释义。`,
       });
 
     } catch (error) {
       if (token !== imageAnalysisTokenRef.current) return;
       console.error("Image analysis error:", error);
-
-      const errorMessage = error instanceof Error ? error.message : "图片识别过程中发生未知错误。";
-
       toast({
         variant: "destructive",
         title: "识别出错",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : "图片识别过程中发生未知错误。",
       });
     } finally {
       if (token === imageAnalysisTokenRef.current) setIsAnalyzing(false);

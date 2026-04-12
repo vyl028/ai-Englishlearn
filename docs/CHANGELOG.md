@@ -1,3 +1,45 @@
+## 2026-04-12
+
+### 新增/修改内容
+- **图片识别优化：用多模态 AI 替换 Tesseract.js**
+  - 问题：`word-capture-form.tsx` 原用 Tesseract.js（浏览器端 WASM OCR）识别图片，效果极差，尤其对手写笔记、教材图片、真实照片基本无法识别
+  - 方案：废弃三步流程（Tesseract OCR → extractWords → N×define），改为直接将图片 base64 发给后端 `/api/ai/extract`，由 Kimi 视觉模型一步完成识别+释义
+  - 前端：移除 `ocr-utils` import，重写 `handleImageAnalysis`，调用 `aiApi.extract(dataUri)`
+  - 后端：重写 `extractWordsFromImage()` 提示词，支持教材/笔记/截图/单词卡等场景，最多返回 10 个单词，新增 `synonyms`+`difficulty` 字段，token 上限 4000→6000，添加结果后处理过滤空条目
+- **修复作文批改"修改后"列有时显示 AI 注释而非修改内容**
+  - 问题：AI 偶尔在 `revisedTextEn` 开头插入 "Note: This revision..."、"Here is the revised..." 等说明性前言，导致"修改后"区域显示评语而非修改内容
+  - 方案：双层防御——强化 prompt 明确禁止前言文本 + 新增 `stripRevisedTextPreamble()` 后处理函数，通过正则覆盖 Note/Notice/This revision/Below is/Here is/I have/Please note 等常见模式
+- **开源配置改造**（本次会话同步完成）
+  - 移除所有硬编码 IP（`192.168.0.100`）
+  - 替换 `server/.env.example` 中的真实 API Key 为占位符 `your-api-key-here`
+  - 补充 `.gitignore`（新增 server/node_modules、server/dist、server/.env、server/*.db 等）
+  - 重写 `README.md`（快速上手指南：前提/克隆/安装/配置/数据库初始化/启动/手机访问/结构/技术栈）
+  - 新增 `install.bat` / `install.sh` 一键安装脚本
+  - 重写 `start.bat`（动态 IP 检测，`setlocal enabledelayedexpansion`）
+  - 新增 `start.sh`（Mac/Linux 启动脚本）
+  - 通过 `git filter-repo --replace-text` 清除历史 commit 中的真实 API Key，重新 force push
+
+### 涉及文件
+- 修改：`src/components/word-capture-form.tsx`（移除 ocr-utils，重写 handleImageAnalysis）
+- 修改：`server/src/services/ai-service.ts`（重写 extractWordsFromImage 提示词，新增 stripRevisedTextPreamble）
+- 修改：`server/.env.example`（脱敏 API Key，补充注释与多 Provider 示例）
+- 修改：`.gitignore`（补充 server 构建产物与数据库文件）
+- 修改：`README.md`（全面重写为开源快速上手文档）
+- 修改：`start.bat`（动态 IP 检测）
+- 新增：`install.bat` / `install.sh` / `start.sh`
+
+### 背景/原因
+- Tesseract.js 是纯 OCR 引擎，对真实场景图片识别率低，且需要两步（OCR+释义）；直接用多模态模型一步完成效果更好
+- AI 输出不可控，需要后处理层兜底，防止"修改后"列显示非预期内容
+- 项目准备上传 GitHub 开源，需移除敏感信息、补充安装脚本和文档
+
+### 如何验证
+- 图片识别：上传或拍摄包含英文单词的教材/笔记图片，应能识别出单词并生成释义（不再依赖 Tesseract）
+- 作文批改：提交作文批改，"对照"→"修改后"区域应显示修改后的作文全文，不应包含 "Note:"、"Here is..." 等说明性文字
+- 开源配置：`git log --all -p | grep -i "sk-kimi"` 应无结果（密钥已清除）
+
+---
+
 ## 2026-04-10
 
 ### 新增/修改内容
