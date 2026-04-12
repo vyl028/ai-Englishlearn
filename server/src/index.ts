@@ -20,14 +20,18 @@ const PORT = process.env.PORT || 4000;
 // 中间件
 app.use(helmet());
 app.use(cors({
-  origin: [
-    'http://localhost:9002',
-    'http://0.0.0.0:9002',
-    'http://127.0.0.1:9002',
-    'http://192.168.0.100:9002',
-    'http://192.168.168.1:9002',
-    'http://192.168.23.1:9002',
-  ],
+  origin: (origin, callback) => {
+    // 允许无 origin 的请求（如 curl、Postman）
+    if (!origin) return callback(null, true);
+    // 允许 localhost / 127.0.0.1
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    // 允许局域网 IP（192.168.x.x、10.x.x.x、172.16-31.x.x）
+    if (/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return callback(null, true);
+    // 允许环境变量指定的额外来源
+    const extra = process.env.CLIENT_URL;
+    if (extra && origin === extra) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(morgan('dev'));
