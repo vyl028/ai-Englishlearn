@@ -8,12 +8,12 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // 允许所有局域网来源访问开发服务器（手机 / 其他设备）
   allowedDevOrigins: [
-    'http://192.168.0.100:9002',
-    'http://192.168.0.101:9002',
-    'http://192.168.168.1:9002',
-    'http://192.168.23.1:9002',
-    'http://localhost:9002',
+    '*.local',
+    '192.168.*.*',
+    '10.*.*.*',
+    '172.*.*.*',
   ],
   images: {
     remotePatterns: [

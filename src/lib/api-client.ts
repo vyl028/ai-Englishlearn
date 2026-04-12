@@ -1,6 +1,17 @@
 // API 客户端配置
-// 使用电脑IP地址，支持手机和电脑访问
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.0.100:4000';
+// 优先读构建时注入的环境变量，开发模式兜底用当前页面的 hostname（手机访问时自动使用局域网 IP）
+function resolveApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    // 用当前页面的 hostname，确保手机访问时指向正确的局域网 IP
+    return `http://${window.location.hostname}:4000`;
+  }
+  return 'http://localhost:4000';
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 // 调试：在浏览器控制台显示当前使用的API地址
 if (typeof window !== 'undefined') {

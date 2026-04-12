@@ -6,16 +6,17 @@ module.exports = {
       args: 'start',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000, // Next.js app will run on this port
+        PORT: 9002,
       },
     },
     {
-      name: 'lexicapture-ai',
-      script: 'node',
-      args: '--loader tsx src/ai/server.ts',
+      name: 'lexicapture-server',
+      script: 'npm',
+      args: 'start',
+      cwd: './server',
       env: {
         NODE_ENV: 'production',
-        PORT: 3400, // AI service port (express)
+        PORT: 4000,
       },
     },
   ],
