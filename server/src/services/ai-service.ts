@@ -6,6 +6,9 @@ const BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.kimi.com/coding/';
 const MODEL = process.env.OPENAI_MODEL || 'kimi-k2.5';
 const TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '120000');
 
+// 视觉模型配置（专用于图片识别，主模型不支持视觉）
+const VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'qwen3-vl:235b';
+
 // 带超时的 fetch 函数
 async function fetchWithTimeout(
   url: string,
@@ -102,6 +105,47 @@ async function callAI(
   }
 
   throw lastError || new Error('AI 请求失败');
+}
+
+// 视觉 AI 请求函数（使用支持图片的模型，不重试）
+async function callVisionAI(
+  messages: any[],
+  maxTokens: number = 4000
+): Promise<string> {
+  const url = `${BASE_URL}chat/completions`;
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages,
+        temperature: 0.3,
+        max_tokens: maxTokens,
+      }),
+    },
+    TIMEOUT_MS
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Vision AI API error: ${response.status} - ${errorText}`);
+  }
+
+  const data: any = await response.json();
+  const content = data.choices[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('Vision AI 返回空内容');
+  }
+
+  // 去除 <think>...</think> 推理块（qwen3-vl 会输出思考过程）
+  return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
 // 尝试修复截断的 JSON
@@ -531,38 +575,20 @@ export class AIService {
     const messages = [
       {
         role: 'system',
-        content: `你是一个英语词典助手。请为给定的英语单词或短语生成中文释义和拓展信息。
+        content: `你是英语词典助手。为给定单词生成中文释义，严格按 JSON 格式返回，不要多余说明。
 
-请以 JSON 格式返回，结构如下：
-{
-  "definitions": [
-    {
-      "word": "原词",
-      "partOfSpeech": "词性 (noun/verb/adjective/adverb/phrase等)",
-      "definition": "中文释义",
-      "enrichment": {
-        "collocations": ["常见搭配1", "常见搭配2"],
-        "synonyms": ["同义词1", "同义词2"],
-        "antonyms": ["反义词1", "反义词2"],
-        "examples": [
-          { "en": "英文例句", "zh": "中文翻译" }
-        ],
-        "usageZh": "用法说明（80字以内）",
-        "difficulty": "难度 (easy/medium/hard)"
-      }
-    }
-  ]
-}
+格式：
+{"definitions":[{"word":"原词","partOfSpeech":"词性","definition":"中文释义","enrichment":{"collocations":["搭配1","搭配2"],"synonyms":["同义1","同义2"],"antonyms":["反义1"],"examples":[{"en":"例句","zh":"翻译"}],"usageZh":"用法说明（50字内）","difficulty":"easy|medium|hard"}}]}
 
-对于多词性单词，返回多个 definition 对象。`,
+注意：每个数组最多2项，examples只要1项，只返回最常用的1个词性。`,
       },
       {
         role: 'user',
-        content: `请为 "${term}" 生成释义和拓展信息`,
+        content: `"${term}"`,
       },
     ];
 
-    const response = await callAI(messages, undefined, 4000);
+    const response = await callAI(messages, undefined, 1500);
     const result = extractJson(response);
 
     // 验证返回格式
@@ -600,7 +626,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 500);
+    const response = await callVisionAI(messages, 500);
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
@@ -637,13 +663,20 @@ export class AIService {
           });
         }
       } catch (err) {
-        console.warn(`[AI] Failed to define word "${term}":`, err);
+        console.warn(`[AI] Failed to define word "${term}", using fallback:`, err);
+        // 降级：保留单词但不含释义，避免整批失败
+        words.push({
+          word: term,
+          partOfSpeech: 'unknown',
+          definition: '',
+          enrichment: undefined,
+        });
       }
     }
 
-    // 过滤无效条目
+    // 过滤无效条目（保留 definition 为空的降级词条，只排除 word 本身为空的）
     const validWords = words.filter(
-      (w: any) => w && typeof w.word === 'string' && w.word.trim() && w.definition
+      (w: any) => w && typeof w.word === 'string' && w.word.trim()
     );
 
     return { words: validWords };
@@ -683,7 +716,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 4000);
+    const response = await callVisionAI(messages, 4000);
     const text = response.trim();
 
     if (!text || text.length < 5) {
