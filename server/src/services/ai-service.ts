@@ -573,65 +573,124 @@ export class AIService {
     return result;
   }
 
-  // 图片识别单词
-  static async extractWordsFromImage(imageBase64: string) {
+  // 步骤一：从图片中识别单词列表（只识别，不生成释义）
+  static async recognizeWordsFromImage(imageBase64: string): Promise<string[]> {
     const messages = [
       {
         role: 'system',
-        content: `你是一个专业的英语单词识别和词典助手。你的任务是：
-1. 识别图片中所有可见的英语单词（包括教材页面、手写笔记、屏幕截图、单词卡片、标签等各种场景）
-2. 对每个识别出的单词生成详细的中文释义和学习资料
+        content: `你是专业的图片文字识别助手。
+任务：识别图片中所有可见的英语单词，原样输出，不要修改。
 
-重要规则：
-- 识别图片中所有清晰可见的英语单词，不要遗漏
-- 如果图片是句子或段落，提取其中的关键词汇（名词、动词、形容词、副词为主，忽略 the/a/is 等功能词）
-- 每个单词只返回最常用的一个词性和释义
-- 最多返回 10 个单词
-- 必须返回纯 JSON，不加任何说明文字
+规则：
+- 包括教材、手写笔记、单词卡、屏幕截图等所有场景
+- 如果图片只有少量单词（如单词卡），全部输出，一个都不能遗漏
+- 如果图片是句子或段落，列出实词（名词/动词/形容词/副词），忽略 a/an/the/is/are/of/to/in/on/at/and/or/but/it/he/she/we/they 等功能词
+- 最多返回 15 个单词
+- 只返回 JSON，不加任何说明文字
 
-返回格式（JSON）：
-{
-  "words": [
-    {
-      "word": "单词原形",
-      "partOfSpeech": "词性（noun/verb/adjective/adverb/phrase等）",
-      "definition": "简明中文释义",
-      "enrichment": {
-        "collocations": ["常见搭配1", "常见搭配2", "常见搭配3"],
-        "synonyms": ["近义词1", "近义词2"],
-        "examples": [
-          { "en": "例句（含该单词）", "zh": "中文翻译" },
-          { "en": "例句2", "zh": "翻译2" }
-        ],
-        "usageZh": "简要用法说明（不超过60字）",
-        "difficulty": "easy|medium|hard"
-      }
-    }
-  ]
-}`,
+返回格式：
+{ "words": ["word1", "word2", "word3"] }`,
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: '请识别图片中的所有英语单词，并生成释义和学习资料：' },
+          { type: 'text', text: '请识别图片中的所有英语单词：' },
           { type: 'image_url', image_url: { url: imageBase64 } },
         ],
       },
     ];
 
-    const response = await callAI(messages, undefined, 6000);
+    const response = await callAI(messages, undefined, 500);
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
-      throw new Error('AI 返回格式不正确');
+      throw new Error('图片识别返回格式不正确');
     }
 
-    // 过滤无效条目（word 或 definition 为空）
-    result.words = result.words.filter(
+    return result.words
+      .map((w: any) => (typeof w === 'string' ? w.trim() : String(w || '').trim()))
+      .filter(Boolean);
+  }
+
+  // 图片识别单词（两步：先识别单词列表，再批量生成释义）
+  static async extractWordsFromImage(imageBase64: string) {
+    // Step 1：识别图片中的单词列表
+    const wordList = await AIService.recognizeWordsFromImage(imageBase64);
+    console.log('[AI] Recognized words from image:', wordList);
+
+    if (wordList.length === 0) {
+      return { words: [] };
+    }
+
+    // Step 2：对每个单词调用 defineWord 生成完整释义
+    const words: any[] = [];
+    for (const term of wordList) {
+      try {
+        const def = await AIService.defineWord(term);
+        if (def.definitions && Array.isArray(def.definitions) && def.definitions.length > 0) {
+          const d = def.definitions[0];
+          words.push({
+            word: d.word || term,
+            partOfSpeech: d.partOfSpeech || 'noun',
+            definition: d.definition || '',
+            enrichment: d.enrichment,
+          });
+        }
+      } catch (err) {
+        console.warn(`[AI] Failed to define word "${term}":`, err);
+      }
+    }
+
+    // 过滤无效条目
+    const validWords = words.filter(
       (w: any) => w && typeof w.word === 'string' && w.word.trim() && w.definition
     );
 
-    return result;
+    return { words: validWords };
+  }
+
+  // 从图片中转录文章或作文文字（多模态 AI，替代 Tesseract）
+  static async extractTextFromImage(imageBase64: string, mode: 'article' | 'essay'): Promise<{ text: string }> {
+    const systemPrompt = mode === 'article'
+      ? `你是专业的图片文字转录助手。
+任务：将图片中的英文文章完整、准确地转录为纯文本。
+
+规则：
+- 保留原文的段落结构（段落之间用空行分隔）
+- 保持原文拼写，明显的印刷错误可以纠正
+- 不添加任何注释、翻译或说明性文字
+- 直接从第一个词开始输出，不加任何前言或后记`
+      : `你是专业的手写与印刷文字识别助手。
+任务：将图片中的英文作文完整转录为纯文本。
+
+规则：
+- 保留原文的所有拼写和语法错误（作文批改场景需要原始文本）
+- 保留段落结构（段落之间用空行分隔）
+- 不添加任何注释、评语或说明性文字
+- 直接从第一个词开始输出，不加任何前言或后记`;
+
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '请转录图片中的文字：' },
+          { type: 'image_url', image_url: { url: imageBase64 } },
+        ],
+      },
+    ];
+
+    const response = await callAI(messages, undefined, 4000);
+    const text = response.trim();
+
+    if (!text || text.length < 5) {
+      throw new Error('未能从图片中识别到足够文字');
+    }
+
+    return { text };
   }
 
   // 生成练习题

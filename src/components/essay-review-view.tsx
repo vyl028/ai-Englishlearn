@@ -7,7 +7,6 @@ import { extractTextFromFileAction } from "@/app/actions";
 import { aiApi } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewEssayOutput, EssayIssueCategory, EssayIssueSeverity } from "@/lib/types";
-import { extractTextFromImage } from "@/lib/ocr-utils";
 import { generateId } from "@/lib/utils";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -467,8 +466,8 @@ export function EssayReviewView() {
       const isImage = file.type.startsWith("image/") || /\.(png|jpg|jpeg|webp)$/i.test(file.name);
 
       if (isImage) {
-        // Use frontend OCR for images
-        console.log("[EssayReview] Detected image file, using frontend OCR");
+        // Use backend multimodal AI for images (replaces Tesseract OCR)
+        console.log("[EssayReview] Detected image file, using AI text extraction");
         const reader = new FileReader();
         const imageDataUri = await new Promise<string>((resolve, reject) => {
           reader.onloadend = () => resolve(reader.result as string);
@@ -476,9 +475,9 @@ export function EssayReviewView() {
           reader.readAsDataURL(file);
         });
 
-        const extractedText = await extractTextFromImage(imageDataUri);
+        const res = await aiApi.extractText(imageDataUri, 'essay');
 
-        if (!extractedText || extractedText.length < 10) {
+        if (!res.success || !res.data?.text || res.data.text.length < 10) {
           toast({
             variant: "destructive",
             title: "识别失败",
@@ -487,6 +486,7 @@ export function EssayReviewView() {
           return;
         }
 
+        const extractedText = res.data.text;
         setText(extractedText);
         toast({
           title: "图片识别完成",

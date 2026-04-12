@@ -37,6 +37,11 @@ const articleSchema = z.object({
   questionCount: z.coerce.number().int().min(1).max(12).optional().default(5),
 });
 
+const extractTextSchema = z.object({
+  imageBase64: z.string().min(1),
+  mode: z.enum(['article', 'essay']),
+});
+
 // 生成单词释义
 router.post('/define', async (req: AuthRequest, res) => {
   try {
@@ -59,6 +64,23 @@ router.post('/extract', async (req: AuthRequest, res) => {
   try {
     const { imageBase64 } = extractSchema.parse(req.body);
     const result = await AIService.extractWordsFromImage(imageBase64);
+    return successResponse(res, result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
+    }
+    if (error instanceof Error) {
+      return errorResponse(res, 'AI_ERROR', error.message, 500);
+    }
+    throw error;
+  }
+});
+
+// 图片转录文字（文章阅读 / 作文批改场景，替代前端 Tesseract OCR）
+router.post('/extract-text', async (req: AuthRequest, res) => {
+  try {
+    const { imageBase64, mode } = extractTextSchema.parse(req.body);
+    const result = await AIService.extractTextFromImage(imageBase64, mode);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {

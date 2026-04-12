@@ -6,7 +6,6 @@ import { Copy, Eye, ListPlus, Loader2, RotateCcw, Upload } from "lucide-react";
 import { extractTextFromFileAction } from "@/app/actions";
 import { aiApi } from "@/lib/api-client";
 import type { CapturedWord, DefineTermAutoOutput, StudyArticleOutput, WordEnrichment } from "@/lib/types";
-import { extractTextFromImage } from "@/lib/ocr-utils";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
 
@@ -208,8 +207,8 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       const isImage = file.type.startsWith("image/") || /\.(png|jpg|jpeg|webp)$/i.test(file.name);
 
       if (isImage) {
-        // Use frontend OCR for images
-        console.log("[ArticleReading] Detected image file, using frontend OCR");
+        // Use backend multimodal AI for images (replaces Tesseract OCR)
+        console.log("[ArticleReading] Detected image file, using AI text extraction");
         const reader = new FileReader();
         const imageDataUri = await new Promise<string>((resolve, reject) => {
           reader.onloadend = () => resolve(reader.result as string);
@@ -217,9 +216,9 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           reader.readAsDataURL(file);
         });
 
-        const extractedText = await extractTextFromImage(imageDataUri);
+        const res = await aiApi.extractText(imageDataUri, 'article');
 
-        if (!extractedText || extractedText.length < 10) {
+        if (!res.success || !res.data?.text || res.data.text.length < 10) {
           toast({
             variant: "destructive",
             title: "识别失败",
@@ -228,6 +227,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           return;
         }
 
+        const extractedText = res.data.text;
         setText(extractedText);
         const warnings: string[] = [];
         setFileReadInfo({ filename: file.name, warnings });

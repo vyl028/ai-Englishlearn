@@ -459,6 +459,13 @@ export const aiApi = {
       body: JSON.stringify(params),
       timeoutMs: AI_TIMEOUT_MS,
     }),
+
+  extractText: (imageBase64: string, mode: 'article' | 'essay') =>
+    request<{ text: string }>('/api/ai/extract-text', {
+      method: 'POST',
+      body: JSON.stringify({ imageBase64, mode }),
+      timeoutMs: AI_TIMEOUT_MS,
+    }),
 };
 
 // ===== 学习统计 API =====
