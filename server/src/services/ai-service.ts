@@ -286,52 +286,97 @@ function trySmartFixTruncatedJson(text: string): string | null {
 }
 
 // JSON 提取工具
+function stripJsonPreamble(text: string): string {
+  // 移除常见的前缀文字，直到第一个 { 或 [
+  const idxObj = text.indexOf('{');
+  const idxArr = text.indexOf('[');
+  let start = -1;
+  if (idxObj >= 0 && idxArr >= 0) start = Math.min(idxObj, idxArr);
+  else if (idxObj >= 0) start = idxObj;
+  else if (idxArr >= 0) start = idxArr;
+  if (start > 0) return text.slice(start);
+  return text;
+}
+
+function stripJsonPostamble(text: string): string {
+  // 找到最后一个匹配的 } 或 ]
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let lastValidPos = -1;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (escapeNext) { escapeNext = false; continue; }
+    if (char === '\\') { escapeNext = true; continue; }
+    if (char === '"' && !inString) { inString = true; continue; }
+    if (char === '"' && inString) { inString = false; continue; }
+    if (inString) continue;
+    if (char === '{') braceDepth++;
+    else if (char === '}') { braceDepth--; if (braceDepth === 0 && bracketDepth === 0) lastValidPos = i; }
+    else if (char === '[') bracketDepth++;
+    else if (char === ']') { bracketDepth--; if (braceDepth === 0 && bracketDepth === 0) lastValidPos = i; }
+  }
+  if (lastValidPos >= 0) return text.slice(0, lastValidPos + 1);
+  return text;
+}
+
+function findJsonCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  // 1. markdown fenced block
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) candidates.push(fenced[1].trim());
+
+  // 2. open fence without close
+  const openFence = text.match(/```(?:json)?\s*([\s\S]*)/);
+  if (openFence) candidates.push(openFence[1].trim());
+
+  // 3. strip preamble/postamble
+  const stripped = stripJsonPostamble(stripJsonPreamble(text));
+  if (stripped) candidates.push(stripped);
+
+  return candidates;
+}
+
 function extractJson(text: string): any {
-  // 尝试直接解析
-  try {
-    return JSON.parse(text);
-  } catch {
-    // 尝试从完整代码块中提取（有开头和结尾围栏）
-    const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (match) {
-      try {
-        return JSON.parse(match[1]);
-      } catch {
-        // 尝试修复截断的 JSON
-        const fixed = tryFixTruncatedJson(match[1]);
-        if (fixed) return JSON.parse(fixed);
-      }
+  const trimmed = text.trim();
+  // 1. 直接解析
+  try { return JSON.parse(trimmed); } catch { /* continue */ }
+
+  // 2. 尝试多个候选
+  const candidates = findJsonCandidates(trimmed);
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch { /* try next */ }
+    const fixed = tryFixTruncatedJson(candidate);
+    if (fixed) {
+      try { return JSON.parse(fixed); } catch { /* try next */ }
     }
-    // 处理有开头围栏但无结尾围栏的截断响应（AI 输出被 token 限制截断）
-    const openFenceMatch = text.match(/```(?:json)?\s*([\s\S]*)/);
-    if (openFenceMatch) {
-      const partial = openFenceMatch[1].trim();
-      try {
-        return JSON.parse(partial);
-      } catch {
-        const fixed = tryFixTruncatedJson(partial);
-        if (fixed) {
-          try {
-            console.log('[AI] Recovered truncated JSON from open fence');
-            return JSON.parse(fixed);
-          } catch { /* 继续尝试其他方式 */ }
-        }
-      }
-    }
-    // 尝试从文本中提取 JSON 对象
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        // 尝试修复截断的 JSON
-        const fixed = tryFixTruncatedJson(jsonMatch[0]);
-        if (fixed) return JSON.parse(fixed);
+  }
+
+  // 3. 尝试找到最内层的 JSON 对象（从第一个 { 到最后一个匹配的 }）
+  const objMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try { return JSON.parse(objMatch[0]); } catch {
+      const fixed = tryFixTruncatedJson(objMatch[0]);
+      if (fixed) {
+        try { return JSON.parse(fixed); } catch { /* continue */ }
       }
     }
   }
-  // 输出原始内容以便调试
-  console.error('[AI] Failed to extract JSON. Raw text preview:', text.substring(0, 500));
+
+  // 4. 尝试找到 JSON 数组（从第一个 [ 到最后一个匹配的 ]）
+  const arrMatch = trimmed.match(/\[[\s\S]*\]/);
+  if (arrMatch) {
+    try { return JSON.parse(arrMatch[0]); } catch {
+      const fixed = tryFixTruncatedJson(arrMatch[0]);
+      if (fixed) {
+        try { return JSON.parse(fixed); } catch { /* continue */ }
+      }
+    }
+  }
+
+  console.error('[AI] Failed to extract JSON. Raw text preview:', trimmed.substring(0, 800));
   throw new Error('无法从响应中提取 JSON');
 }
 
@@ -540,7 +585,11 @@ export class AIService {
     const messages = [
       {
         role: 'system',
-        content: `你是英语词典助手。为给定单词生成中文释义，严格按 JSON 格式返回，不要多余说明。
+        content: `你是英语词典助手。为给定单词生成中文释义。
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 格式：
 {"definitions":[{"word":"原词","partOfSpeech":"词性","definition":"中文释义","enrichment":{"collocations":["搭配1","搭配2"],"synonyms":["同义1","同义2"],"antonyms":["反义1"],"examples":[{"en":"例句","zh":"翻译"}],"usageZh":"用法说明（50字内）","difficulty":"easy|medium|hard"}}]}
@@ -553,7 +602,7 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 1500 });
+    const response = await callLLM(messages, { maxTokens: 1500, responseFormat: { type: 'json_object' } });
     const result = extractJson(response);
 
     // 验证返回格式
@@ -577,7 +626,8 @@ export class AIService {
 - 如果图片只有少量单词（如单词卡），全部输出，一个都不能遗漏
 - 如果图片是句子或段落，列出实词（名词/动词/形容词/副词），忽略 a/an/the/is/are/of/to/in/on/at/and/or/but/it/he/she/we/they 等功能词
 - 最多返回 15 个单词
-- 只返回 JSON，不加任何说明文字
+- 只返回纯 JSON，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 返回格式：
 { "words": ["word1", "word2", "word3"] }`,
@@ -591,7 +641,7 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 500, retries: 0, stripThink: true });
+    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 500, retries: 0, stripThink: true, responseFormat: { type: 'json_object' } });
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
@@ -711,6 +761,11 @@ export class AIService {
 2. fill_blank (填空题): 句子挖空，填写单词正确形式
 3. reorder (重组题): 打乱单词顺序，要求重组为正确句子
 
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+- 必须生成${questionCount}道题目，不能多也不能少
+
 请以 JSON 格式返回：
 {
   "questions": [
@@ -767,7 +822,7 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 3500 });
+    const response = await callLLM(messages, { maxTokens: 3500, responseFormat: { type: 'json_object' } });
     const result = extractJson(response);
 
     if (!result.questions || !Array.isArray(result.questions)) {
@@ -893,6 +948,10 @@ export class AIService {
         role: 'system',
         content: `你是一个英语故事生成助手。请基于给定的单词列表编写一个有趣的故事，帮助学习者记忆这些单词。
 
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+
 请以 JSON 格式返回：
 {
   "title": "故事标题",
@@ -912,7 +971,7 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 3500 });
+    const response = await callLLM(messages, { maxTokens: 3500, responseFormat: { type: 'json_object' } });
     const result = extractJson(response);
 
     if (!result.title || !result.story || !result.translation) {
@@ -928,6 +987,10 @@ export class AIService {
       {
         role: 'system',
         content: `你是一个雅思写作 Task 2 批改专家。请对作文进行全面批改和评分。
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 请以 JSON 格式返回：
 {
@@ -974,7 +1037,7 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 8000 });
+    const response = await callLLM(messages, { maxTokens: 8000, responseFormat: { type: 'json_object' } });
     const rawResult = extractJson(response);
 
     console.log('[AI] Essay review raw result:', JSON.stringify({
@@ -1013,6 +1076,10 @@ export class AIService {
       {
         role: 'system',
         content: `你是一个英语阅读教学助手。请对文章进行深度分析，帮助学习者理解。
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 请以 JSON 格式返回：
 {
@@ -1211,6 +1278,10 @@ ${userTextEn.trim()}
    - 提供更自然的纠正版本（英语）
    - 给出 1-2 条实用建议
 
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+
 请以 JSON 格式返回：
 {
   "assistantReplyEn": "助手回复（英语）",
@@ -1224,7 +1295,7 @@ ${userTextEn.trim()}
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 1500 });
+    const response = await callLLM(messages, { maxTokens: 1500, responseFormat: { type: 'json_object' } });
     const result = extractJson(response);
 
     return {
