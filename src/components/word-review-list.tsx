@@ -286,7 +286,7 @@ export function WordReviewList({
   const [practiceConfirmOpen, setPracticeConfirmOpen] = useState(false);
   const [generatorGroupId, setGeneratorGroupId] = useState<string>(selectedGroupId || ALL_GROUP_ID);
 
-  const [questionCountText, setQuestionCountText] = useState('10');
+  const [questionCountText, setQuestionCountText] = useState('5');
   const [typeSelection, setTypeSelection] = useState<Record<PracticeQuestionType, boolean>>({
     mcq: true,
     fill_blank: true,

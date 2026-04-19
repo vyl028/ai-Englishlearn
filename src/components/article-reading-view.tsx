@@ -79,7 +79,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
   const [title, setTitle] = React.useState("");
   const [text, setText] = React.useState("");
   const [includeQuestions, setIncludeQuestions] = React.useState(false);
-  const [questionCount, setQuestionCount] = React.useState(6);
+  const [questionCount, setQuestionCount] = React.useState(4);
 
   const [result, setResult] = React.useState<StudyArticleOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
