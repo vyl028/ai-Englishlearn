@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Copy, Eye, ListPlus, Loader2, RotateCcw, Upload } from "lucide-react";
 
-import { extractTextFromFileAction } from "@/app/actions";
+import { extractEssayTextFromFileAction } from "@/app/actions";
 import { aiApi } from "@/lib/api-client";
 import type { CapturedWord, DefineTermAutoOutput, StudyArticleOutput, WordEnrichment } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -208,7 +208,6 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
 
       if (isImage) {
         // Use backend multimodal AI for images (replaces Tesseract OCR)
-        console.log("[ArticleReading] Detected image file, using AI text extraction");
         const reader = new FileReader();
         const imageDataUri = await new Promise<string>((resolve, reject) => {
           reader.onloadend = () => resolve(reader.result as string);
@@ -239,7 +238,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
         // Use backend for text/PDF/docx files
         const formData = new FormData();
         formData.append("file", file);
-        const res = await extractTextFromFileAction(formData);
+        const res = await extractEssayTextFromFileAction(formData);
         if (res.success && res.data?.text) {
           setText(res.data.text);
           const warnings = (res.data.warnings || [])
@@ -453,31 +452,23 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
   };
 
   const handleAnalyze = async () => {
-    console.log("[ArticleReadingView] handleAnalyze called, text:", text, "length:", text?.length);
     const trimmed = text.trim();
-    console.log("[ArticleReadingView] trimmed text length:", trimmed?.length);
     if (!trimmed) {
-      console.log("[ArticleReadingView] Empty text, returning");
       toast({ variant: "destructive", title: "请输入文章", description: "请粘贴或上传英文文章正文后再开始分析。" });
       return;
     }
 
-    console.log("[ArticleReadingView] Starting analysis...");
     setIsAnalyzing(true);
     setAnalysisProgress(null);
     setAnalysisMeta(null);
     setResult(null);
 
     const baseTitle = title.trim() || undefined;
-    console.log("[ArticleReadingView] baseTitle:", baseTitle, "includeQuestions:", includeQuestions);
     try {
       if (trimmed.length <= 16000) {
-        console.log("[ArticleReadingView] Calling studyArticleAction...");
         const res = await aiApi.studyArticle(trimmed, includeQuestions, questionCount);
-        console.log("[ArticleReadingView] studyArticleAction returned:", res);
 
         if (res.success && res.data) {
-          console.log("[ArticleReadingView] Setting result data");
           setResult(res.data);
           toast({ title: "分析完成", description: "已生成结构、句法、难句拆解与词汇提取结果。" });
         } else {
@@ -1662,7 +1653,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button type="button" onClick={() => { console.log("[ArticleReadingView] Button clicked"); handleAnalyze(); }} disabled={isAnalyzing || isParsingFile} className="w-full sm:w-auto">
+          <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || isParsingFile} className="w-full sm:w-auto">
             {isAnalyzing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

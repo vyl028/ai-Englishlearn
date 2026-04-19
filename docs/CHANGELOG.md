@@ -1,3 +1,76 @@
+## 2026-04-19
+
+### 新增/修改内容
+- **B方案前端 Provider 适配器精简**
+  - 新增 `src/ai/types.ts`：提取 `GenerateOptions`、`ImageInput`、`GenerateTextParams` 共用接口，以及 `getAiErrorMessage` 公共错误映射函数
+  - 修改 `src/ai/gemini.ts` 和 `src/ai/openai.ts`：删除重复的接口定义和错误映射逻辑，统一从 `types.ts` import
+  - 新增 `src/lib/fetch-utils.ts`：提取公共 `fetchWithTimeout` 函数
+  - 修改 `src/app/actions.ts` 和 `src/lib/api-client.ts`：复用 `fetchWithTimeout`，删除各自的内联重复实现
+  - 清理废弃 Action：删除 `generateQuizAction`（已废弃）、`extractTextFromFileAction`（与 `extractEssayTextFromFileAction` 完全重复）
+  - 同步修改 `src/components/essay-review-view.tsx`：将 `extractTextFromFileAction` 调用改为 `extractEssayTextFromFileAction`
+  - 清理 `studyArticleAction` 中遗漏的调试 `console.log`
+  - 从 `actions.ts` 导入中移除不再使用的 `GenerateQuizInput`、`GenerateQuizOutput`
+
+### 涉及文件
+- 新增：`src/ai/types.ts`
+- 新增：`src/lib/fetch-utils.ts`
+- 修改：`src/ai/gemini.ts`、`src/ai/openai.ts`
+- 修改：`src/app/actions.ts`、`src/lib/api-client.ts`
+- 修改：`src/components/essay-review-view.tsx`
+
+### 背景/原因
+- `gemini.ts` 和 `openai.ts` 存在 `GenerateOptions`/`ImageInput` 接口和 HTTP 错误映射的明显重复，违反 DRY 原则
+- `actions.ts` 和 `api-client.ts` 各自独立实现了完全相同的 `fetchWithTimeout`，应提取到公共模块
+- `generateQuizAction` 已废弃且直接返回错误、`extractTextFromFileAction` 是完全重复包装，属于死代码
+
+### 如何验证
+- 运行：`npm run typecheck`（无新增错误）
+- 运行：`npm run lint`（无新增错误）
+
+---
+
+## 2026-04-19
+
+### 新增/修改内容
+- **C方案死代码清理：删除零引用文件、清理未使用依赖、收敛调试日志**
+  - 批次1：删除24个确认零引用的文件
+    - mobile-* 组件（7个）：`mobile-bottom-bar`, `mobile-input`, `mobile-list`, `mobile-search-bar`, `mobile-segmented-control`, `mobile-select`, `mobile-word-card`
+    - 兼容性/工具组件（5个）：`device-compatibility`, `dynamic-import`, `skeleton-card`, `swipeable-card`, `virtual-list`, `word-card`
+    - 零引用 hooks（4个）：`use-lazy-image`, `use-long-press`, `use-performance`, `use-swipe-gesture`
+    - shadcn/ui 零引用组件（2个）：`chart`, `calendar`
+    - 其他（2个）：`ocr-utils.ts`（Tesseract已废弃）、`growth-sheet.tsx.backup`（不应在版本控制中的备份）
+    - 注意：过程中恢复7个实际上仍被引用的文件（`toast`, `separator`, `scroll-area`, `radio-group`, `progress`, `slider`, `switch`），并修改 `sidebar.tsx` / `word-review-list.tsx` 移除对已删除模块的 import
+  - 批次2：根目录 `package.json` 清理10个未使用依赖
+    - `firebase`, `@google/generative-ai`, `express`, `@types/express`, `dotenv`, `tesseract.js`, `patch-package`, `react-day-picker`, `embla-carousel-react`, `@radix-ui/react-menubar`
+  - 批次3：收敛7个文件中的调试 `console.log`
+    - 移除 `api-client.ts` API地址调试日志
+    - 移除 `article-reading-view.tsx` 9处分析流程调试日志
+    - 移除 `essay-review-view.tsx` 图片检测调试日志
+    - 移除 `word-capture-form.tsx` 图片分析调试日志
+    - 保留所有 `console.error`（localStorage/API失败等合理错误处理）
+
+### 涉及文件
+- 删除：`src/components/mobile-*.tsx`（7个）、`src/components/device-compatibility.tsx`、`src/components/dynamic-import.tsx`、`src/components/skeleton-card.tsx`、`src/components/swipeable-card.tsx`、`src/components/virtual-list.tsx`、`src/components/word-card.tsx`、`src/components/ui/chart.tsx`、`src/components/ui/calendar.tsx`、`src/components/ui/carousel.tsx`、`src/lib/ocr-utils.ts`、`src/components/growth-sheet.tsx.backup`
+- 删除：`src/hooks/use-lazy-image.ts`、`src/hooks/use-long-press.ts`、`src/hooks/use-performance.ts`
+- 修改：`src/components/ui/sidebar.tsx`（移除 use-swipe-gesture import）
+- 修改：`src/components/word-review-list.tsx`（移除 swipeable-card/virtual-list/skeleton-card/useInfiniteScroll import）
+- 修改：`package.json`（移除10个未使用依赖）
+- 修改：`src/lib/api-client.ts`、`src/components/article-reading-view.tsx`、`src/components/essay-review-view.tsx`、`src/components/word-capture-form.tsx`（移除调试日志）
+
+### 背景/原因
+- 跨设备适配阶段添加了大量移动端专属组件/hooks，但大部分未被实际使用，持续占用源码空间并增加构建体积
+- Tesseract.js 已废弃改用多模态 AI，ocr-utils.ts 成为死代码
+- package.json 中存在多个源码零引用的依赖（firebase、google-generative-ai、express 等）
+- 各处残留的调试 console.log 会污染生产环境控制台
+
+### 如何验证
+- 运行：`npm run typecheck`（无新增错误，剩余5个为既有类型不匹配问题）
+- 运行：`npm run lint`（无新增错误）
+- 运行：`npm run dev`（项目正常启动）
+- 确认被删除文件无业务代码引用（已通过全局搜索+typecheck双重验证）
+
+---
+
 ## 2026-04-12
 
 ### 新增/修改内容

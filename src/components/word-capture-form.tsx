@@ -69,7 +69,6 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
     setIsAnalyzing(true);
     try {
       // 直接将图片发给后端多模态 AI，一步完成识别+释义
-      console.log("[ImageAnalysis] Sending image to AI for recognition...");
       const result = await aiApi.extract(dataUri);
 
       if (token !== imageAnalysisTokenRef.current) return;
@@ -286,23 +285,29 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
             'define',
             defineCacheHash
           );
-          const result = cached
-            ? { success: true as const, data: { definitions: cached } }
-            : await aiApi.define(term);
-          if (!result.success || !result.data?.definitions) {
-            failed.push({ term, reason: result.error?.message || "生成失败" });
-            continue;
+          let definitions: DefinitionItem[] | null = null;
+          if (cached) {
+            definitions = cached;
+          } else {
+            const res = await aiApi.define(term);
+            if (!res.success || !res.data?.definitions) {
+              failed.push({ term, reason: res.error?.message || "生成失败" });
+              continue;
+            }
+            definitions = res.data.definitions;
+            setAiCache('define', defineCacheHash, definitions);
           }
 
-          if (!cached) {
-            setAiCache('define', defineCacheHash, result.data.definitions);
+          if (!definitions || definitions.length === 0) {
+            failed.push({ term, reason: "生成失败" });
+            continue;
           }
 
           const capturedAt = new Date();
           const seenPos = new Set<string>();
           const newWords: CapturedWord[] = [];
 
-          for (const it of result.data.definitions) {
+          for (const it of definitions) {
             const rawPos = String(it.partOfSpeech || "").trim();
             const partOfSpeech = rawPos || (/\s/.test(term) ? "phrase" : "noun");
             const posKey = partOfSpeech.toLowerCase();

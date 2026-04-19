@@ -30,12 +30,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useInfiniteScroll } from "@/hooks/use-virtual-list";
-import { SwipeableCard } from "@/components/swipeable-card";
 import { MobileContextMenu } from "@/components/mobile-context-menu";
 import { MobileBulkActions } from "@/components/mobile-bulk-actions";
-import { PaginatedList } from "@/components/virtual-list";
-import { WordCardSkeleton } from "@/components/skeleton-card";
 
 interface WordReviewListProps {
   words: CapturedWord[];

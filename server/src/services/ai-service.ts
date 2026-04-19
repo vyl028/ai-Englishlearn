@@ -29,13 +29,26 @@ async function fetchWithTimeout(
   }
 }
 
-// 通用 AI 请求函数（带重试机制）
-async function callAI(
-  messages: any[],
-  responseFormat?: { type: string },
-  maxTokens: number = 4000,
-  retries: number = 2
-): Promise<string> {
+interface CallLLMOptions {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  responseFormat?: { type: string };
+  retries?: number;
+  stripThink?: boolean;
+}
+
+// 统一 AI 请求函数（支持重试、模型切换、推理块清理）
+async function callLLM(messages: any[], options: CallLLMOptions = {}): Promise<string> {
+  const {
+    model = MODEL,
+    temperature = 0.7,
+    maxTokens = 4000,
+    responseFormat,
+    retries = 2,
+    stripThink = false,
+  } = options;
+
   const url = `${BASE_URL}chat/completions`;
   let lastError: Error | undefined;
 
@@ -50,9 +63,9 @@ async function callAI(
             'Authorization': `Bearer ${API_KEY}`,
           },
           body: JSON.stringify({
-            model: MODEL,
+            model,
             messages,
-            temperature: 0.7,
+            temperature,
             max_tokens: maxTokens,
             ...(responseFormat && { response_format: responseFormat }),
           }),
@@ -72,32 +85,25 @@ async function callAI(
         throw new Error('AI 返回空内容');
       }
 
-      return content;
+      return stripThink ? content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : content;
     } catch (error: any) {
       lastError = error;
 
-      // 如果是最后一次尝试，直接抛出错误
-      if (attempt === retries) {
-        break;
-      }
+      if (attempt === retries) break;
 
-      // 检查是否是可重试的错误
       const isRetryable =
-        error.name === 'AbortError' || // 超时
+        error.name === 'AbortError' ||
         error.message?.includes('ECONNRESET') ||
         error.message?.includes('ETIMEDOUT') ||
         error.message?.includes('fetch failed') ||
         (error.message?.includes('AI API error') &&
-          (error.message?.includes('429') || // 速率限制
-            error.message?.includes('502') || // 网关错误
-            error.message?.includes('503') || // 服务不可用
-            error.message?.includes('504'))); // 网关超时
+          (error.message?.includes('429') ||
+            error.message?.includes('502') ||
+            error.message?.includes('503') ||
+            error.message?.includes('504')));
 
-      if (!isRetryable) {
-        throw error;
-      }
+      if (!isRetryable) throw error;
 
-      // 指数退避重试：1s, 2s
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`[AI] 请求失败，${delay}ms 后重试 (${attempt + 1}/${retries})...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -105,47 +111,6 @@ async function callAI(
   }
 
   throw lastError || new Error('AI 请求失败');
-}
-
-// 视觉 AI 请求函数（使用支持图片的模型，不重试）
-async function callVisionAI(
-  messages: any[],
-  maxTokens: number = 4000
-): Promise<string> {
-  const url = `${BASE_URL}chat/completions`;
-
-  const response = await fetchWithTimeout(
-    url,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages,
-        temperature: 0.3,
-        max_tokens: maxTokens,
-      }),
-    },
-    TIMEOUT_MS
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Vision AI API error: ${response.status} - ${errorText}`);
-  }
-
-  const data: any = await response.json();
-  const content = data.choices[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('Vision AI 返回空内容');
-  }
-
-  // 去除 <think>...</think> 推理块（qwen3-vl 会输出思考过程）
-  return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
 // 尝试修复截断的 JSON
@@ -588,7 +553,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 1500);
+    const response = await callLLM(messages, { maxTokens: 1500 });
     const result = extractJson(response);
 
     // 验证返回格式
@@ -626,7 +591,7 @@ export class AIService {
       },
     ];
 
-    const response = await callVisionAI(messages, 500);
+    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 500, retries: 0, stripThink: true });
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
@@ -716,7 +681,7 @@ export class AIService {
       },
     ];
 
-    const response = await callVisionAI(messages, 4000);
+    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 4000, retries: 0, stripThink: true });
     const text = response.trim();
 
     if (!text || text.length < 5) {
@@ -802,7 +767,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 3500);
+    const response = await callLLM(messages, { maxTokens: 3500 });
     const result = extractJson(response);
 
     if (!result.questions || !Array.isArray(result.questions)) {
@@ -947,7 +912,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 3500);
+    const response = await callLLM(messages, { maxTokens: 3500 });
     const result = extractJson(response);
 
     if (!result.title || !result.story || !result.translation) {
@@ -1009,7 +974,7 @@ export class AIService {
       },
     ];
 
-    const response = await callAI(messages, undefined, 8000);
+    const response = await callLLM(messages, { maxTokens: 8000 });
     const rawResult = extractJson(response);
 
     console.log('[AI] Essay review raw result:', JSON.stringify({
@@ -1109,7 +1074,7 @@ ${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解
       },
     ];
 
-    const response = await callAI(messages, undefined, 8000);
+    const response = await callLLM(messages, { maxTokens: 8000 });
     const rawResult = extractJson(response);
 
     console.log('[AI] Article study raw result keys:', Object.keys(rawResult));
@@ -1259,7 +1224,7 @@ ${userTextEn.trim()}
       },
     ];
 
-    const response = await callAI(messages, undefined, 1500);
+    const response = await callLLM(messages, { maxTokens: 1500 });
     const result = extractJson(response);
 
     return {

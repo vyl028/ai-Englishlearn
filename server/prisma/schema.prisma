@@ -17,6 +17,7 @@ model User {
   words         Word[]
   groups        Group[]
   learningStats LearningStats?
+  growthGoals   GrowthGoals?
 
   @@map("users")
 }
@@ -72,8 +73,83 @@ model LearningStats {
 
   unlockedBadges String @default("[]")
 
+  // Extended gamification fields
+  lastActiveDate   DateTime?
+  practiceCompleted Int @default(0)
+  storiesGenerated  Int @default(0)
+  masteredMarked    Int @default(0)
+  dailyStats        String @default("{}")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("learning_stats")
+}
+
+model GrowthGoals {
+  id              String @id @default(uuid())
+  userId          String @unique
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  weeklyXpGoal    Int    @default(200)
+  weeklyWordsGoal Int    @default(20)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("growth_goals")
+}
+
+model ReadingQuestionStats {
+  id         String   @id @default(uuid())
+  userId     String
+  articleKey String
+
+  attempts   Int      @default(0)
+  best       Int      @default(0)
+  last       Int      @default(0)
+  total      Int      @default(0)
+  bestAt     DateTime?
+  lastAt     DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, articleKey])
+  @@map("reading_question_stats")
+}
+
+model SpeakingTrainingStats {
+  id        String   @id @default(uuid())
+  userId    String
+  dateKey   String
+
+  attempts  Int      @default(0)
+  scoreSum  Int      @default(0)
+  best      Int      @default(0)
+  last      Int      @default(0)
+  lastAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, dateKey])
+  @@map("speaking_training_stats")
+}
+
+model LearningEvent {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String
+  count       Int?
+  correctCount Int?
+  totalCount  Int?
+  wordCount   Int?
+  termKey     String?
+  at          DateTime @default(now())
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, at])
+  @@map("learning_events")
 }

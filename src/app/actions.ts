@@ -10,8 +10,6 @@ import {
   ExtractWordAndDefineOutput,
   GeneratePracticeInput,
   GeneratePracticeOutput,
-  GenerateQuizInput,
-  GenerateQuizOutput,
   GenerateStoryInput,
   GenerateStoryOutput,
   GenerateStoryOutputSchema,
@@ -27,32 +25,13 @@ import { getAiCache, setAiCache, hashAiCachePayload } from "@/lib/ai-cache";
 import { generateStoryPdf } from "@/lib/pdf-server-utils";
 import { extractTextFromDocx, extractTextFromPdf, extractTextFromTxtLike } from "@/lib/essay-file-utils";
 import { aiDebug } from "@/ai/debug";
+import { fetchWithTimeout } from "@/lib/fetch-utils";
 
 // 后端 API 基础 URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 // AI 请求超时时间（2 分钟）
 const AI_TIMEOUT_MS = 120000;
-
-// 带超时的 fetch
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 // 带认证的 API 请求函数
 async function apiRequest<T>(
@@ -244,15 +223,6 @@ export async function defineTermAutoAction(
   }));
 
   return { success: true, data: definitions };
-}
-
-export async function generateQuizAction(
-  input: GenerateQuizInput
-): Promise<{ success: boolean; data?: { questions: GenerateQuizOutput }; error?: string }> {
-  // 复用 practice API - 后端需要 wordIds，但前端传入的是 words 数组
-  // 这里需要先从 words 中提取信息，然后调用后端
-  // 暂时返回错误，需要 page.tsx 传入 wordIds
-  return { success: false, error: "请使用 generatePracticeAction 代替" };
 }
 
 export async function generatePracticeAction(
@@ -448,12 +418,6 @@ export async function extractEssayTextFromFileAction(
   }
 }
 
-export async function extractTextFromFileAction(
-  formData: FormData
-): Promise<{ success: boolean; data?: { text: string; warnings?: string[]; filename?: string }; error?: string }> {
-  return extractEssayTextFromFileAction(formData);
-}
-
 export async function studyArticleAction(
   input: StudyArticleInput
 ): Promise<{ success: boolean; data?: StudyArticleOutput; error?: string }> {
@@ -464,22 +428,6 @@ export async function studyArticleAction(
     body: JSON.stringify({ article: input.text, generateQuestions: input.includeQuestions, questionCount: input.questionCount }),
     timeoutMs: AI_TIMEOUT_MS,
   });
-
-  console.log("[Frontend] Received article study response:", JSON.stringify({
-    success: result.success,
-    hasData: !!result.data,
-    kind: result.data?.kind,
-    hasStructure: !!result.data?.structure,
-    structureParagraphsCount: result.data?.structure?.paragraphs?.length || 0,
-    hasSyntax: !!result.data?.syntax,
-    syntaxHighlightsCount: result.data?.syntax?.highlights?.length || 0,
-    hardSentencesCount: result.data?.hardSentences?.length || 0,
-    keywordsCount: result.data?.keywords?.length || 0,
-    phrasesCount: result.data?.phrases?.length || 0,
-    questionsCount: result.data?.questions?.length || 0,
-    firstParagraph: result.data?.structure?.paragraphs?.[0] || null,
-    firstKeyword: result.data?.keywords?.[0] || null,
-  }, null, 2));
 
   if (!result.success || !result.data?.structure) {
     return { success: false, error: result.error || "无法完成文章分析，请重试。" };

@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { aiDebug } from './debug';
 import { AiHttpError, fetchWithTimeoutRetry, readResponseTextSafe } from './http';
+import { GenerateOptions, ImageInput, GenerateTextParams, getAiErrorMessage } from './types';
 
 /**
  * OpenAI / OpenAI-compatible Chat Completions wrapper.
@@ -11,16 +12,6 @@ import { AiHttpError, fetchWithTimeoutRetry, readResponseTextSafe } from './http
  * - OPENAI_BASE_URL (optional, default: https://api.openai.com/v1)
  * - OPENAI_MODEL (optional, default: gpt-4o-mini)
  */
-
-export interface GenerateOptions {
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  maxOutputTokens?: number;
-  responseMimeType?: string; // ignored for OpenAI-compatible APIs (kept for shared signature)
-}
-
-interface ImageInput { dataUri: string; }
 
 function getBaseUrl() {
   return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -34,14 +25,7 @@ export async function generateText(
     model = process.env.OPENAI_MODEL || 'gpt-4o-mini',
     options = {},
     signal,
-  }: {
-    systemPrompt?: string;
-    userPrompt: string;
-    image?: ImageInput; // data URI
-    model?: string;
-    options?: GenerateOptions;
-    signal?: AbortSignal;
-  }
+  }: GenerateTextParams
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('未配置 OPENAI_API_KEY（或环境变量未生效）。');
@@ -89,14 +73,7 @@ export async function generateText(
     const txt = await readResponseTextSafe(resp);
     aiDebug('[OpenAI] HTTP error %s: %s', resp.status, txt);
 
-    const message =
-      resp.status === 401 || resp.status === 403
-        ? 'AI 配置错误：OPENAI_API_KEY 无效或缺失。'
-        : resp.status === 429
-          ? 'AI 当前繁忙（429），已自动重试仍失败，请稍后再试。'
-          : resp.status >= 500
-            ? `AI 服务暂时不可用（${resp.status}），已自动重试仍失败，请稍后再试。`
-            : `OpenAI 请求失败（${resp.status}），请稍后重试。`;
+    const message = getAiErrorMessage(resp.status, 'OpenAI');
 
     throw new AiHttpError(resp.status, message, txt);
   }

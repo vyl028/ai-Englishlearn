@@ -83,7 +83,7 @@ export class UserStatsService {
       streak: {
         current: stats.streakDays,
         longest: stats.longestStreak,
-        lastActiveDate: stats.lastActiveDate || undefined,
+        lastActiveDate: stats.lastActiveDate ? formatDateKey(stats.lastActiveDate) : undefined,
       },
       totals: {
         wordsAdded: stats.totalWords,

@@ -13,10 +13,7 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE_URL = resolveApiBaseUrl();
 
-// 调试：在浏览器控制台显示当前使用的API地址
-if (typeof window !== 'undefined') {
-  console.log('[API] Base URL:', API_BASE_URL);
-}
+import { fetchWithTimeout } from '@/lib/fetch-utils';
 
 // 存储 key
 const TOKEN_KEY = 'lexi-auth-token';
@@ -41,6 +38,8 @@ export function clearToken() {
   }
 }
 
+import type { WordEnrichment, ReviewEssayOutput, SpeakingChatOutput, GeneratePracticeOutput, StudyArticleOutput, GenerateStoryOutput, PracticeQuestionType } from '@/lib/types';
+
 // API 响应格式
 export interface ApiResponse<T> {
   success: boolean;
@@ -55,26 +54,6 @@ export interface ApiResponse<T> {
 interface RequestConfig extends RequestInit {
   skipAuth?: boolean;
   timeoutMs?: number;
-}
-
-// 带超时的 fetch
-async function fetchWithTimeout(
-  url: string,
-  config: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...config,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 // 通用请求函数
@@ -181,14 +160,7 @@ export interface Word {
   word: string;
   partOfSpeech: string;
   definition: string;
-  enrichment?: {
-    collocations?: string[];
-    synonyms?: string[];
-    antonyms?: string[];
-    examples?: { en: string; zh: string }[];
-    usageZh?: string;
-    difficulty?: 'easy' | 'medium' | 'hard';
-  };
+  enrichment?: WordEnrichment;
   groupId?: string | null;
   group?: {
     id: string;
@@ -315,94 +287,6 @@ export interface ExtractResult {
   }>;
 }
 
-export type QuestionType = 'mcq' | 'fill_blank' | 'reorder';
-
-export interface PracticeQuestion {
-  type: QuestionType;
-  targetWord: string;
-  promptZh?: string;
-  promptEn: string;
-  options?: string[];
-  correctAnswer: string;
-  answer?: string;
-  explanation: string;
-  analysis?: string;
-  grammar?: string;
-  usage?: string;
-  fragments?: string[];
-}
-
-export interface PracticeResult {
-  questions: PracticeQuestion[];
-}
-
-export interface StoryResult {
-  title: string;
-  story: string;
-  translation: string;
-}
-
-export interface EssayReviewResult {
-  scores: {
-    tr: number;
-    cc: number;
-    lr: number;
-    gra: number;
-    overall: number;
-    cefr: string;
-  };
-  issues: Array<{
-    type: string;
-    severity: 'high' | 'medium' | 'low';
-    message: string;
-    original?: string;
-    suggestion?: string;
-    corrected?: string;
-  }>;
-  revisedTextEn: string;
-  revisedTextZh: string;
-  keyChanges: Array<{
-    before: string;
-    after: string;
-    explanation: string;
-  }>;
-}
-
-export interface ArticleStudyResult {
-  structure: {
-    paragraphs: Array<{
-      index: number;
-      mainIdea: string;
-      role: string;
-      relationToPrevious: string;
-    }>;
-  };
-  syntax: {
-    highlights: Array<{
-      sentence: string;
-      analysis: string;
-    }>;
-  };
-  difficultSentences: Array<{
-    original: string;
-    breakdown: string;
-    simplified: string;
-    rewrite: string;
-  }>;
-  keyVocabulary: Array<{
-    word: string;
-    meaning: string;
-    usage: string;
-  }>;
-  questions?: Array<{
-    question: string;
-    options: string[];
-    correctAnswer: string;
-    explanation: string;
-    location: string;
-  }>;
-}
-
 // AI 请求超时时间（2 分钟）
 const AI_TIMEOUT_MS = 120000;
 
@@ -421,29 +305,29 @@ export const aiApi = {
       timeoutMs: AI_TIMEOUT_MS,
     }),
 
-  practice: (wordIds: string[], questionCount?: number, allowedTypes?: QuestionType[]) =>
-    request<PracticeResult>('/api/ai/practice', {
+  practice: (wordIds: string[], questionCount?: number, allowedTypes?: PracticeQuestionType[]) =>
+    request<{ questions: GeneratePracticeOutput }>('/api/ai/practice', {
       method: 'POST',
       body: JSON.stringify({ wordIds, questionCount, allowedTypes }),
       timeoutMs: AI_TIMEOUT_MS,
     }),
 
   story: (wordIds: string[]) =>
-    request<StoryResult>('/api/ai/story', {
+    request<GenerateStoryOutput>('/api/ai/story', {
       method: 'POST',
       body: JSON.stringify({ wordIds }),
       timeoutMs: AI_TIMEOUT_MS,
     }),
 
   reviewEssay: (essay: string, title?: string) =>
-    request<EssayReviewResult>('/api/ai/review-essay', {
+    request<ReviewEssayOutput>('/api/ai/review-essay', {
       method: 'POST',
       body: JSON.stringify({ essay, title }),
       timeoutMs: AI_TIMEOUT_MS,
     }),
 
   studyArticle: (article: string, generateQuestions?: boolean, questionCount?: number) =>
-    request<ArticleStudyResult>('/api/ai/study-article', {
+    request<StudyArticleOutput>('/api/ai/study-article', {
       method: 'POST',
       body: JSON.stringify({ article, generateQuestions, questionCount }),
       timeoutMs: AI_TIMEOUT_MS,
@@ -455,17 +339,7 @@ export const aiApi = {
     history?: Array<{ role: 'user' | 'assistant'; contentEn: string }>;
     targetLevel?: 'A2' | 'B1' | 'B2' | 'C1';
   }) =>
-    request<{
-      assistantReplyEn: string;
-      feedbackZh: string;
-      correctedUserEn?: string;
-      issues?: Array<{
-        type?: string;
-        suggestion: string;
-        reasonZh?: string;
-      }>;
-      scoreOverall?: number;
-    }>('/api/ai/speaking-chat', {
+    request<SpeakingChatOutput>('/api/ai/speaking-chat', {
       method: 'POST',
       body: JSON.stringify(params),
       timeoutMs: AI_TIMEOUT_MS,

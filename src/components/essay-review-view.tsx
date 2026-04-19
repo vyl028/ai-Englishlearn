@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ClipboardCopy, Download, History, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 
-import { extractTextFromFileAction } from "@/app/actions";
+import { extractEssayTextFromFileAction } from "@/app/actions";
 import { aiApi } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import type { ReviewEssayOutput, EssayIssueCategory, EssayIssueSeverity } from "@/lib/types";
@@ -467,7 +467,6 @@ export function EssayReviewView() {
 
       if (isImage) {
         // Use backend multimodal AI for images (replaces Tesseract OCR)
-        console.log("[EssayReview] Detected image file, using AI text extraction");
         const reader = new FileReader();
         const imageDataUri = await new Promise<string>((resolve, reject) => {
           reader.onloadend = () => resolve(reader.result as string);
@@ -496,7 +495,7 @@ export function EssayReviewView() {
         // Use backend for text/PDF/docx files
         const formData = new FormData();
         formData.append("file", file);
-        const res = await extractTextFromFileAction(formData);
+        const res = await extractEssayTextFromFileAction(formData);
         if (res.success && res.data?.text) {
           setText(res.data.text);
 
