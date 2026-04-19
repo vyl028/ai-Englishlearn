@@ -8,6 +8,8 @@ import { authRouter } from './routes/auth';
 import { wordsRouter } from './routes/words';
 import { groupsRouter } from './routes/groups';
 import { aiRouter } from './routes/ai';
+import { practiceRouter } from './routes/practice';
+import { wordMasteryRouter } from './routes/word-mastery';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { errorResponse } from './utils/response';
@@ -53,6 +55,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/words', authMiddleware, wordsRouter);
 app.use('/api/groups', authMiddleware, groupsRouter);
 app.use('/api/ai', authMiddleware, aiRouter);
+app.use('/api/practice', authMiddleware, practiceRouter);
+app.use('/api/word-mastery', authMiddleware, wordMasteryRouter);
 
 // 404 处理
 app.use((req, res) => {

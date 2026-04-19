@@ -8,6 +8,7 @@ import { WordCaptureForm } from '@/components/word-capture-form';
 import { WordReviewList } from '@/components/word-review-list';
 import { EditWordDialog } from '@/components/edit-word-dialog';
 import { PracticeView } from '@/components/practice-view';
+import { PracticeHistoryView } from '@/components/practice-history-view';
 import { StoryView } from '@/components/story-view';
 import { GrowthSheet } from '@/components/growth-sheet';
 import { EssayReviewView } from '@/components/essay-review-view';
@@ -29,7 +30,7 @@ import { cn, generateId } from '@/lib/utils';
 import { getAiCache, hashAiCachePayload, setAiCache } from '@/lib/ai-cache';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useWords, useGroups, useWordMutations, useGroupMutations } from '@/lib/api-hooks';
-import { wordsApi, groupsApi, aiApi } from '@/lib/api-client';
+import { wordsApi, groupsApi, aiApi, practiceApi } from '@/lib/api-client';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -118,6 +119,7 @@ export default function Home() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [wordToDelete, setWordToDelete] = useState<CapturedWord | null>(null);
   const [practiceData, setPracticeData] = useState<{ questions: GeneratePracticeOutput } | null>(null);
+  const [currentPracticeRecordId, setCurrentPracticeRecordId] = useState<string | null>(null);
   const [storyData, setStoryData] = useState<GenerateStoryOutput | null>(null);
   const [globalTask, setGlobalTask] = useState<GlobalTask | null>(null);
   const globalTaskIdRef = useRef<string | null>(null);
@@ -130,6 +132,7 @@ export default function Home() {
   const [gamification, setGamification] = useState<GamificationState>(() => createDefaultGamificationState());
   const [growthOpen, setGrowthOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showPracticeHistory, setShowPracticeHistory] = useState(false);
   const { toast } = useToast();
   const levelInfo = getLevelInfo(gamification.xp);
   const isBusy = !!globalTask;
@@ -651,6 +654,21 @@ export default function Home() {
       if (result.success && result.data) {
         setAiCache('practice', practiceCacheHash, result.data);
         setPracticeData(result.data);
+
+        // Save practice record to backend
+        try {
+          const createRes = await practiceApi.create({
+            questionsJson: JSON.stringify(result.data.questions),
+            wordIds,
+            questionCount: result.data.questions.length,
+          });
+          if (createRes.success && createRes.data) {
+            setCurrentPracticeRecordId(createRes.data.id);
+          }
+        } catch (e) {
+          console.error('Failed to save practice record:', e);
+        }
+
         setView('practice');
         return;
       }
@@ -914,6 +932,13 @@ export default function Home() {
       case 'capture':
         return <WordCaptureForm onWordAdded={handleWordAdded} onMultipleWordsAdded={handleMultipleWordsAdded} />;
       case 'review':
+        if (showPracticeHistory) {
+          return (
+            <PracticeHistoryView
+              onBack={() => setShowPracticeHistory(false)}
+            />
+          );
+        }
         return (
           <WordReviewList
             words={words}
@@ -934,6 +959,7 @@ export default function Home() {
             onRegenerateWord={handleRegenerateWord}
             onGeneratePractice={handleGeneratePractice}
             onGenerateStory={handleGenerateStory}
+            onShowPracticeHistory={() => setShowPracticeHistory(true)}
           />
         );
       case 'practice':
@@ -944,11 +970,49 @@ export default function Home() {
               onBack={() => setView('review')}
               onRegenerate={lastPracticeRequestRef.current ? handleRegeneratePractice : undefined}
               busy={isBusy}
-              onSubmitted={({ correctCount, totalCount }) => {
+              onSubmitted={({ correctCount, totalCount, answers }) => {
                 setGamification((prev) =>
                   applyLearningEvent(prev, { type: "practice_completed", correctCount, totalCount })
                 );
                 recordLearningEvent({ type: "practice_completed", correctCount, totalCount });
+
+                // Submit practice answers to backend
+                if (currentPracticeRecordId) {
+                  const wordIdMap = new Map<string, string>();
+                  for (const w of words) {
+                    const key = normalizeTermKey(w.word);
+                    if (!wordIdMap.has(key)) wordIdMap.set(key, w.id);
+                  }
+
+                  const wordResults = answers
+                    .map((a) => {
+                      const wordId = wordIdMap.get(normalizeTermKey(a.word));
+                      if (!wordId) return null;
+                      return { wordId, isCorrect: a.isCorrect };
+                    })
+                    .filter(Boolean) as Array<{ wordId: string; isCorrect: boolean }>;
+
+                  void practiceApi.submit(currentPracticeRecordId, {
+                    answers: answers.map((a) => ({
+                      questionIndex: a.questionIndex,
+                      questionType: a.questionType,
+                      word: a.word,
+                      promptEn: a.promptEn,
+                      userAnswer: a.userAnswer,
+                      correctAnswer: a.correctAnswer,
+                      isCorrect: a.isCorrect,
+                    })),
+                    correctCount,
+                    totalCount,
+                    wordResults,
+                  }).then((res) => {
+                    if (res.success) {
+                      toast({ title: "练习已保存", description: "答题记录已同步到云端。" });
+                    }
+                  }).catch((err) => {
+                    console.error('Failed to submit practice:', err);
+                  });
+                }
               }}
             />
           );

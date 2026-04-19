@@ -23,10 +23,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+export interface PracticeAnswerResult {
+  questionIndex: number;
+  questionType: string;
+  word: string;
+  promptEn: string;
+  userAnswer: string | null;
+  correctAnswer: string | null;
+  isCorrect: boolean;
+}
+
 interface PracticeViewProps {
   practiceData: { questions: GeneratePracticeOutput };
   onBack: () => void;
-  onSubmitted?: (result: { correctCount: number; totalCount: number }) => void;
+  onSubmitted?: (result: {
+    correctCount: number;
+    totalCount: number;
+    answers: PracticeAnswerResult[];
+  }) => void;
   onRegenerate?: () => void;
   busy?: boolean;
 }
@@ -168,7 +182,36 @@ export function PracticeView({ practiceData, onBack, onSubmitted, onRegenerate, 
   const submitNow = () => {
     const correct = practiceData.questions.filter((q, idx) => isCorrect(q, idx)).length;
     setSubmitted(true);
-    onSubmitted?.({ correctCount: correct, totalCount: totalCount });
+
+    const answerResults: PracticeAnswerResult[] = practiceData.questions.map((q, idx) => {
+      const a = answers[idx];
+      let userAnswer: string | null = null;
+      let correctAnswer: string | null = null;
+
+      if (q.type === "mcq") {
+        userAnswer = a?.mcq !== undefined ? String(a.mcq) : null;
+        correctAnswer = String(q.answerIndex);
+      } else if (q.type === "fill_blank") {
+        userAnswer = a?.blank || null;
+        correctAnswer = JSON.stringify(q.acceptableAnswers || []);
+      } else if (q.type === "reorder") {
+        const order = getReorderOrder(q, idx);
+        userAnswer = JSON.stringify(order);
+        correctAnswer = JSON.stringify(q.correctOrder || []);
+      }
+
+      return {
+        questionIndex: idx,
+        questionType: q.type,
+        word: q.word,
+        promptEn: q.promptEn,
+        userAnswer,
+        correctAnswer,
+        isCorrect: isCorrect(q, idx),
+      };
+    });
+
+    onSubmitted?.({ correctCount: correct, totalCount: totalCount, answers: answerResults });
   };
 
   const requestSubmit = () => {

@@ -463,3 +463,137 @@ export const userStatsApi = {
       method: 'POST',
     }),
 };
+
+// ===== Practice API =====
+
+export interface PracticeRecordListItem {
+  id: string;
+  questionCount: number;
+  correctCount: number;
+  totalCount: number;
+  isSubmitted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  answerCount: number;
+}
+
+export interface PracticeRecordDetail {
+  id: string;
+  questionsJson: string;
+  wordIds: string[];
+  questionCount: number;
+  correctCount: number;
+  totalCount: number;
+  isSubmitted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  answers: Array<{
+    id: string;
+    questionIndex: number;
+    questionType: string;
+    word: string;
+    promptEn: string;
+    userAnswer: string | null;
+    correctAnswer: string | null;
+    isCorrect: boolean;
+  }>;
+}
+
+export interface SubmitPracticeInput {
+  answers: Array<{
+    questionIndex: number;
+    questionType: string;
+    word: string;
+    promptEn: string;
+    userAnswer: string | null;
+    correctAnswer: string | null;
+    isCorrect: boolean;
+  }>;
+  correctCount: number;
+  totalCount: number;
+  wordResults?: Array<{ wordId: string; isCorrect: boolean }>;
+}
+
+export const practiceApi = {
+  create: (data: { questionsJson: string; wordIds: string[]; questionCount: number }) =>
+    request<{ id: string }>('/api/practice', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  list: (params?: { limit?: number; offset?: number }) =>
+    request<{ records: PracticeRecordListItem[] }>(`/api/practice?limit=${params?.limit ?? 50}&offset=${params?.offset ?? 0}`, {
+      method: 'GET',
+    }),
+
+  get: (id: string) =>
+    request<PracticeRecordDetail>(`/api/practice/${id}`, {
+      method: 'GET',
+    }),
+
+  submit: (id: string, data: SubmitPracticeInput) =>
+    request<PracticeRecordDetail>(`/api/practice/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    request<{ deleted: boolean }>(`/api/practice/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// ===== Word Mastery API =====
+
+export interface WordMasteryStat {
+  wordId: string;
+  word: string;
+  partOfSpeech: string;
+  definition: string;
+  isMastered: boolean;
+  totalAppeared: number;
+  totalCorrect: number;
+  consecutiveCorrect: number;
+  lastAnsweredAt: string | null;
+  masteryScore: number;
+  isAutoMastered: boolean;
+}
+
+export const wordMasteryApi = {
+  list: (params?: { minScore?: number; maxScore?: number; onlyAutoMastered?: boolean; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.minScore !== undefined) qs.append('minScore', String(params.minScore));
+    if (params?.maxScore !== undefined) qs.append('maxScore', String(params.maxScore));
+    if (params?.onlyAutoMastered) qs.append('onlyAutoMastered', 'true');
+    if (params?.limit !== undefined) qs.append('limit', String(params.limit));
+    if (params?.offset !== undefined) qs.append('offset', String(params.offset));
+    return request<{ stats: WordMasteryStat[] }>(`/api/word-mastery?${qs.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  get: (wordId: string) =>
+    request<WordMasteryStat | null>(`/api/word-mastery/${wordId}`, {
+      method: 'GET',
+    }),
+
+  recalculateAll: () =>
+    request<{ recalculated: number }>('/api/word-mastery/recalculate', {
+      method: 'POST',
+    }),
+
+  recalculateOne: (wordId: string) =>
+    request<WordMasteryStat>(`/api/word-mastery/${wordId}/recalculate`, {
+      method: 'POST',
+    }),
+
+  resetOne: (wordId: string) =>
+    request<{ reset: boolean }>(`/api/word-mastery/${wordId}`, {
+      method: 'DELETE',
+    }),
+
+  resetAll: () =>
+    request<{ reset: boolean }>('/api/word-mastery', {
+      method: 'DELETE',
+    }),
+};

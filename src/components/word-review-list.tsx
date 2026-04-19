@@ -3,12 +3,15 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { format, startOfWeek, endOfWeek, formatDistanceToNow, subMonths, subWeeks } from 'date-fns';
-import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff, Search, Copy, Loader2, RefreshCcw, GripVertical } from 'lucide-react';
+import { BookOpen, Sparkles, Pencil, Trash, Newspaper, ListChecks, Folders, FolderInput, CheckCircle, Circle, Eye, EyeOff, Search, Copy, Loader2, RefreshCcw, GripVertical, History } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import type { CapturedWord, PracticeQuestionType, WordGroup } from '@/lib/types';
 import { normalizeTermKey } from '@/lib/gamification';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { wordMasteryApi, type WordMasteryStat } from '@/lib/api-client';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,6 +55,7 @@ interface WordReviewListProps {
   onRegenerateWord: (word: CapturedWord) => Promise<{ success: boolean; error?: string }>;
   onGeneratePractice: (words: CapturedWord[], options: { questionCount: number; allowedTypes: PracticeQuestionType[] }) => void;
   onGenerateStory: (words: CapturedWord[]) => void;
+  onShowPracticeHistory?: () => void;
 }
 
 type GeneratorMode = 'practice' | 'story';
@@ -238,6 +242,7 @@ export function WordReviewList({
   onRegenerateWord,
   onGeneratePractice,
   onGenerateStory,
+  onShowPracticeHistory,
 }: WordReviewListProps) {
   const [definitionOpenKeys, setDefinitionOpenKeys] = useState<Set<string>>(new Set());
   const [variantSelection, setVariantSelection] = useState<Record<string, string>>({});
@@ -269,7 +274,11 @@ export function WordReviewList({
 
   const isMobile = useIsMobile();
   const [generatorOpen, setGeneratorOpen] = useState(false);
-  
+
+  // 单词掌握度统计
+  const [masteryStatsMap, setMasteryStatsMap] = useState<Map<string, WordMasteryStat>>(new Map());
+  const [masteryStatsLoading, setMasteryStatsLoading] = useState(false);
+
   // 无限滚动加载
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -305,6 +314,26 @@ export function WordReviewList({
   useEffect(() => {
     setRenderLimit(80);
   }, [selectedGroupId, reviewSearch, masteryFilter, reviewSort]);
+
+  // Load word mastery stats
+  useEffect(() => {
+    let cancelled = false;
+    setMasteryStatsLoading(true);
+    wordMasteryApi.list({ limit: 500 }).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) {
+        const map = new Map<string, WordMasteryStat>();
+        for (const s of res.data.stats) {
+          map.set(s.wordId, s);
+        }
+        setMasteryStatsMap(map);
+      }
+      setMasteryStatsLoading(false);
+    }).catch(() => {
+      if (!cancelled) setMasteryStatsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [words.length]);
 
   const selectedTypes = (Object.keys(typeSelection) as PracticeQuestionType[]).filter(t => typeSelection[t]);
   const questionCount = Math.min(30, Math.max(1, Number.parseInt(questionCountText || '10', 10) || 10));
@@ -713,6 +742,19 @@ export function WordReviewList({
              <h2 className="text-2xl font-bold font-headline">我的单词本</h2>
            </div>
            <div className="flex items-center gap-2">
+             {onShowPracticeHistory && (
+               <Button
+                 type="button"
+                 variant="outline"
+                 size="sm"
+                 onClick={onShowPracticeHistory}
+                 aria-label="练习历史"
+                 title="练习历史"
+               >
+                 <History className="h-4 w-4 mr-1" />
+                 历史
+               </Button>
+             )}
              <Button
                type="button"
                variant={bulkMode ? "secondary" : "outline"}
@@ -950,6 +992,37 @@ export function WordReviewList({
                                  已掌握
                                </Badge>
                              )}
+
+                             {/* Mastery score indicator */}
+                             {(() => {
+                               const stat = masteryStatsMap.get(selected.id);
+                               if (!stat || stat.totalAppeared === 0) return null;
+                               const score = stat.masteryScore;
+                               const label = score >= 80 ? "熟练" : score >= 50 ? "掌握中" : "初学";
+                               const color = score >= 80 ? "bg-green-500" : score >= 50 ? "bg-yellow-500" : "bg-orange-500";
+                               return (
+                                 <Tooltip>
+                                   <TooltipTrigger asChild>
+                                     <div className="flex items-center gap-1 shrink-0">
+                                       <Badge variant="outline" className="h-6 px-2 text-xs shrink-0">
+                                         {label}
+                                       </Badge>
+                                       <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden hidden sm:block">
+                                         <div className={cn("h-full rounded-full", color)} style={{ width: `${score}%` }} />
+                                       </div>
+                                     </div>
+                                   </TooltipTrigger>
+                                   <TooltipContent side="top">
+                                     <div className="text-xs space-y-1">
+                                       <div>掌握度：{score}/100</div>
+                                       <div>出现 {stat.totalAppeared} 次，答对 {stat.totalCorrect} 次</div>
+                                       <div>连续正确 {stat.consecutiveCorrect} 次</div>
+                                       {stat.isAutoMastered && <div className="text-green-600">已自动判定为已掌握</div>}
+                                     </div>
+                                   </TooltipContent>
+                                 </Tooltip>
+                               );
+                             })()}
 
                              {variants.length > 1 ? (
                                <>
