@@ -4,6 +4,7 @@ import * as React from "react";
 import { Download, FileWarning, HardDrive, LogOut, Upload, Trash2, Wrench, User } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { aiConfigApi, type AiConfig } from "@/lib/api-client";
 import {
   applyBackup,
   createBackup,
@@ -77,12 +79,74 @@ export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = fal
 
   const [usage, setUsage] = React.useState(() => getLocalStorageUsageEstimate());
 
+  // AI 配置状态
+  const [aiConfig, setAiConfig] = React.useState<{ effective: AiConfig; userConfig: AiConfig | null } | null>(null);
+  const [aiConfigOpen, setAiConfigOpen] = React.useState(false);
+  const [aiConfigLoading, setAiConfigLoading] = React.useState(false);
+  const [aiConfigForm, setAiConfigForm] = React.useState<Partial<AiConfig>>({});
+
   React.useEffect(() => {
     if (!open) return;
     setUsage(getLocalStorageUsageEstimate());
     // 刷新用户信息，确保账户部分显示最新数据（特别是在切换账户后）
     void refreshUser();
+    // 加载 AI 配置
+    void loadAiConfig();
   }, [open, refreshUser]);
+
+  const loadAiConfig = async () => {
+    try {
+      const res = await aiConfigApi.get();
+      if (res.success && res.data) {
+        setAiConfig(res.data);
+        setAiConfigForm({
+          provider: res.data.userConfig?.provider || res.data.effective.provider,
+          model: res.data.userConfig?.model || res.data.effective.model,
+          visionModel: res.data.userConfig?.visionModel || res.data.effective.visionModel,
+          baseUrl: res.data.userConfig?.baseUrl || res.data.effective.baseUrl,
+          apiKey: res.data.userConfig?.apiKey || '',
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load AI config:', e);
+    }
+  };
+
+  const handleSaveAiConfig = async () => {
+    setAiConfigLoading(true);
+    try {
+      const res = await aiConfigApi.update(aiConfigForm);
+      if (res.success) {
+        toast({ title: '已保存', description: 'AI 配置已更新。' });
+        setAiConfigOpen(false);
+        await loadAiConfig();
+      } else {
+        toast({ variant: 'destructive', title: '保存失败', description: res.error?.message || '未知错误' });
+      }
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: '保存失败', description: e?.message || '网络错误' });
+    } finally {
+      setAiConfigLoading(false);
+    }
+  };
+
+  const handleResetAiConfig = async () => {
+    setAiConfigLoading(true);
+    try {
+      const res = await aiConfigApi.reset();
+      if (res.success) {
+        toast({ title: '已重置', description: 'AI 配置已恢复为服务端默认值。' });
+        setAiConfigOpen(false);
+        await loadAiConfig();
+      } else {
+        toast({ variant: 'destructive', title: '重置失败', description: res.error?.message || '未知错误' });
+      }
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: '重置失败', description: e?.message || '网络错误' });
+    } finally {
+      setAiConfigLoading(false);
+    }
+  };
 
   const quotaBytes = 5 * 1024 * 1024;
   const usagePercent = Math.min(100, Math.round((usage.totalBytes / quotaBytes) * 100));
@@ -307,15 +371,58 @@ export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = fal
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">AI</CardTitle>
-              <CardDescription>提供商与模型由服务端环境变量配置。</CardDescription>
+              <CardDescription>当前使用的模型与提供商配置。</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-2">
-              <Button type="button" variant="outline" disabled className="w-full sm:w-auto">
-                查看当前配置（待实现）
-              </Button>
-              <Button type="button" variant="outline" disabled className="w-full sm:w-auto">
-                切换提供商/模型（待实现）
-              </Button>
+            <CardContent className="space-y-3">
+              {aiConfig ? (
+                <div className="text-sm space-y-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">提供商</span>
+                    <span className="font-medium">{aiConfig.effective.provider}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">主模型</span>
+                    <span className="font-medium truncate max-w-[200px]" title={aiConfig.effective.model}>
+                      {aiConfig.effective.model}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">视觉模型</span>
+                    <span className="font-medium truncate max-w-[200px]" title={aiConfig.effective.visionModel}>
+                      {aiConfig.effective.visionModel}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">来源</span>
+                    <Badge variant={aiConfig.userConfig ? 'default' : 'secondary'}>
+                      {aiConfig.userConfig ? '自定义' : '环境变量'}
+                    </Badge>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">加载中...</div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => setAiConfigOpen(true)}
+                >
+                  编辑配置
+                </Button>
+                {aiConfig?.userConfig && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={handleResetAiConfig}
+                    disabled={aiConfigLoading}
+                  >
+                    重置为默认
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -731,6 +838,91 @@ export function SettingsSheet({ open, onOpenChange, onResetLocalData, busy = fal
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRepairOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI 配置编辑 */}
+      <Dialog open={aiConfigOpen} onOpenChange={setAiConfigOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑 AI 配置</DialogTitle>
+            <DialogDescription>自定义模型与 API 设置。留空则使用服务端环境变量默认值。</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-provider">提供商</Label>
+              <select
+                id="ai-provider"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={aiConfigForm.provider || 'openai'}
+                onChange={(e) => setAiConfigForm((prev) => ({ ...prev, provider: e.target.value }))}
+              >
+                <option value="openai">OpenAI 兼容</option>
+                <option value="gemini">Gemini</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+              <div className="text-xs text-muted-foreground">当前仅支持 OpenAI 兼容格式调用。</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-model">主模型</Label>
+              <Input
+                id="ai-model"
+                value={aiConfigForm.model || ''}
+                onChange={(e) => setAiConfigForm((prev) => ({ ...prev, model: e.target.value }))}
+                placeholder="例如：kimi-k2.5 / gpt-4o"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-vision-model">视觉模型</Label>
+              <Input
+                id="ai-vision-model"
+                value={aiConfigForm.visionModel || ''}
+                onChange={(e) => setAiConfigForm((prev) => ({ ...prev, visionModel: e.target.value }))}
+                placeholder="例如：qwen3-vl:235b"
+              />
+              <div className="text-xs text-muted-foreground">用于图片识别与转录。</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-base-url">API 地址</Label>
+              <Input
+                id="ai-base-url"
+                value={aiConfigForm.baseUrl || ''}
+                onChange={(e) => setAiConfigForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
+                placeholder="https://api.openai.com/v1/"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-api-key">API 密钥</Label>
+              <Input
+                id="ai-api-key"
+                type="password"
+                value={aiConfigForm.apiKey || ''}
+                onChange={(e) => setAiConfigForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                placeholder="留空则使用服务端环境变量"
+              />
+              <div className="text-xs text-muted-foreground">仅在当前账号生效，存储于服务端数据库。</div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button type="button" variant="outline" onClick={() => setAiConfigOpen(false)}>取消</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleResetAiConfig}
+              disabled={aiConfigLoading || !aiConfig?.userConfig}
+            >
+              重置为默认
+            </Button>
+            <Button type="button" onClick={handleSaveAiConfig} disabled={aiConfigLoading}>
+              保存
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

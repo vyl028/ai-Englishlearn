@@ -353,6 +353,34 @@ export const aiApi = {
     }),
 };
 
+// ===== AI 配置 API =====
+
+export interface AiConfig {
+  provider: string;
+  model: string;
+  visionModel: string;
+  baseUrl: string;
+  apiKey: string;
+}
+
+export const aiConfigApi = {
+  get: () =>
+    request<{ effective: AiConfig; userConfig: AiConfig | null }>('/api/ai/config', {
+      method: 'GET',
+    }),
+
+  update: (data: Partial<AiConfig>) =>
+    request<AiConfig>('/api/ai/config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  reset: () =>
+    request<{ reset: boolean }>('/api/ai/config', {
+      method: 'DELETE',
+    }),
+};
+
 // ===== 学习统计 API =====
 
 export interface GamificationState {

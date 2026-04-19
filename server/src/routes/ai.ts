@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AIService } from '../services/ai-service';
+import { AiConfigService } from '../services/ai-config-service';
 import prisma from '../config/database';
 import { successResponse, errorResponse } from '../utils/response';
 import { AuthRequest } from '../types';
@@ -46,7 +47,8 @@ const extractTextSchema = z.object({
 router.post('/define', async (req: AuthRequest, res) => {
   try {
     const { term } = defineSchema.parse(req.body);
-    const result = await AIService.defineWord(term);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
+    const result = await AIService.defineWord(term, config);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -63,7 +65,8 @@ router.post('/define', async (req: AuthRequest, res) => {
 router.post('/extract', async (req: AuthRequest, res) => {
   try {
     const { imageBase64 } = extractSchema.parse(req.body);
-    const result = await AIService.extractWordsFromImage(imageBase64);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
+    const result = await AIService.extractWordsFromImage(imageBase64, config);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -80,7 +83,8 @@ router.post('/extract', async (req: AuthRequest, res) => {
 router.post('/extract-text', async (req: AuthRequest, res) => {
   try {
     const { imageBase64, mode } = extractTextSchema.parse(req.body);
-    const result = await AIService.extractTextFromImage(imageBase64, mode);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
+    const result = await AIService.extractTextFromImage(imageBase64, mode, config);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -109,7 +113,8 @@ router.post('/practice', async (req: AuthRequest, res) => {
       return errorResponse(res, 'WORDS_NOT_FOUND', '未找到指定单词', 404);
     }
 
-    const result = await AIService.generatePractice(words, questionCount, allowedTypes);
+    const config = await AiConfigService.getEffectiveConfig(userId);
+    const result = await AIService.generatePractice(words, questionCount, allowedTypes, config);
     console.log('[API] Practice generated, questions count:', result.questions?.length);
     if (result.questions?.length > 0) {
       const firstQ = result.questions[0];
@@ -143,7 +148,8 @@ router.post('/story', async (req: AuthRequest, res) => {
       return errorResponse(res, 'WORDS_NOT_FOUND', '未找到指定单词', 404);
     }
 
-    const result = await AIService.generateStory(words);
+    const config = await AiConfigService.getEffectiveConfig(userId);
+    const result = await AIService.generateStory(words, config);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -161,7 +167,8 @@ router.post('/review-essay', async (req: AuthRequest, res) => {
   try {
     const { title, essay } = essaySchema.parse(req.body);
     console.log('[API] Received essay review request, title:', title ? 'provided' : 'empty', 'essay length:', essay?.length);
-    const result = await AIService.reviewEssay(title, essay);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
+    const result = await AIService.reviewEssay(title, essay, config);
     console.log('[API] Sending essay review response:', JSON.stringify({
       success: true,
       hasOverallBand: !!result.overallBand,
@@ -190,7 +197,8 @@ router.post('/study-article', async (req: AuthRequest, res) => {
   try {
     const { article, generateQuestions, questionCount } = articleSchema.parse(req.body);
     console.log('[API] Received article study request, length:', article?.length, 'generateQuestions:', generateQuestions, 'questionCount:', questionCount);
-    const result = await AIService.studyArticle(article, generateQuestions, questionCount);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
+    const result = await AIService.studyArticle(article, generateQuestions, questionCount, config);
     console.log('[API] Sending article study response:', JSON.stringify({
       success: true,
       kind: result.kind,
@@ -226,12 +234,13 @@ const speakingChatSchema = z.object({
 router.post('/speaking-chat', async (req: AuthRequest, res) => {
   try {
     const { scenario, userTextEn, history, targetLevel } = speakingChatSchema.parse(req.body);
+    const config = await AiConfigService.getEffectiveConfig(req.userId!);
     const result = await AIService.speakingChat({
       scenario,
       userTextEn,
       history,
       targetLevel,
-    });
+    }, config);
     return successResponse(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -239,6 +248,72 @@ router.post('/speaking-chat', async (req: AuthRequest, res) => {
     }
     if (error instanceof Error) {
       return errorResponse(res, 'AI_ERROR', error.message, 500);
+    }
+    throw error;
+  }
+});
+
+// ===== AI 配置路由 =====
+
+const aiConfigUpdateSchema = z.object({
+  provider: z.string().min(1).max(20).optional(),
+  model: z.string().min(1).max(100).optional(),
+  visionModel: z.string().min(1).max(100).optional(),
+  baseUrl: z.string().min(1).max(500).optional(),
+  apiKey: z.string().max(500).optional(),
+});
+
+// GET /api/ai/config - 获取当前生效的 AI 配置
+router.get('/config', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!;
+    const effective = await AiConfigService.getEffectiveConfig(userId);
+    const userConfig = await AiConfigService.getUserConfig(userId);
+    return successResponse(res, {
+      effective,
+      userConfig,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      return errorResponse(res, 'CONFIG_ERROR', error.message, 500);
+    }
+    throw error;
+  }
+});
+
+// PUT /api/ai/config - 更新用户 AI 配置
+router.put('/config', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!;
+    const data = aiConfigUpdateSchema.parse(req.body);
+    const updated = await AiConfigService.updateConfig(userId, data);
+    return successResponse(res, {
+      provider: updated.provider,
+      model: updated.model,
+      visionModel: updated.visionModel,
+      baseUrl: updated.baseUrl,
+      apiKey: updated.apiKey ? '***' : '',
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return errorResponse(res, 'VALIDATION_ERROR', error.errors[0].message, 400);
+    }
+    if (error instanceof Error) {
+      return errorResponse(res, 'CONFIG_ERROR', error.message, 500);
+    }
+    throw error;
+  }
+});
+
+// DELETE /api/ai/config - 重置为环境变量默认值
+router.delete('/config', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!;
+    const result = await AiConfigService.resetConfig(userId);
+    return successResponse(res, result);
+  } catch (error) {
+    if (error instanceof Error) {
+      return errorResponse(res, 'CONFIG_ERROR', error.message, 500);
     }
     throw error;
   }

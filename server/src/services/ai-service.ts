@@ -36,6 +36,8 @@ interface CallLLMOptions {
   responseFormat?: { type: string };
   retries?: number;
   stripThink?: boolean;
+  baseUrl?: string;
+  apiKey?: string;
 }
 
 // 统一 AI 请求函数（支持重试、模型切换、推理块清理）
@@ -47,9 +49,11 @@ async function callLLM(messages: any[], options: CallLLMOptions = {}): Promise<s
     responseFormat,
     retries = 2,
     stripThink = false,
+    baseUrl = BASE_URL,
+    apiKey = API_KEY,
   } = options;
 
-  const url = `${BASE_URL}chat/completions`;
+  const url = `${baseUrl}chat/completions`;
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -60,7 +64,7 @@ async function callLLM(messages: any[], options: CallLLMOptions = {}): Promise<s
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`,
+            'Authorization': `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
             model,
@@ -579,9 +583,16 @@ function validateAndNormalizeEssayReview(raw: any): any {
   return result;
 }
 
+export type AiRuntimeConfig = {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  visionModel?: string;
+};
+
 export class AIService {
   // 生成单词释义
-  static async defineWord(term: string) {
+  static async defineWord(term: string, config?: AiRuntimeConfig) {
     const messages = [
       {
         role: 'system',
@@ -602,7 +613,13 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 1500, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      maxTokens: 1500,
+      responseFormat: { type: 'json_object' },
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const result = extractJson(response);
 
     // 验证返回格式
@@ -614,7 +631,7 @@ export class AIService {
   }
 
   // 步骤一：从图片中识别单词列表（只识别，不生成释义）
-  static async recognizeWordsFromImage(imageBase64: string): Promise<string[]> {
+  static async recognizeWordsFromImage(imageBase64: string, config?: AiRuntimeConfig): Promise<string[]> {
     const messages = [
       {
         role: 'system',
@@ -641,7 +658,16 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 500, retries: 0, stripThink: true, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      model: config?.visionModel || VISION_MODEL,
+      temperature: 0.3,
+      maxTokens: 500,
+      retries: 0,
+      stripThink: true,
+      responseFormat: { type: 'json_object' },
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const result = extractJson(response);
 
     if (!result.words || !Array.isArray(result.words)) {
@@ -654,9 +680,9 @@ export class AIService {
   }
 
   // 图片识别单词（两步：先识别单词列表，再批量生成释义）
-  static async extractWordsFromImage(imageBase64: string) {
+  static async extractWordsFromImage(imageBase64: string, config?: AiRuntimeConfig) {
     // Step 1：识别图片中的单词列表
-    const wordList = await AIService.recognizeWordsFromImage(imageBase64);
+    const wordList = await AIService.recognizeWordsFromImage(imageBase64, config);
     console.log('[AI] Recognized words from image:', wordList);
 
     if (wordList.length === 0) {
@@ -667,7 +693,7 @@ export class AIService {
     const words: any[] = [];
     for (const term of wordList) {
       try {
-        const def = await AIService.defineWord(term);
+        const def = await AIService.defineWord(term, config);
         if (def.definitions && Array.isArray(def.definitions) && def.definitions.length > 0) {
           const d = def.definitions[0];
           words.push({
@@ -698,7 +724,7 @@ export class AIService {
   }
 
   // 从图片中转录文章或作文文字（多模态 AI，替代 Tesseract）
-  static async extractTextFromImage(imageBase64: string, mode: 'article' | 'essay'): Promise<{ text: string }> {
+  static async extractTextFromImage(imageBase64: string, mode: 'article' | 'essay', config?: AiRuntimeConfig): Promise<{ text: string }> {
     const systemPrompt = mode === 'article'
       ? `你是专业的图片文字转录助手。
 任务：将图片中的英文文章完整、准确地转录为纯文本。
@@ -731,7 +757,15 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { model: VISION_MODEL, temperature: 0.3, maxTokens: 4000, retries: 0, stripThink: true });
+    const response = await callLLM(messages, {
+      model: config?.visionModel || VISION_MODEL,
+      temperature: 0.3,
+      maxTokens: 4000,
+      retries: 0,
+      stripThink: true,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const text = response.trim();
 
     if (!text || text.length < 5) {
@@ -745,7 +779,8 @@ export class AIService {
   static async generatePractice(
     words: { word: string; definition: string; partOfSpeech: string }[],
     questionCount: number = 10,
-    allowedTypes: ('mcq' | 'fill_blank' | 'reorder')[] = ['mcq', 'fill_blank', 'reorder']
+    allowedTypes: ('mcq' | 'fill_blank' | 'reorder')[] = ['mcq', 'fill_blank', 'reorder'],
+    config?: AiRuntimeConfig
   ) {
     const wordsText = words.map(w => `${w.word} (${w.partOfSpeech}): ${w.definition}`).join('\n');
 
@@ -822,7 +857,13 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 3500, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      maxTokens: 3500,
+      responseFormat: { type: 'json_object' },
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const result = extractJson(response);
 
     if (!result.questions || !Array.isArray(result.questions)) {
@@ -939,7 +980,8 @@ export class AIService {
 
   // 生成故事
   static async generateStory(
-    words: { word: string; definition: string }[]
+    words: { word: string; definition: string }[],
+    config?: AiRuntimeConfig
   ) {
     const wordsText = words.map(w => `${w.word}: ${w.definition}`).join('\n');
 
@@ -971,7 +1013,13 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 3500, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      maxTokens: 3500,
+      responseFormat: { type: 'json_object' },
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const result = extractJson(response);
 
     if (!result.title || !result.story || !result.translation) {
@@ -982,7 +1030,7 @@ export class AIService {
   }
 
   // 作文批改
-  static async reviewEssay(title: string | undefined, essay: string) {
+  static async reviewEssay(title: string | undefined, essay: string, config?: AiRuntimeConfig) {
     const messages = [
       {
         role: 'system',
@@ -1037,7 +1085,13 @@ export class AIService {
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 8000, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      maxTokens: 8000,
+      responseFormat: { type: 'json_object' },
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const rawResult = extractJson(response);
 
     console.log('[AI] Essay review raw result:', JSON.stringify({
@@ -1071,7 +1125,7 @@ export class AIService {
   }
 
   // 文章分析
-  static async studyArticle(article: string, generateQuestions: boolean = false, questionCount: number = 5) {
+  static async studyArticle(article: string, generateQuestions: boolean = false, questionCount: number = 5, config?: AiRuntimeConfig) {
     const messages = [
       {
         role: 'system',
@@ -1141,7 +1195,12 @@ ${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 8000 });
+    const response = await callLLM(messages, {
+      maxTokens: 8000,
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const rawResult = extractJson(response);
 
     console.log('[AI] Article study raw result keys:', Object.keys(rawResult));
@@ -1238,7 +1297,7 @@ ${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解
     userTextEn: string;
     history?: Array<{ role: 'user' | 'assistant'; contentEn: string }>;
     targetLevel?: string;
-  }) {
+  }, config?: AiRuntimeConfig) {
     const { scenario, userTextEn, history, targetLevel } = params;
 
     const historyText = (history || [])
@@ -1295,7 +1354,13 @@ ${userTextEn.trim()}
       },
     ];
 
-    const response = await callLLM(messages, { maxTokens: 1500, responseFormat: { type: 'json_object' } });
+    const response = await callLLM(messages, {
+      maxTokens: 1500,
+      responseFormat: { type: 'json_object' },
+      model: config?.model,
+      baseUrl: config?.baseUrl,
+      apiKey: config?.apiKey,
+    });
     const result = extractJson(response);
 
     return {

@@ -197,6 +197,20 @@ model PracticeAnswer {
   @@map("practice_answers")
 }
 
+model AiConfig {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  provider     String   @default("openai") // openai / gemini / anthropic 等标签
+  model        String   @default("")       // 主模型名称
+  visionModel  String   @default("")       // 视觉模型名称
+  baseUrl      String   @default("")       // API 基础地址
+  apiKey       String   @default("")       // API 密钥（空则回退到环境变量）
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_configs")
+}
+
 // ===== Word Mastery Stats =====
 
 model WordMasteryStats {
