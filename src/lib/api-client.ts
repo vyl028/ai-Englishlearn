@@ -637,3 +637,94 @@ export const wordMasteryApi = {
       method: 'DELETE',
     }),
 };
+
+// ===== 学习计划 API =====
+
+export interface EvaluationDimension {
+  score: number;
+  label: string;
+  details: Record<string, number | string>;
+}
+
+export interface EvaluationReport {
+  overallScore: number;
+  trend: 'up' | 'down' | 'stable';
+  dimensions: {
+    vocabulary: EvaluationDimension;
+    practice: EvaluationDimension;
+    activity: EvaluationDimension;
+  };
+  weakPoints: string[];
+  strengths: string[];
+}
+
+export interface RecommendedWord {
+  wordId: string;
+  word: string;
+  partOfSpeech: string;
+  definition: string;
+  masteryScore: number;
+  reason: 'weak' | 'at_risk' | 'consecutive_wrong';
+}
+
+export interface PlanTask {
+  id: string;
+  type: 'review_words' | 'practice' | 'read_article' | 'story' | 'speaking' | 'capture_words';
+  title: string;
+  description: string;
+  targetCount?: number;
+  wordIds?: string[];
+  questionTypes?: string[];
+  estimatedMinutes: number;
+}
+
+export interface LearningPlanData {
+  id: string;
+  dateKey: string;
+  planType: 'daily' | 'weekly';
+  status: string;
+  evaluationSnapshot: {
+    overallScore: number;
+    vocabularyScore: number;
+    practiceScore: number;
+    activityScore: number;
+  };
+  title: string;
+  tasks: PlanTask[];
+}
+
+export interface RecommendationsData {
+  recommendedWords: RecommendedWord[];
+  recommendedTypes: string[];
+  goalSuggestion: string | null;
+}
+
+export const learningPlanApi = {
+  getEvaluation: () =>
+    request<EvaluationReport>('/api/learning-plan/evaluation', {
+      method: 'GET',
+    }),
+
+  getTodayPlan: () =>
+    request<LearningPlanData>('/api/learning-plan/today', {
+      method: 'GET',
+    }),
+
+  generatePlan: (planType: 'daily' | 'weekly' = 'daily') =>
+    request<LearningPlanData>('/api/learning-plan/generate', {
+      method: 'POST',
+      body: JSON.stringify({ planType }),
+    }),
+
+  updatePlanStatus: (id: string, status: string) =>
+    request<LearningPlanData>(`/api/learning-plan/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
+
+  getHistory: (limit?: number) =>
+    request<{ history: Array<Pick<LearningPlanData, 'id' | 'dateKey' | 'planType' | 'status' | 'title'>> }>(
+      `/api/learning-plan/history?limit=${limit ?? 30}`,
+      { method: 'GET' }
+    ),
+};
