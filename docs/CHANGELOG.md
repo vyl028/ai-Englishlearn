@@ -1,3 +1,49 @@
+## 2026-05-16
+
+### 新增/修改内容
+- **修复 AI 功能报错与前端崩溃问题（与 ai-Englishlearn 项目同步修复）**
+  - 后端模型配置修复：将 `server/.env` 中 `OPENAI_MODEL` 从 `minimax-m2.5` 改为 `gemini-2.5-flash`，解决 API 返回 503 `model_not_found` 错误
+  - 后端 JSON 解析修复：在 `server/src/services/ai-service.ts` 中新增 `sanitizeJsonString()` 与 `safeJsonParse()`，解决 Gemini 2.5 Flash 返回的中文释义字段包含未转义换行符导致 `JSON.parse` 失败的问题
+  - Service Worker 缓存刷新：`public/sw.js` 中 `CACHE_VERSION` 从 `v1` 升级为 `v2`，强制旧缓存失效，避免浏览器运行旧版 JS
+  - API 响应格式防御：`src/lib/api-client.ts` 在 `response.json()` 后增加防御性校验，确保返回对象包含 `success` 字段；若格式异常则返回统一错误而非让前端崩溃
+  - 前端全模块空值保护：为所有 AI 调用结果增加 `!result || !result.success` 前置校验，防止因 Service Worker 缓存旧代码或网络异常导致的 `Cannot read properties of undefined (reading 'success')` 崩溃
+    - `src/app/page.tsx`：练习生成、故事生成、单词重新生成
+    - `src/components/word-capture-form.tsx`：图片识别（extract）与手动输入释义（define）
+    - `src/components/article-reading-view.tsx`：文章分析、图片 OCR、词汇预览、批量加入、单个加入
+    - `src/components/essay-review-view.tsx`：作文批改、图片 OCR
+    - `src/components/speaking-training-view.tsx`：AI 口语对话
+    - `src/lib/ai-retry.ts`：`extractWordWithRetry` 与 `defineTermWithRetry`
+
+### 涉及文件
+- 修改：`server/.env`
+- 修改：`server/src/services/ai-service.ts`
+- 修改：`public/sw.js`
+- 修改：`src/lib/api-client.ts`
+- 修改：`src/app/page.tsx`
+- 修改：`src/components/word-capture-form.tsx`
+- 修改：`src/components/article-reading-view.tsx`
+- 修改：`src/components/essay-review-view.tsx`
+- 修改：`src/components/speaking-training-view.tsx`
+- 修改：`src/lib/ai-retry.ts`
+
+### 背景/原因
+- 使用 OpenAI-compatible API（`api.inliver.com/v1/`）时，模型 ID 必须与服务端可用模型严格匹配；`minimax-m2.5` 已被移除，需改为 `gemini-2.5-flash`
+- Gemini 2.5 Flash 输出中文分析字段时会在 JSON 字符串值内插入原始换行符，标准 `JSON.parse` 无法处理，需要预处理转义
+- 前端 Service Worker 缓存 `_next/static/` JS 资源，代码更新后浏览器可能继续运行旧版，导致新旧代码不兼容或调用已变更的 API；升级 `CACHE_VERSION` 可触发缓存清理
+- 旧版 `api-client.ts` 未校验响应格式，若后端返回非 JSON 或拦截器注入异常内容，`result` 可能为 `undefined`，直接访问 `.success` 会抛出 TypeError 导致白屏
+- 即使修复了 `api-client.ts`，仍需要在每个调用处做空值保护，作为最后一道防线，确保任何异常都能转化为用户友好的 toast 提示而非崩溃
+
+### 如何验证
+- 运行：`npm run typecheck`（无新增类型错误，已通过）
+- 启动前后端后，在浏览器按 Ctrl+F5 强制刷新（或 unregister Service Worker）
+- 测试 AI 练习生成：选择单词后点击"练习"，应正常返回题目列表，不再报"练习生成失败"
+- 测试图片识别：在"新增单词"中拍照/上传图片，应正常识别单词并生成释义
+- 测试作文批改：粘贴英文作文后点击"开始批改"，应正常返回评分与问题清单
+- 测试口语对话：在"听说训练"的 AI 对话页发送消息，应正常收到 AI 回复与中文反馈
+- 后端日志应显示 `POST /api/ai/* 200`，不应再出现 `model_not_found` 或 "无法从响应中提取 JSON"
+
+---
+
 ## 2026-04-19
 
 ### 新增/修改内容

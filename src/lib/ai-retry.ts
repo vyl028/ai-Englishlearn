@@ -68,7 +68,7 @@ export async function extractWordWithRetry(
 ) {
   return withRetry(async () => {
     const result = await aiApi.extract(dataUri);
-    if (!result.success) {
+    if (!result || !result.success) {
       throw new Error(result.error?.message || "图片分析失败");
     }
     return result.data;
@@ -84,7 +84,7 @@ export async function defineTermWithRetry(
 ) {
   return withRetry(async () => {
     const result = await aiApi.define(term);
-    if (!result.success) {
+    if (!result || !result.success) {
       throw new Error(result.error?.message || "单词释义生成失败");
     }
     return result.data?.definitions;

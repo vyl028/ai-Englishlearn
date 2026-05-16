@@ -585,8 +585,8 @@ export default function Home() {
     try {
       const result = await aiApi.define(word.word);
 
-      if (!result.success || !result.data?.definitions?.[0]) {
-        return { success: false, error: result.error?.message || "模型未返回有效结果，请稍后重试。" };
+      if (!result || !result.success || !result.data?.definitions?.[0]) {
+        return { success: false, error: result?.error?.message || "模型未返回有效结果，请稍后重试。" };
       }
 
       const def = result.data.definitions[0];
@@ -651,14 +651,22 @@ export default function Home() {
       );
       if (globalTaskIdRef.current !== taskId) return;
 
-      if (result.success && result.data) {
-        setAiCache('practice', practiceCacheHash, result.data);
-        setPracticeData(result.data);
+      if (!result || !result.success || !result.data) {
+        toast({
+          variant: "destructive",
+          title: "练习生成失败",
+          description: result?.error?.message || "发生未知错误，请稍后重试。",
+        });
+        return;
+      }
 
-        // Save practice record to backend
-        try {
-          const createRes = await practiceApi.create({
-            questionsJson: JSON.stringify(result.data.questions),
+      setAiCache('practice', practiceCacheHash, result.data);
+      setPracticeData(result.data);
+
+      // Save practice record to backend
+      try {
+        const createRes = await practiceApi.create({
+          questionsJson: JSON.stringify(result.data.questions),
             wordIds,
             questionCount: result.data.questions.length,
           });
@@ -671,13 +679,6 @@ export default function Home() {
 
         setView('practice');
         return;
-      }
-
-      toast({
-        variant: "destructive",
-        title: "练习生成失败",
-        description: result.error?.message || "发生未知错误，请稍后重试。",
-      });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;
       toast({
@@ -762,21 +763,21 @@ export default function Home() {
       const result = await aiApi.story(wordIds);
       if (globalTaskIdRef.current !== taskId) return;
 
-      if (result.success && result.data) {
-        setAiCache('story', storyCacheHash, result.data);
-        setStoryData(result.data);
-        setView('story');
-        setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
-        recordLearningEvent({ type: "story_generated", wordCount: storyWords.length });
-        toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
+      if (!result || !result.success || !result.data) {
+        toast({
+          variant: "destructive",
+          title: "故事生成失败",
+          description: result?.error?.message || "发生未知错误，请稍后重试。",
+        });
         return;
       }
 
-      toast({
-        variant: "destructive",
-        title: "故事生成失败",
-        description: result.error?.message || "发生未知错误，请稍后重试。",
-      });
+      setAiCache('story', storyCacheHash, result.data);
+      setStoryData(result.data);
+      setView('story');
+      setGamification((prev) => applyLearningEvent(prev, { type: "story_generated" }));
+      recordLearningEvent({ type: "story_generated", wordCount: storyWords.length });
+      toast({ title: "故事已生成", description: "已在页面中展示，可点击右上角导出 PDF。" });
     } catch (error: any) {
       if (globalTaskIdRef.current !== taskId) return;
       toast({

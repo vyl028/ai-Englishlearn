@@ -217,7 +217,7 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
 
         const res = await aiApi.extractText(imageDataUri, 'article');
 
-        if (!res.success || !res.data?.text || res.data.text.length < 10) {
+        if (!res || !res.success || !res.data?.text || res.data.text.length < 10) {
           toast({
             variant: "destructive",
             title: "识别失败",
@@ -468,14 +468,14 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
       if (trimmed.length <= 16000) {
         const res = await aiApi.studyArticle(trimmed, includeQuestions, questionCount);
 
-        if (res.success && res.data) {
+        if (res && res.success && res.data) {
           setResult(res.data);
           toast({ title: "分析完成", description: "已生成结构、句法、难句拆解与词汇提取结果。" });
         } else {
           toast({
             variant: "destructive",
             title: "分析失败",
-            description: res.error?.message || "文章分析失败，请稍后重试。",
+            description: res?.error?.message || "文章分析失败，请稍后重试。",
           });
         }
         return;
@@ -537,8 +537,8 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
           questionCount
         );
 
-        if (!res.success || !res.data) {
-          throw new Error(res.error?.message || "文章分析失败，请稍后重试。");
+        if (!res || !res.success || !res.data) {
+          throw new Error(res?.error?.message || "文章分析失败，请稍后重试。");
         }
 
         outputs.push({ startParagraphIndex: chunk.startParagraphIndex, paragraphCount: chunk.paragraphCount, output: res.data });
@@ -660,9 +660,9 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
     setPreviewError(null);
     try {
       const res = await aiApi.define(cleanedTerm);
-      if (!res.success || !res.data?.definitions) {
+      if (!res || !res.success || !res.data?.definitions) {
         setPreviewGenerated(null);
-        setPreviewError(res.error?.message || "无法生成词条内容，请稍后重试。");
+        setPreviewError(res?.error?.message || "无法生成词条内容，请稍后重试。");
         return;
       }
       setPreviewGenerated(res.data.definitions);
@@ -729,8 +729,8 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
 
         try {
           const res = await aiApi.define(cleanedTerm);
-          if (!res.success || !res.data?.definitions) {
-            failures.push({ term: cleanedTerm, error: res.error?.message || "无法生成词条内容。" });
+          if (!res || !res.success || !res.data?.definitions) {
+            failures.push({ term: cleanedTerm, error: res?.error?.message || "无法生成词条内容。" });
           } else {
             nextWords.push(...buildCapturedWordsFromDefineOutput(cleanedTerm, res.data.definitions, new Date()));
           }
@@ -782,11 +782,11 @@ export function ArticleReadingView({ words, onAddWords }: ArticleReadingViewProp
     setAddingKey(key);
     try {
       const res = await aiApi.define(cleanedTerm);
-      if (!res.success || !res.data?.definitions) {
+      if (!res || !res.success || !res.data?.definitions) {
         toast({
           variant: "destructive",
           title: "加入失败",
-          description: res.error?.message || "无法生成词条内容，请稍后重试。",
+          description: res?.error?.message || "无法生成词条内容，请稍后重试。",
         });
         return;
       }

@@ -692,8 +692,8 @@ export function SpeakingTrainingView() {
         targetLevel: chatLevel,
       });
 
-      if (!res.success || !res.data) {
-        const msg = res.error?.message || "口语对话失败，请稍后重试。";
+      if (!res || !res.success || !res.data) {
+        const msg = res?.error?.message || "口语对话失败，请稍后重试。";
         setChatError(msg);
         setChatTurns((prev) =>
           prev.map((t) =>

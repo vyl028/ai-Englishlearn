@@ -73,11 +73,11 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
 
       if (token !== imageAnalysisTokenRef.current) return;
 
-      if (!result.success || !result.data?.words || result.data.words.length === 0) {
+      if (!result || !result.success || !result.data?.words || result.data.words.length === 0) {
         toast({
           variant: "destructive",
           title: "识别失败",
-          description: result.error?.message || "未能从图片中识别到有效单词，请尝试更清晰的图片。",
+          description: result?.error?.message || "未能从图片中识别到有效单词，请尝试更清晰的图片。",
         });
         return;
       }
@@ -290,8 +290,8 @@ export function WordCaptureForm({ onWordAdded, onMultipleWordsAdded }: WordCaptu
             definitions = cached;
           } else {
             const res = await aiApi.define(term);
-            if (!res.success || !res.data?.definitions) {
-              failed.push({ term, reason: res.error?.message || "生成失败" });
+            if (!res || !res.success || !res.data?.definitions) {
+              failed.push({ term, reason: res?.error?.message || "生成失败" });
               continue;
             }
             definitions = res.data.definitions;

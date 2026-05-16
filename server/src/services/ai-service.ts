@@ -343,28 +343,75 @@ function findJsonCandidates(text: string): string[] {
   return candidates;
 }
 
+// 修复 JSON 字符串值内部的未转义换行符（某些模型会在字符串值中直接插入换行）
+function sanitizeJsonString(text: string): string {
+  let result = '';
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (escapeNext) {
+      result += char;
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      result += char;
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString && (char === '\n' || char === '\r')) {
+      result += '\\n';
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
+function safeJsonParse(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const sanitized = sanitizeJsonString(text);
+    return JSON.parse(sanitized);
+  }
+}
+
 function extractJson(text: string): any {
   const trimmed = text.trim();
   // 1. 直接解析
-  try { return JSON.parse(trimmed); } catch { /* continue */ }
+  try { return safeJsonParse(trimmed); } catch { /* continue */ }
 
   // 2. 尝试多个候选
   const candidates = findJsonCandidates(trimmed);
   for (const candidate of candidates) {
-    try { return JSON.parse(candidate); } catch { /* try next */ }
+    try { return safeJsonParse(candidate); } catch { /* try next */ }
     const fixed = tryFixTruncatedJson(candidate);
     if (fixed) {
-      try { return JSON.parse(fixed); } catch { /* try next */ }
+      try { return safeJsonParse(fixed); } catch { /* try next */ }
     }
   }
 
   // 3. 尝试找到最内层的 JSON 对象（从第一个 { 到最后一个匹配的 }）
   const objMatch = trimmed.match(/\{[\s\S]*\}/);
   if (objMatch) {
-    try { return JSON.parse(objMatch[0]); } catch {
+    try { return safeJsonParse(objMatch[0]); } catch {
       const fixed = tryFixTruncatedJson(objMatch[0]);
       if (fixed) {
-        try { return JSON.parse(fixed); } catch { /* continue */ }
+        try { return safeJsonParse(fixed); } catch { /* continue */ }
       }
     }
   }
@@ -372,10 +419,10 @@ function extractJson(text: string): any {
   // 4. 尝试找到 JSON 数组（从第一个 [ 到最后一个匹配的 ]）
   const arrMatch = trimmed.match(/\[[\s\S]*\]/);
   if (arrMatch) {
-    try { return JSON.parse(arrMatch[0]); } catch {
+    try { return safeJsonParse(arrMatch[0]); } catch {
       const fixed = tryFixTruncatedJson(arrMatch[0]);
       if (fixed) {
-        try { return JSON.parse(fixed); } catch { /* continue */ }
+        try { return safeJsonParse(fixed); } catch { /* continue */ }
       }
     }
   }

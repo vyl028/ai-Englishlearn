@@ -476,7 +476,7 @@ export function EssayReviewView() {
 
         const res = await aiApi.extractText(imageDataUri, 'essay');
 
-        if (!res.success || !res.data?.text || res.data.text.length < 10) {
+        if (!res || !res.success || !res.data?.text || res.data.text.length < 10) {
           toast({
             variant: "destructive",
             title: "识别失败",
@@ -544,7 +544,7 @@ export function EssayReviewView() {
     setResult(null);
     try {
       const res = await aiApi.reviewEssay(trimmed, taskPrompt.trim() || undefined);
-      if (res.success && res.data) {
+      if (res && res.success && res.data) {
         setResult(res.data);
 
         const saved: EssayReviewSaved = {
@@ -579,7 +579,7 @@ export function EssayReviewView() {
         toast({
           variant: "destructive",
           title: "批改失败",
-          description: res.error?.message || "作文批改失败，请稍后重试。",
+          description: res?.error?.message || "作文批改失败，请稍后重试。",
         });
       }
     } catch (e: any) {

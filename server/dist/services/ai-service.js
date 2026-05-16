@@ -6,6 +6,8 @@ const API_KEY = process.env.OPENAI_API_KEY || '';
 const BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.kimi.com/coding/';
 const MODEL = process.env.OPENAI_MODEL || 'kimi-k2.5';
 const TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '120000');
+// 视觉模型配置（专用于图片识别，主模型不支持视觉）
+const VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'qwen3-vl:235b';
 // 带超时的 fetch 函数
 async function fetchWithTimeout(url, options, timeoutMs) {
     const controller = new AbortController();
@@ -21,9 +23,10 @@ async function fetchWithTimeout(url, options, timeoutMs) {
         clearTimeout(timeoutId);
     }
 }
-// 通用 AI 请求函数（带重试机制）
-async function callAI(messages, responseFormat, maxTokens = 4000, retries = 2) {
-    const url = `${BASE_URL}chat/completions`;
+// 统一 AI 请求函数（支持重试、模型切换、推理块清理）
+async function callLLM(messages, options = {}) {
+    const { model = MODEL, temperature = 0.7, maxTokens = 4000, responseFormat, retries = 2, stripThink = false, baseUrl = BASE_URL, apiKey = API_KEY, } = options;
+    const url = `${baseUrl}chat/completions`;
     let lastError;
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -31,12 +34,12 @@ async function callAI(messages, responseFormat, maxTokens = 4000, retries = 2) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${API_KEY}`,
+                    'Authorization': `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
-                    model: MODEL,
+                    model,
                     messages,
-                    temperature: 0.7,
+                    temperature,
                     max_tokens: maxTokens,
                     ...(responseFormat && { response_format: responseFormat }),
                 }),
@@ -50,28 +53,23 @@ async function callAI(messages, responseFormat, maxTokens = 4000, retries = 2) {
             if (!content) {
                 throw new Error('AI 返回空内容');
             }
-            return content;
+            return stripThink ? content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : content;
         }
         catch (error) {
             lastError = error;
-            // 如果是最后一次尝试，直接抛出错误
-            if (attempt === retries) {
+            if (attempt === retries)
                 break;
-            }
-            // 检查是否是可重试的错误
-            const isRetryable = error.name === 'AbortError' || // 超时
+            const isRetryable = error.name === 'AbortError' ||
                 error.message?.includes('ECONNRESET') ||
                 error.message?.includes('ETIMEDOUT') ||
                 error.message?.includes('fetch failed') ||
                 (error.message?.includes('AI API error') &&
-                    (error.message?.includes('429') || // 速率限制
-                        error.message?.includes('502') || // 网关错误
-                        error.message?.includes('503') || // 服务不可用
-                        error.message?.includes('504'))); // 网关超时
-            if (!isRetryable) {
+                    (error.message?.includes('429') ||
+                        error.message?.includes('502') ||
+                        error.message?.includes('503') ||
+                        error.message?.includes('504')));
+            if (!isRetryable)
                 throw error;
-            }
-            // 指数退避重试：1s, 2s
             const delay = Math.pow(2, attempt) * 1000;
             console.log(`[AI] 请求失败，${delay}ms 后重试 (${attempt + 1}/${retries})...`);
             await new Promise((resolve) => setTimeout(resolve, delay));
@@ -240,41 +238,138 @@ function trySmartFixTruncatedJson(text) {
     }
 }
 // JSON 提取工具
+function stripJsonPreamble(text) {
+    // 移除常见的前缀文字，直到第一个 { 或 [
+    const idxObj = text.indexOf('{');
+    const idxArr = text.indexOf('[');
+    let start = -1;
+    if (idxObj >= 0 && idxArr >= 0)
+        start = Math.min(idxObj, idxArr);
+    else if (idxObj >= 0)
+        start = idxObj;
+    else if (idxArr >= 0)
+        start = idxArr;
+    if (start > 0)
+        return text.slice(start);
+    return text;
+}
+function stripJsonPostamble(text) {
+    // 找到最后一个匹配的 } 或 ]
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let lastValidPos = -1;
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        if (char === '"' && !inString) {
+            inString = true;
+            continue;
+        }
+        if (char === '"' && inString) {
+            inString = false;
+            continue;
+        }
+        if (inString)
+            continue;
+        if (char === '{')
+            braceDepth++;
+        else if (char === '}') {
+            braceDepth--;
+            if (braceDepth === 0 && bracketDepth === 0)
+                lastValidPos = i;
+        }
+        else if (char === '[')
+            bracketDepth++;
+        else if (char === ']') {
+            bracketDepth--;
+            if (braceDepth === 0 && bracketDepth === 0)
+                lastValidPos = i;
+        }
+    }
+    if (lastValidPos >= 0)
+        return text.slice(0, lastValidPos + 1);
+    return text;
+}
+function findJsonCandidates(text) {
+    const candidates = [];
+    // 1. markdown fenced block
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced)
+        candidates.push(fenced[1].trim());
+    // 2. open fence without close
+    const openFence = text.match(/```(?:json)?\s*([\s\S]*)/);
+    if (openFence)
+        candidates.push(openFence[1].trim());
+    // 3. strip preamble/postamble
+    const stripped = stripJsonPostamble(stripJsonPreamble(text));
+    if (stripped)
+        candidates.push(stripped);
+    return candidates;
+}
 function extractJson(text) {
-    // 尝试直接解析
+    const trimmed = text.trim();
+    // 1. 直接解析
     try {
-        return JSON.parse(text);
+        return JSON.parse(trimmed);
     }
-    catch {
-        // 尝试从代码块中提取
-        const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (match) {
-            try {
-                return JSON.parse(match[1]);
-            }
-            catch {
-                // 尝试修复截断的 JSON
-                const fixed = tryFixTruncatedJson(match[1]);
-                if (fixed)
-                    return JSON.parse(fixed);
-            }
+    catch { /* continue */ }
+    // 2. 尝试多个候选
+    const candidates = findJsonCandidates(trimmed);
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate);
         }
-        // 尝试从文本中提取 JSON 对象
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
+        catch { /* try next */ }
+        const fixed = tryFixTruncatedJson(candidate);
+        if (fixed) {
             try {
-                return JSON.parse(jsonMatch[0]);
+                return JSON.parse(fixed);
             }
-            catch {
-                // 尝试修复截断的 JSON
-                const fixed = tryFixTruncatedJson(jsonMatch[0]);
-                if (fixed)
-                    return JSON.parse(fixed);
-            }
+            catch { /* try next */ }
         }
     }
-    // 输出原始内容以便调试
-    console.error('[AI] Failed to extract JSON. Raw text preview:', text.substring(0, 500));
+    // 3. 尝试找到最内层的 JSON 对象（从第一个 { 到最后一个匹配的 }）
+    const objMatch = trimmed.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+        try {
+            return JSON.parse(objMatch[0]);
+        }
+        catch {
+            const fixed = tryFixTruncatedJson(objMatch[0]);
+            if (fixed) {
+                try {
+                    return JSON.parse(fixed);
+                }
+                catch { /* continue */ }
+            }
+        }
+    }
+    // 4. 尝试找到 JSON 数组（从第一个 [ 到最后一个匹配的 ]）
+    const arrMatch = trimmed.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+        try {
+            return JSON.parse(arrMatch[0]);
+        }
+        catch {
+            const fixed = tryFixTruncatedJson(arrMatch[0]);
+            if (fixed) {
+                try {
+                    return JSON.parse(fixed);
+                }
+                catch { /* continue */ }
+            }
+        }
+    }
+    console.error('[AI] Failed to extract JSON. Raw text preview:', trimmed.substring(0, 800));
     throw new Error('无法从响应中提取 JSON');
 }
 // 辅助函数：将值转换为数字（支持字符串数字）
@@ -286,6 +381,30 @@ function toNumber(v) {
         return isNaN(n) ? 0 : n;
     }
     return 0;
+}
+// 去除 AI 在 revisedTextEn 开头添加的说明性文字（如 "Note: This revision..."）
+function stripRevisedTextPreamble(text) {
+    if (!text)
+        return '';
+    // 常见的说明性前缀模式，匹配后删除到下一个段落
+    const preamblePatterns = [
+        /^Note:[^\n]*\n+/i,
+        /^Note —[^\n]*\n+/i,
+        /^Notice:[^\n]*\n+/i,
+        /^This revision[^\n]*\n+/i,
+        /^The following[^\n]*\n+/i,
+        /^Below is[^\n]*\n+/i,
+        /^Here is[^\n]*\n+/i,
+        /^I have[^\n]*\n+/i,
+        /^Please note[^\n]*\n+/i,
+        /^\*\*Note\*\*:[^\n]*\n+/i,
+        /^\[Note:[^\]]*\]\n+/i,
+    ];
+    let cleaned = text.trim();
+    for (const pattern of preamblePatterns) {
+        cleaned = cleaned.replace(pattern, '').trimStart();
+    }
+    return cleaned;
 }
 // 验证并规范化作文批改结果
 function validateAndNormalizeEssayReview(raw) {
@@ -366,8 +485,9 @@ function validateAndNormalizeEssayReview(raw) {
     else if (Array.isArray(raw.weaknesses_zh)) {
         result.weaknessesZh = raw.weaknesses_zh;
     }
-    // 处理 revisedTextEn
-    result.revisedTextEn = raw.revisedTextEn || raw.revised_text_en || raw.revisedText || '';
+    // 处理 revisedTextEn — 去除 AI 有时在开头添加的说明性文字
+    const rawRevisedText = raw.revisedTextEn || raw.revised_text_en || raw.revisedText || '';
+    result.revisedTextEn = stripRevisedTextPreamble(rawRevisedText);
     // 规范化 issues 数组
     const validCategories = ['grammar', 'spelling', 'tense', 'logic', 'coherence', 'task_response', 'word_choice', 'punctuation', 'style', 'other'];
     const validSeverities = ['low', 'medium', 'high'];
@@ -451,41 +571,33 @@ function validateAndNormalizeEssayReview(raw) {
 }
 class AIService {
     // 生成单词释义
-    static async defineWord(term) {
+    static async defineWord(term, config) {
         const messages = [
             {
                 role: 'system',
-                content: `你是一个英语词典助手。请为给定的英语单词或短语生成中文释义和拓展信息。
+                content: `你是英语词典助手。为给定单词生成中文释义。
 
-请以 JSON 格式返回，结构如下：
-{
-  "definitions": [
-    {
-      "word": "原词",
-      "partOfSpeech": "词性 (noun/verb/adjective/adverb/phrase等)",
-      "definition": "中文释义",
-      "enrichment": {
-        "collocations": ["常见搭配1", "常见搭配2"],
-        "synonyms": ["同义词1", "同义词2"],
-        "antonyms": ["反义词1", "反义词2"],
-        "examples": [
-          { "en": "英文例句", "zh": "中文翻译" }
-        ],
-        "usageZh": "用法说明（80字以内）",
-        "difficulty": "难度 (easy/medium/hard)"
-      }
-    }
-  ]
-}
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
-对于多词性单词，返回多个 definition 对象。`,
+格式：
+{"definitions":[{"word":"原词","partOfSpeech":"词性","definition":"中文释义","enrichment":{"collocations":["搭配1","搭配2"],"synonyms":["同义1","同义2"],"antonyms":["反义1"],"examples":[{"en":"例句","zh":"翻译"}],"usageZh":"用法说明（50字内）","difficulty":"easy|medium|hard"}}]}
+
+注意：每个数组最多2项，examples只要1项，只返回最常用的1个词性。`,
             },
             {
                 role: 'user',
-                content: `请为 "${term}" 生成释义和拓展信息`,
+                content: `"${term}"`,
             },
         ];
-        const response = await callAI(messages, undefined, 4000);
+        const response = await callLLM(messages, {
+            maxTokens: 1500,
+            responseFormat: { type: 'json_object' },
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const result = extractJson(response);
         // 验证返回格式
         if (!result.definitions || !Array.isArray(result.definitions)) {
@@ -493,58 +605,155 @@ class AIService {
         }
         return result;
     }
-    // 图片识别单词
-    static async extractWordsFromImage(imageBase64) {
+    // 步骤一：从图片中识别单词列表（只识别，不生成释义）
+    static async recognizeWordsFromImage(imageBase64, config) {
         const messages = [
             {
                 role: 'system',
-                content: `你是一个图像文字识别助手。请识别图片中的英语单词，并为每个单词生成中文释义和拓展信息。
+                content: `你是专业的图片文字识别助手。
+任务：识别图片中所有可见的英语单词，原样输出，不要修改。
 
-请以 JSON 格式返回：
-{
-  "words": [
-    {
-      "word": "识别出的单词",
-      "partOfSpeech": "词性",
-      "definition": "中文释义",
-      "enrichment": {
-        "collocations": ["搭配1", "搭配2", "搭配3"],
-        "examples": [{ "en": "例句", "zh": "翻译" }],
-        "usageZh": "用法说明"
-      }
-    }
-  ]
-}
+规则：
+- 包括教材、手写笔记、单词卡、屏幕截图等所有场景
+- 如果图片只有少量单词（如单词卡），全部输出，一个都不能遗漏
+- 如果图片是句子或段落，列出实词（名词/动词/形容词/副词），忽略 a/an/the/is/are/of/to/in/on/at/and/or/but/it/he/she/we/they 等功能词
+- 最多返回 15 个单词
+- 只返回纯 JSON，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
-最多返回 6 个单词，优先选择图片中最清晰、最重要的词汇。`,
+返回格式：
+{ "words": ["word1", "word2", "word3"] }`,
             },
             {
                 role: 'user',
                 content: [
-                    { type: 'text', text: '请识别图片中的英语单词：' },
+                    { type: 'text', text: '请识别图片中的所有英语单词：' },
                     { type: 'image_url', image_url: { url: imageBase64 } },
                 ],
             },
         ];
-        const response = await callAI(messages, undefined, 4000);
+        const response = await callLLM(messages, {
+            model: config?.visionModel || VISION_MODEL,
+            temperature: 0.3,
+            maxTokens: 500,
+            retries: 0,
+            stripThink: true,
+            responseFormat: { type: 'json_object' },
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const result = extractJson(response);
         if (!result.words || !Array.isArray(result.words)) {
-            throw new Error('AI 返回格式不正确');
+            throw new Error('图片识别返回格式不正确');
         }
-        return result;
+        return result.words
+            .map((w) => (typeof w === 'string' ? w.trim() : String(w || '').trim()))
+            .filter(Boolean);
+    }
+    // 图片识别单词（两步：先识别单词列表，再批量生成释义）
+    static async extractWordsFromImage(imageBase64, config) {
+        // Step 1：识别图片中的单词列表
+        const wordList = await AIService.recognizeWordsFromImage(imageBase64, config);
+        console.log('[AI] Recognized words from image:', wordList);
+        if (wordList.length === 0) {
+            return { words: [] };
+        }
+        // Step 2：对每个单词调用 defineWord 生成完整释义
+        const words = [];
+        for (const term of wordList) {
+            try {
+                const def = await AIService.defineWord(term, config);
+                if (def.definitions && Array.isArray(def.definitions) && def.definitions.length > 0) {
+                    const d = def.definitions[0];
+                    words.push({
+                        word: d.word || term,
+                        partOfSpeech: d.partOfSpeech || 'noun',
+                        definition: d.definition || '',
+                        enrichment: d.enrichment,
+                    });
+                }
+            }
+            catch (err) {
+                console.warn(`[AI] Failed to define word "${term}", using fallback:`, err);
+                // 降级：保留单词但不含释义，避免整批失败
+                words.push({
+                    word: term,
+                    partOfSpeech: 'unknown',
+                    definition: '',
+                    enrichment: undefined,
+                });
+            }
+        }
+        // 过滤无效条目（保留 definition 为空的降级词条，只排除 word 本身为空的）
+        const validWords = words.filter((w) => w && typeof w.word === 'string' && w.word.trim());
+        return { words: validWords };
+    }
+    // 从图片中转录文章或作文文字（多模态 AI，替代 Tesseract）
+    static async extractTextFromImage(imageBase64, mode, config) {
+        const systemPrompt = mode === 'article'
+            ? `你是专业的图片文字转录助手。
+任务：将图片中的英文文章完整、准确地转录为纯文本。
+
+规则：
+- 保留原文的段落结构（段落之间用空行分隔）
+- 保持原文拼写，明显的印刷错误可以纠正
+- 不添加任何注释、翻译或说明性文字
+- 直接从第一个词开始输出，不加任何前言或后记`
+            : `你是专业的手写与印刷文字识别助手。
+任务：将图片中的英文作文完整转录为纯文本。
+
+规则：
+- 保留原文的所有拼写和语法错误（作文批改场景需要原始文本）
+- 保留段落结构（段落之间用空行分隔）
+- 不添加任何注释、评语或说明性文字
+- 直接从第一个词开始输出，不加任何前言或后记`;
+        const messages = [
+            {
+                role: 'system',
+                content: systemPrompt,
+            },
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: '请转录图片中的文字：' },
+                    { type: 'image_url', image_url: { url: imageBase64 } },
+                ],
+            },
+        ];
+        const response = await callLLM(messages, {
+            model: config?.visionModel || VISION_MODEL,
+            temperature: 0.3,
+            maxTokens: 4000,
+            retries: 0,
+            stripThink: true,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
+        const text = response.trim();
+        if (!text || text.length < 5) {
+            throw new Error('未能从图片中识别到足够文字');
+        }
+        return { text };
     }
     // 生成练习题
-    static async generatePractice(words, questionCount = 10, allowedTypes = ['mcq', 'fill_blank', 'reorder']) {
+    static async generatePractice(words, questionCount = 10, allowedTypes = ['mcq', 'fill_blank', 'reorder'], config) {
         const wordsText = words.map(w => `${w.word} (${w.partOfSpeech}): ${w.definition}`).join('\n');
         const messages = [
             {
                 role: 'system',
-                content: `你是一个英语练习题生成助手。请基于给定的单词列表生成练习题。
+                content: `你是一个英语练习题生成助手。请基于给定的单词列表生成${questionCount}道练习题。
+
+【重要】必须生成${questionCount}道题目，不能多也不能少。
 
 题型说明：
 1. mcq (选择题): 单句填空，A/B/C/D 选项，测试词义和用法
 2. fill_blank (填空题): 句子挖空，填写单词正确形式
 3. reorder (重组题): 打乱单词顺序，要求重组为正确句子
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+- 必须生成${questionCount}道题目，不能多也不能少
 
 请以 JSON 格式返回：
 {
@@ -601,7 +810,13 @@ class AIService {
                 content: `请基于以下单词生成练习题：\n${wordsText}`,
             },
         ];
-        const response = await callAI(messages, undefined, 3500);
+        const response = await callLLM(messages, {
+            maxTokens: 3500,
+            responseFormat: { type: 'json_object' },
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const result = extractJson(response);
         if (!result.questions || !Array.isArray(result.questions)) {
             throw new Error('AI 返回格式不正确');
@@ -636,9 +851,16 @@ class AIService {
             normalized.analysisZh = getChineseContent(q.analysisZh, q.explanationZh, q.analysis, q.explanation);
             normalized.grammarZh = getChineseContent(q.grammarZh, q.grammar);
             normalized.usageZh = getChineseContent(q.usageZh, q.usage);
-            // 如果没有中文内容，添加提示标记
-            if (!containsChinese(normalized.analysisZh)) {
-                normalized.analysisZh = '（解析内容非中文）' + normalized.analysisZh;
+            // 确保解析字段有中文内容，如果为空或非中文则提供默认中文解释
+            const targetWord = normalized.word || q.word || '该单词';
+            if (!containsChinese(normalized.analysisZh) || !normalized.analysisZh.trim()) {
+                normalized.analysisZh = `正确答案是「${normalized.options?.[normalized.answerIndex] || targetWord}」。本题考查对单词「${targetWord}」含义的理解，需要结合上下文语境选择最合适的选项。`;
+            }
+            if (!containsChinese(normalized.grammarZh) || !normalized.grammarZh.trim()) {
+                normalized.grammarZh = `本题涉及单词「${targetWord}」的语法应用。注意该单词在句中的成分和搭配关系，确保语法结构正确。`;
+            }
+            if (!containsChinese(normalized.usageZh) || !normalized.usageZh.trim()) {
+                normalized.usageZh = `「${targetWord}」是一个常用词汇，建议多阅读相关例句来掌握其用法，注意与其他近义词的区别。`;
             }
             if (normalized.type === 'mcq') {
                 // 确保有4个选项
@@ -693,12 +915,16 @@ class AIService {
         return result;
     }
     // 生成故事
-    static async generateStory(words) {
+    static async generateStory(words, config) {
         const wordsText = words.map(w => `${w.word}: ${w.definition}`).join('\n');
         const messages = [
             {
                 role: 'system',
                 content: `你是一个英语故事生成助手。请基于给定的单词列表编写一个有趣的故事，帮助学习者记忆这些单词。
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 请以 JSON 格式返回：
 {
@@ -718,7 +944,13 @@ class AIService {
                 content: `请基于以下单词生成故事：\n${wordsText}`,
             },
         ];
-        const response = await callAI(messages, undefined, 3500);
+        const response = await callLLM(messages, {
+            maxTokens: 3500,
+            responseFormat: { type: 'json_object' },
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const result = extractJson(response);
         if (!result.title || !result.story || !result.translation) {
             throw new Error('AI 返回格式不正确');
@@ -726,11 +958,15 @@ class AIService {
         return result;
     }
     // 作文批改
-    static async reviewEssay(title, essay) {
+    static async reviewEssay(title, essay, config) {
         const messages = [
             {
                 role: 'system',
                 content: `你是一个雅思写作 Task 2 批改专家。请对作文进行全面批改和评分。
+
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
 
 请以 JSON 格式返回：
 {
@@ -759,7 +995,7 @@ class AIService {
       "exampleZh": "示例句子中文翻译（可选）"
     }
   ],
-  "revisedTextEn": "优化后的完整作文（英文）",
+  "revisedTextEn": "优化后的完整作文（英文）。重要：此字段只能包含修改后的作文正文，禁止包含任何说明、注释、前言或解释性文字（如 'Note:'、'This revision...' 等）。直接从作文第一段开始。",
   "beforeAfter": [
     {
       "before": "修改前片段",
@@ -776,7 +1012,13 @@ class AIService {
                 content: `题目：${title || '无'}\n\n作文：\n${essay}`,
             },
         ];
-        const response = await callAI(messages, undefined, 8000);
+        const response = await callLLM(messages, {
+            maxTokens: 8000,
+            responseFormat: { type: 'json_object' },
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const rawResult = extractJson(response);
         console.log('[AI] Essay review raw result:', JSON.stringify({
             hasOverallBand: !!rawResult.overallBand,
@@ -805,15 +1047,20 @@ class AIService {
         return result;
     }
     // 文章分析
-    static async studyArticle(article, generateQuestions = false) {
+    static async studyArticle(article, generateQuestions = false, questionCount = 5, config) {
         const messages = [
             {
                 role: 'system',
                 content: `你是一个英语阅读教学助手。请对文章进行深度分析，帮助学习者理解。
 
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+
 请以 JSON 格式返回：
 {
   "structure": {
+    "overallMainIdea": "全文主旨（中文总结）",
     "paragraphs": [
       {
         "index": 段落序号,
@@ -848,23 +1095,33 @@ class AIService {
   ]${generateQuestions ? `,
   "questions": [
     {
-      "question": "题目",
-      "options": ["A选项", "B选项", "C选项", "D选项"],
+      "question": "Question text in English",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": "A/B/C/D",
-      "explanation": "解析",
-      "location": "定位依据"
+      "explanation": "解析（中文）",
+      "location": "定位依据（中文）"
     }
   ]` : ''}
 }
 
-${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : '不要生成 questions 字段。'}`,
+${generateQuestions ? `【重要】必须生成 ${questionCount} 道阅读理解选择题，不能多也不能少。
+
+要求：
+1. 题目和选项必须是全英文
+2. 解析可以用中文
+3. 严格只生成 ${questionCount} 道题目` : '不要生成 questions 字段。'}`,
             },
             {
                 role: 'user',
                 content: `请分析以下文章：\n\n${article}`,
             },
         ];
-        const response = await callAI(messages, undefined, 4500);
+        const response = await callLLM(messages, {
+            maxTokens: 8000,
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const rawResult = extractJson(response);
         console.log('[AI] Article study raw result keys:', Object.keys(rawResult));
         console.log('[AI] Article study raw structure:', JSON.stringify(rawResult.structure ? { hasParagraphs: !!rawResult.structure.paragraphs, paragraphsCount: rawResult.structure.paragraphs?.length } : null));
@@ -926,7 +1183,9 @@ ${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : '不�
                 noteZh: p.note || p.noteZh || '',
                 exampleEn: p.example || p.exampleEn || '',
             })),
-            questions: (rawResult.questions || []).map((q) => ({
+            questions: (rawResult.questions || [])
+                .slice(0, generateQuestions ? questionCount : 0)
+                .map((q) => ({
                 questionEn: q.question || q.questionEn || '',
                 options: q.options || [],
                 answerIndex: q.correctAnswer ? ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer) : (q.answerIndex || 0),
@@ -948,7 +1207,7 @@ ${generateQuestions ? '请生成 5 道中国考试风格的选择题。' : '不�
         return result;
     }
     // 口语对话
-    static async speakingChat(params) {
+    static async speakingChat(params, config) {
         const { scenario, userTextEn, history, targetLevel } = params;
         const historyText = (history || [])
             .slice(-12)
@@ -986,6 +1245,10 @@ ${userTextEn.trim()}
    - 提供更自然的纠正版本（英语）
    - 给出 1-2 条实用建议
 
+【绝对规则】
+- 只返回纯 JSON 对象，不要 markdown 代码块（不要 \`\`\`），不要任何说明文字
+- 不要加 "Here is"、"Sure" 等前缀，直接从第一个 { 开始
+
 请以 JSON 格式返回：
 {
   "assistantReplyEn": "助手回复（英语）",
@@ -998,7 +1261,13 @@ ${userTextEn.trim()}
 }`,
             },
         ];
-        const response = await callAI(messages, undefined, 1500);
+        const response = await callLLM(messages, {
+            maxTokens: 1500,
+            responseFormat: { type: 'json_object' },
+            model: config?.model,
+            baseUrl: config?.baseUrl,
+            apiKey: config?.apiKey,
+        });
         const result = extractJson(response);
         return {
             kind: 'speaking_chat',

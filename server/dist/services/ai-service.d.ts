@@ -1,17 +1,29 @@
+export type AiRuntimeConfig = {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    visionModel?: string;
+};
 export declare class AIService {
-    static defineWord(term: string): Promise<any>;
-    static extractWordsFromImage(imageBase64: string): Promise<any>;
+    static defineWord(term: string, config?: AiRuntimeConfig): Promise<any>;
+    static recognizeWordsFromImage(imageBase64: string, config?: AiRuntimeConfig): Promise<string[]>;
+    static extractWordsFromImage(imageBase64: string, config?: AiRuntimeConfig): Promise<{
+        words: any[];
+    }>;
+    static extractTextFromImage(imageBase64: string, mode: 'article' | 'essay', config?: AiRuntimeConfig): Promise<{
+        text: string;
+    }>;
     static generatePractice(words: {
         word: string;
         definition: string;
         partOfSpeech: string;
-    }[], questionCount?: number, allowedTypes?: ('mcq' | 'fill_blank' | 'reorder')[]): Promise<any>;
+    }[], questionCount?: number, allowedTypes?: ('mcq' | 'fill_blank' | 'reorder')[], config?: AiRuntimeConfig): Promise<any>;
     static generateStory(words: {
         word: string;
         definition: string;
-    }[]): Promise<any>;
-    static reviewEssay(title: string | undefined, essay: string): Promise<any>;
-    static studyArticle(article: string, generateQuestions?: boolean): Promise<any>;
+    }[], config?: AiRuntimeConfig): Promise<any>;
+    static reviewEssay(title: string | undefined, essay: string, config?: AiRuntimeConfig): Promise<any>;
+    static studyArticle(article: string, generateQuestions?: boolean, questionCount?: number, config?: AiRuntimeConfig): Promise<any>;
     static speakingChat(params: {
         scenario?: string;
         userTextEn: string;
@@ -20,7 +32,7 @@ export declare class AIService {
             contentEn: string;
         }>;
         targetLevel?: string;
-    }): Promise<{
+    }, config?: AiRuntimeConfig): Promise<{
         kind: string;
         assistantReplyEn: any;
         feedbackZh: any;

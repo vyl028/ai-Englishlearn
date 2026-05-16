@@ -89,6 +89,18 @@ async function request<T>(
 
     const data: ApiResponse<T> = await response.json();
 
+    // 防御性校验：确保返回的是合法对象（防止拦截器或异常响应导致 undefined/null）
+    if (!data || typeof data !== 'object' || !('success' in data)) {
+      console.error('[API] Invalid response format:', data);
+      return {
+        success: false,
+        error: {
+          code: 'INVALID_RESPONSE',
+          message: '服务器返回格式异常，请稍后重试',
+        },
+      };
+    }
+
     // 如果 401，清除 token
     if (response.status === 401) {
       clearToken();
