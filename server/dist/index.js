@@ -14,6 +14,8 @@ const groups_1 = require("./routes/groups");
 const ai_1 = require("./routes/ai");
 const practice_1 = require("./routes/practice");
 const word_mastery_1 = require("./routes/word-mastery");
+const user_stats_1 = require("./routes/user-stats");
+const learning_plan_1 = require("./routes/learning-plan");
 const auth_2 = require("./middleware/auth");
 const error_1 = require("./middleware/error");
 const response_1 = require("./utils/response");
@@ -59,6 +61,8 @@ app.use('/api/groups', auth_2.authMiddleware, groups_1.groupsRouter);
 app.use('/api/ai', auth_2.authMiddleware, ai_1.aiRouter);
 app.use('/api/practice', auth_2.authMiddleware, practice_1.practiceRouter);
 app.use('/api/word-mastery', auth_2.authMiddleware, word_mastery_1.wordMasteryRouter);
+app.use('/api/user-stats', auth_2.authMiddleware, user_stats_1.userStatsRouter);
+app.use('/api/learning-plan', auth_2.authMiddleware, learning_plan_1.learningPlanRouter);
 // 404 处理
 app.use((req, res) => {
     return (0, response_1.errorResponse)(res, 'NOT_FOUND', '接口不存在', 404);
