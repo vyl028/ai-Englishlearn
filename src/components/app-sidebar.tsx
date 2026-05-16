@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BookCopy, BookOpen, BookText, FileText, Mic, PlusSquare, type LucideIcon } from "lucide-react";
+import { BookCopy, BookOpen, BookText, FileText, Mic, PlusSquare, Target, type LucideIcon } from "lucide-react";
 
 import { getPrimaryNavView, type AppView } from "@/lib/app-view";
 import {
@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "speaking", label: "听说训练", icon: Mic },
   { id: "article", label: "文章阅读", icon: BookText },
   { id: "essay", label: "作文批改", icon: FileText },
+  { id: "learningPlan", label: "学习计划", icon: Target },
 ];
 
 export function AppSidebar({

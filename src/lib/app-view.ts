@@ -1,4 +1,4 @@
-export type AppView = "capture" | "review" | "practice" | "story" | "essay" | "article" | "speaking";
+export type AppView = "capture" | "review" | "practice" | "story" | "essay" | "article" | "speaking" | "learningPlan";
 
 export function getPrimaryNavView(view: AppView): AppView {
   if (view === "practice" || view === "story") return "review";
@@ -21,6 +21,8 @@ export function getViewLabel(view: AppView): string {
       return "文章阅读";
     case "essay":
       return "作文批改";
+    case "learningPlan":
+      return "学习计划";
     default:
       return "LexiCapture";
   }
@@ -38,6 +40,8 @@ export function getViewDescription(view: AppView): string | undefined {
       return "分析文章结构与词汇，生成阅读理解题。";
     case "essay":
       return "雅思写作 Task 2 批改与优化建议。";
+    case "learningPlan":
+      return "智能评价学习效果并获取每日学习计划。";
     default:
       return undefined;
   }

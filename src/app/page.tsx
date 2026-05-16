@@ -14,6 +14,7 @@ import { GrowthSheet } from '@/components/growth-sheet';
 import { EssayReviewView } from '@/components/essay-review-view';
 import { ArticleReadingView } from '@/components/article-reading-view';
 import { SpeakingTrainingView } from '@/components/speaking-training-view';
+import { LearningPlanView } from "@/components/learning-plan-view";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { AuthGuard } from "@/components/auth-guard";
@@ -63,6 +64,7 @@ const APP_VIEW_SET = new Set<AppView>([
   'essay',
   'article',
   'speaking',
+  'learningPlan',
 ]);
 
 function normalizeStoredView(raw: unknown): AppView | undefined {
@@ -1037,6 +1039,12 @@ export default function Home() {
         return <ArticleReadingView words={words} onAddWords={handleAddWordsFromArticle} />;
       case 'speaking':
         return <SpeakingTrainingView />;
+      case 'learningPlan':
+        return (
+          <LearningPlanView
+            onNavigate={(v) => setView(v as AppView)}
+          />
+        );
       default:
         return null;
     }
